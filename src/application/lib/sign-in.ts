@@ -1,8 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
-import { IdentityError, type Clock, type IdentityPort, type RawClaims } from "../ports";
-import { normaliseEmail, type Database } from "./db";
+import { IdentityError, type RawClaims } from "../ports";
+import { normaliseEmail } from "./db";
 import { ensureDepartment, ensureSite, type Queryable } from "./departments-and-sites";
+import type { Deps } from "./deps";
+import { blankToNull } from "./input";
 import { adminNotices, members, organisationOidcSettings, organisations, type ClaimMapping } from "./schema";
 
 /** An Organisation a visitor can sign in to. */
@@ -42,7 +44,7 @@ export class SignInError extends Error {
   }
 }
 
-export async function signInOptions(db: Database): Promise<SignInOption[]> {
+export async function signInOptions({ db }: Deps): Promise<SignInOption[]> {
   return db
     .select({ slug: organisations.slug, name: organisations.name })
     .from(organisations)
@@ -55,9 +57,7 @@ export interface BeginSignInInput {
 }
 
 export async function beginSignIn(
-  db: Database,
-  identity: IdentityPort,
-  clock: Clock,
+  { db, identity, clock }: Deps,
   input: BeginSignInInput,
 ): Promise<{ authorizationUrl: string; pending: PendingSignIn }> {
   const { oidc } = await issuerOf(db, input.organisationSlug);
@@ -90,9 +90,7 @@ export interface CompleteSignInInput {
  * Active Member and raises a notice for the Organisation Admins.
  */
 export async function completeSignIn(
-  db: Database,
-  identity: IdentityPort,
-  clock: Clock,
+  { db, identity, clock }: Deps,
   input: CompleteSignInInput,
 ): Promise<{ memberId: string }> {
   const { pending } = input;
@@ -121,7 +119,7 @@ export async function completeSignIn(
 
   return db.transaction(async (tx) => {
     const memberId = await bindMember(tx, organisation.id, person, now);
-    await fillPlacementFromLogin(tx, organisation.id, memberId, person, now);
+    await fillDepartmentAndSiteFromLogin(tx, organisation.id, memberId, person, now);
     return { memberId };
   });
 }
@@ -132,7 +130,10 @@ async function bindMember(tx: Queryable, organisationId: string, person: Person,
   const [existing] = await tx.select({ id: members.id, status: members.status }).from(members).where(byEmail).limit(1);
   if (existing) {
     if (existing.status === "provisioned") {
-      await tx.update(members).set({ status: "active", updatedAt: now }).where(eq(members.id, existing.id));
+      await tx
+        .update(members)
+        .set({ status: "active", updatedAt: now })
+        .where(memberOf(organisationId, existing.id));
     }
     return existing.id;
   }
@@ -162,8 +163,10 @@ async function bindMember(tx: Queryable, organisationId: string, person: Person,
 /**
  * The login fills in Department, Site and staff identifier only where the
  * Member has none: what the roster or the Member themselves set stays.
+ * The login's Department and Site are directory data, so unknown names are
+ * added to the Organisation's lists.
  */
-async function fillPlacementFromLogin(
+async function fillDepartmentAndSiteFromLogin(
   tx: Queryable,
   organisationId: string,
   memberId: string,
@@ -173,7 +176,7 @@ async function fillPlacementFromLogin(
   const [current] = await tx
     .select({ departmentId: members.departmentId, siteId: members.siteId, staffIdentifier: members.staffIdentifier })
     .from(members)
-    .where(eq(members.id, memberId))
+    .where(memberOf(organisationId, memberId))
     .limit(1);
   if (!current) return;
   const changes: Partial<typeof members.$inferInsert> = {};
@@ -187,11 +190,19 @@ async function fillPlacementFromLogin(
     changes.staffIdentifier = person.staffIdentifier;
   }
   if (Object.keys(changes).length > 0) {
-    await tx.update(members).set({ ...changes, updatedAt: now }).where(eq(members.id, memberId));
+    await tx
+      .update(members)
+      .set({ ...changes, updatedAt: now })
+      .where(memberOf(organisationId, memberId));
   }
 }
 
-async function issuerOf(db: Database, organisationSlug: string) {
+/** One Member within one Organisation: every query about a Member carries both (ADR 0005). */
+function memberOf(organisationId: string, memberId: string) {
+  return and(eq(members.organisationId, organisationId), eq(members.id, memberId));
+}
+
+async function issuerOf(db: Deps["db"], organisationSlug: string) {
   const [row] = await db
     .select({
       organisation: { id: organisations.id, slug: organisations.slug, name: organisations.name },
@@ -226,7 +237,7 @@ function mapClaims(claims: RawClaims, mapping: ClaimMapping): Person {
   const text = (claim: string | undefined): string | undefined => {
     if (!claim) return undefined;
     const value = claims[claim];
-    return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+    return typeof value === "string" ? (blankToNull(value) ?? undefined) : undefined;
   };
   const email = text(mapping.email);
   if (!email) {

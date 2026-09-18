@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { RawClaims } from "../ports";
-import { ana, ministryA, ministryB, signInAs, signInForId } from "./fixtures";
+import { ana, ministryA, ministryB, signInAs, signInForId, withDepartmentAndSiteClaims } from "./fixtures";
 import { harness } from "./harness";
 
 const h = harness();
@@ -8,7 +8,7 @@ const h = harness();
 const bo: RawClaims = { sub: "bo-1", email: "bo@ministry-a.example", name: "Bo Chen" };
 const cleo: RawClaims = { sub: "cleo-1", email: "cleo@ministry-b.example", name: "Cleo Marsh" };
 
-test("a Member sees a colleague of their own Organisation and nothing of another Organisation's Member", async () => {
+test("a Member sees another Member of their own Organisation and nothing of another Organisation's Member", async () => {
   await h.app.bootstrap(ministryA);
   await h.app.bootstrap(ministryB);
   const anaId = await signInForId(h, "ministry-a", ana);
@@ -33,17 +33,18 @@ test("the same email signing in with two Organisations' issuers is two separate 
   expect(profileB.organisation.slug).toBe("ministry-b");
 });
 
-test("Departments and Sites are settings of one Organisation and never offered to another", async () => {
+test("Departments and Sites are settings of one Organisation: never offered to, nor choosable by, another", async () => {
   await h.app.bootstrap(ministryA);
-  await h.app.bootstrap(ministryB);
-  const cleoActor = await signInAs(h, "ministry-b", cleo);
-  await cleoActor.updateProfile({ department: "Finance", site: "Harbour House" });
+  await h.app.bootstrap(withDepartmentAndSiteClaims(ministryB));
+  const cleoActor = await signInAs(h, "ministry-b", { ...cleo, ou: "Finance", building: "Harbour House" });
   const anaActor = await signInAs(h, "ministry-a", ana);
 
   expect(await anaActor.departmentsAndSites()).toEqual({ departments: [], sites: [] });
-
-  await anaActor.updateProfile({ department: "Finance", site: null });
-
-  expect(await anaActor.departmentsAndSites()).toEqual({ departments: ["Finance"], sites: [] });
-  expect(await cleoActor.departmentsAndSites()).toEqual({ departments: ["Finance"], sites: ["Harbour House"] });
+  await expect(anaActor.updateProfile({ department: "Finance", site: null })).rejects.toMatchObject({
+    code: "unknown-department",
+  });
+  await expect(anaActor.updateProfile({ department: null, site: "Harbour House" })).rejects.toMatchObject({
+    code: "unknown-site",
+  });
+  expect(await cleoActor.profile()).toMatchObject({ department: "Finance", site: "Harbour House" });
 });

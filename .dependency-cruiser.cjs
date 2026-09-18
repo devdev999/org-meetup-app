@@ -17,6 +17,14 @@ module.exports = {
       to: { path: "^src/application/lib/" },
     },
     {
+      name: "application-tests-are-private",
+      comment:
+        "The application module's tests, harness and fixtures are its own. Shared test support lives in src/testing.",
+      severity: "error",
+      from: { pathNot: "^src/application/tests/" },
+      to: { path: "^src/application/tests/" },
+    },
+    {
       name: "application-owns-no-adapters",
       comment:
         "The application depends on ports, never on adapters or processes; adapters are injected through createApplication.",

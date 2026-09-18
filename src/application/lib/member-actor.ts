@@ -1,7 +1,8 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import type { Clock } from "../ports";
-import type { Database } from "./db";
-import { ensureDepartment, ensureSite, listDepartmentsAndSites } from "./departments-and-sites";
+import { findDepartment, findSite, listDepartmentsAndSites } from "./departments-and-sites";
+import type { Deps } from "./deps";
+import { InvalidInputError } from "./errors";
+import { blankToNull, isUuid } from "./input";
 import { departments, members, organisations, sites } from "./schema";
 
 export type MemberStatus = (typeof members.status.enumValues)[number];
@@ -20,13 +21,17 @@ export interface Profile {
   adminVisibilityNoticeAcknowledgedAt: Date | null;
 }
 
-/** Department and Site by name; null clears the value. Names are matched ignoring case. */
+/**
+ * Department and Site by name, chosen from the Organisation's own lists and
+ * matched ignoring case; null clears the value. Members do not add to the
+ * lists: the roster, the login and the Organisation Admin do.
+ */
 export interface UpdateProfileInput {
   department: string | null;
   site: string | null;
 }
 
-/** What a Member sees about a colleague in their Organisation. */
+/** What a Member sees about another Member of their Organisation. */
 export interface MemberSummary {
   memberId: string;
   name: string;
@@ -46,11 +51,11 @@ export interface MemberActions {
   profile(): Promise<Profile>;
   /** Records that the Member has read the notice about admin visibility. The first time counts. */
   acknowledgeAdminVisibilityNotice(): Promise<void>;
-  /** Corrects the Member's own Department and Site. */
+  /** Corrects the Member's own Department and Site. Throws `InvalidInputError` for a name the Organisation does not have. */
   updateProfile(input: UpdateProfileInput): Promise<Profile>;
   /** The Departments and Sites of the Member's Organisation, to choose from. */
   departmentsAndSites(): Promise<{ departments: string[]; sites: string[] }>;
-  /** A colleague in the Member's Organisation, or undefined if there is no such visible Member there. */
+  /** Another Member of the same Organisation, or undefined if there is no such visible Member there. */
   viewMember(memberId: string): Promise<MemberSummary | undefined>;
 }
 
@@ -59,16 +64,9 @@ interface Actor {
   organisationId: string;
 }
 
-interface Deps {
-  db: Database;
-  clock: Clock;
-}
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /** Resolves a session's Member to an actor, or undefined if they are not an Active Member. */
 export async function asMember(deps: Deps, memberId: string): Promise<MemberActions | undefined> {
-  if (!UUID.test(memberId)) return undefined;
+  if (!isUuid(memberId)) return undefined;
   const [row] = await deps.db
     .select({ organisationId: members.organisationId })
     .from(members)
@@ -81,26 +79,8 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     acknowledgeAdminVisibilityNotice: () => acknowledgeAdminVisibilityNotice(deps, actor),
     updateProfile: (input) => updateProfile(deps, actor, input),
     departmentsAndSites: () => listDepartmentsAndSites(deps.db, actor.organisationId),
-    viewMember: (memberId) => viewMember(deps, actor, memberId),
+    viewMember: (id) => viewMember(deps, actor, id),
   };
-}
-
-async function viewMember(deps: Deps, actor: Actor, memberId: string): Promise<MemberSummary | undefined> {
-  if (!UUID.test(memberId)) return undefined;
-  const [row] = await deps.db
-    .select({ memberId: members.id, name: members.name, department: departments.name, site: sites.name })
-    .from(members)
-    .leftJoin(departments, eq(departments.id, members.departmentId))
-    .leftJoin(sites, eq(sites.id, members.siteId))
-    .where(
-      and(
-        eq(members.id, memberId),
-        eq(members.organisationId, actor.organisationId),
-        inArray(members.status, VISIBLE_STATUSES),
-      ),
-    )
-    .limit(1);
-  return row;
 }
 
 /** The condition every query about the actor's own row carries: their id within their Organisation. */
@@ -108,8 +88,8 @@ function self(actor: Actor) {
   return and(eq(members.id, actor.memberId), eq(members.organisationId, actor.organisationId));
 }
 
-async function profile(deps: Deps, actor: Actor): Promise<Profile> {
-  const [row] = await deps.db
+async function profile({ db }: Deps, actor: Actor): Promise<Profile> {
+  const [row] = await db
     .select({
       memberId: members.id,
       name: members.name,
@@ -131,27 +111,44 @@ async function profile(deps: Deps, actor: Actor): Promise<Profile> {
   return row;
 }
 
-async function acknowledgeAdminVisibilityNotice(deps: Deps, actor: Actor): Promise<void> {
-  const now = deps.clock.now();
-  await deps.db
+async function acknowledgeAdminVisibilityNotice({ db, clock }: Deps, actor: Actor): Promise<void> {
+  const now = clock.now();
+  await db
     .update(members)
     .set({ adminVisibilityNoticeAcknowledgedAt: now, updatedAt: now })
     .where(and(self(actor), isNull(members.adminVisibilityNoticeAcknowledgedAt)));
 }
 
 async function updateProfile(deps: Deps, actor: Actor, input: UpdateProfileInput): Promise<Profile> {
-  const now = deps.clock.now();
-  await deps.db.transaction(async (tx) => {
-    const department = blankToNull(input.department);
-    const site = blankToNull(input.site);
-    const departmentId = department ? await ensureDepartment(tx, actor.organisationId, department, now) : null;
-    const siteId = site ? await ensureSite(tx, actor.organisationId, site, now) : null;
-    await tx.update(members).set({ departmentId, siteId, updatedAt: now }).where(self(actor));
-  });
+  const { db, clock } = deps;
+  const department = blankToNull(input.department);
+  const site = blankToNull(input.site);
+  const departmentId = department === null ? null : await findDepartment(db, actor.organisationId, department);
+  if (departmentId === undefined) {
+    throw new InvalidInputError("unknown-department", `"${department}" is not a Department of this Organisation`);
+  }
+  const siteId = site === null ? null : await findSite(db, actor.organisationId, site);
+  if (siteId === undefined) {
+    throw new InvalidInputError("unknown-site", `"${site}" is not a Site of this Organisation`);
+  }
+  await db.update(members).set({ departmentId, siteId, updatedAt: clock.now() }).where(self(actor));
   return profile(deps, actor);
 }
 
-function blankToNull(value: string | null): string | null {
-  const trimmed = value?.trim() ?? "";
-  return trimmed === "" ? null : trimmed;
+async function viewMember({ db }: Deps, actor: Actor, memberId: string): Promise<MemberSummary | undefined> {
+  if (!isUuid(memberId)) return undefined;
+  const [row] = await db
+    .select({ memberId: members.id, name: members.name, department: departments.name, site: sites.name })
+    .from(members)
+    .leftJoin(departments, eq(departments.id, members.departmentId))
+    .leftJoin(sites, eq(sites.id, members.siteId))
+    .where(
+      and(
+        eq(members.id, memberId),
+        eq(members.organisationId, actor.organisationId),
+        inArray(members.status, VISIBLE_STATUSES),
+      ),
+    )
+    .limit(1);
+  return row;
 }

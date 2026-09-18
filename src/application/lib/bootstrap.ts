@@ -1,5 +1,5 @@
-import type { Clock } from "../ports";
-import { normaliseEmail, type Database } from "./db";
+import { normaliseEmail } from "./db";
+import type { Deps } from "./deps";
 import { members, organisationOidcSettings, organisations, type ClaimMapping } from "./schema";
 
 /**
@@ -18,7 +18,7 @@ export interface BootstrapConfig {
   platformAdmin: { email: string; name: string };
 }
 
-export async function bootstrap(db: Database, clock: Clock, config: BootstrapConfig): Promise<void> {
+export async function bootstrap({ db, clock }: Deps, config: BootstrapConfig): Promise<void> {
   const now = clock.now();
   await db.transaction(async (tx) => {
     const [organisation] = await tx

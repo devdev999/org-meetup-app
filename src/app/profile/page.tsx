@@ -2,8 +2,9 @@ import { requireMemberPastWelcome } from "../../web/session";
 import { signOut, updateProfile } from "./actions";
 
 export default async function ProfilePage() {
-  const member = await requireMemberPastWelcome();
-  const [profile, choices] = await Promise.all([member.profile(), member.departmentsAndSites()]);
+  const { member, profile } = await requireMemberPastWelcome();
+  const choices = await member.departmentsAndSites();
+  const nothingToChoose = choices.departments.length === 0 && choices.sites.length === 0;
 
   return (
     <main>
@@ -26,32 +27,45 @@ export default async function ProfilePage() {
       </dl>
 
       <h2>Where you work</h2>
-      <p className="muted">
-        {profile.department === null || profile.site === null
-          ? "Your login did not tell us all of this. Fill it in so colleagues can find you."
-          : "Correct these if they are wrong."}
-      </p>
-      <form action={updateProfile}>
-        <label>
-          Department
-          <input name="department" list="department-choices" defaultValue={profile.department ?? ""} autoComplete="off" />
-        </label>
-        <datalist id="department-choices">
-          {choices.departments.map((name) => (
-            <option key={name} value={name} />
-          ))}
-        </datalist>
-        <label>
-          Site
-          <input name="site" list="site-choices" defaultValue={profile.site ?? ""} autoComplete="off" />
-        </label>
-        <datalist id="site-choices">
-          {choices.sites.map((name) => (
-            <option key={name} value={name} />
-          ))}
-        </datalist>
-        <button type="submit">Save</button>
-      </form>
+      {nothingToChoose ? (
+        <p className="muted">
+          Your Organisation has no Departments or Sites listed yet. Your Organisation Admin adds them; until then there is
+          nothing to choose from.
+        </p>
+      ) : (
+        <>
+          <p className="muted">
+            {profile.department === null || profile.site === null
+              ? "Your login did not tell us all of this. Choose so other Members can find you."
+              : "Correct these if they are wrong."}
+          </p>
+          <form action={updateProfile}>
+            <label>
+              Department
+              <select name="department" defaultValue={profile.department ?? ""}>
+                <option value="">Not set</option>
+                {choices.departments.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Site
+              <select name="site" defaultValue={profile.site ?? ""}>
+                <option value="">Not set</option>
+                {choices.sites.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit">Save</button>
+          </form>
+        </>
+      )}
 
       <form action={signOut}>
         <button type="submit" className="secondary">

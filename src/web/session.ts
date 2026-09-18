@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import type { MemberActions, PendingSignIn } from "../application/index";
+import { NextResponse } from "next/server";
+import type { MemberActions, PendingSignIn, Profile, SignInErrorCode } from "../application/index";
 import { webConfig } from "../config/env";
 import { application } from "./application";
 import { seal, unseal } from "./sealed";
@@ -15,6 +16,9 @@ export const PENDING_SIGN_IN_COOKIE = "pending_sign_in";
 
 export const SESSION_TIME_TO_LIVE_MS = 12 * 60 * 60 * 1000;
 export const PENDING_SIGN_IN_TIME_TO_LIVE_MS = 10 * 60 * 1000;
+
+/** Why a sign-in failed: the application's reasons, plus the web's own "no sign-in was started here". */
+export type SignInFailure = SignInErrorCode | "no-pending";
 
 export function cookieOptions(timeToLiveMs: number) {
   return {
@@ -43,6 +47,13 @@ export function unsealPendingSignIn(token: string | undefined): PendingSignIn | 
     : undefined;
 }
 
+/** Sends the browser back to the sign-in page with the reason, and forgets any sign-in in progress. */
+export function signInFailedRedirect(code: SignInFailure): NextResponse {
+  const response = NextResponse.redirect(new URL(`/sign-in?error=${code}`, webConfig().APP_URL));
+  response.cookies.delete(PENDING_SIGN_IN_COOKIE);
+  return response;
+}
+
 /** The signed-in Member as an actor, or undefined when nobody is signed in. */
 export async function currentMember(): Promise<MemberActions | undefined> {
   const store = await cookies();
@@ -61,9 +72,9 @@ export async function requireMember(): Promise<MemberActions> {
 }
 
 /** Everything past the welcome page needs the first-login notice acknowledged first. */
-export async function requireMemberPastWelcome(): Promise<MemberActions> {
+export async function requireMemberPastWelcome(): Promise<{ member: MemberActions; profile: Profile }> {
   const member = await requireMember();
   const profile = await member.profile();
   if (profile.adminVisibilityNoticeAcknowledgedAt === null) redirect("/welcome");
-  return member;
+  return { member, profile };
 }

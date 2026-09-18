@@ -1,25 +1,34 @@
 import { redirect } from "next/navigation";
 import { application } from "../../web/application";
-import { currentMember } from "../../web/session";
+import { currentMember, type SignInFailure } from "../../web/session";
 
 /** Plain-language explanations for the reasons a sign-in can fail. */
-const SIGN_IN_ERRORS: Record<string, string> = {
+const SIGN_IN_FAILURES: Record<SignInFailure, string> = {
   expired: "That sign-in took too long. Please start again.",
   rejected: "Your Organisation's login did not accept that sign-in. Please start again.",
   "unknown-organisation": "That Organisation is not set up on this platform.",
-  "no-email": "Your Organisation's login did not tell us your email address, so we cannot find you. Ask your Organisation Admin.",
+  "no-email":
+    "Your Organisation's login did not tell us your email address, so we cannot find you. Ask your Organisation Admin.",
   "no-pending": "We could not match that login to a sign-in started in this browser. Please start again.",
 };
+
+function explain(code: string | undefined): string | undefined {
+  if (code === undefined) return undefined;
+  return code in SIGN_IN_FAILURES
+    ? SIGN_IN_FAILURES[code as SignInFailure]
+    : "Something went wrong signing you in. Please start again.";
+}
 
 export default async function SignInPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   if (await currentMember()) redirect("/profile");
   const { error } = await searchParams;
   const options = await application().signInOptions();
+  const message = explain(error);
 
   return (
     <main>
       <h1>Sign in</h1>
-      {error && <p className="error">{SIGN_IN_ERRORS[error] ?? "Something went wrong signing you in. Please start again."}</p>}
+      {message && <p className="error">{message}</p>}
       {options.length === 0 ? (
         <p className="muted">No Organisation is set up yet.</p>
       ) : (

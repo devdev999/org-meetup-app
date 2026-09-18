@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Organisation Meetups",
-  description: "Find colleagues who share your interests and arrange to meet.",
+  description: "Find the people in your Organisation who share your interests and arrange to meet.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

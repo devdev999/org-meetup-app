@@ -12,31 +12,45 @@ export function nameKey(name: string): string {
   return name.trim().toLowerCase();
 }
 
-/** Returns the id of the Department with this name in the Organisation, creating it if needed. */
+/** The id of the Department with this name in the Organisation, matched ignoring case, or undefined. */
+export function findDepartment(q: Queryable, organisationId: string, name: string): Promise<string | undefined> {
+  return findNamed(q, departments, organisationId, name);
+}
+
+/** The id of the Site with this name in the Organisation, matched ignoring case, or undefined. */
+export function findSite(q: Queryable, organisationId: string, name: string): Promise<string | undefined> {
+  return findNamed(q, sites, organisationId, name);
+}
+
+/** The id of the Department with this name in the Organisation, creating it if needed. For roster and login data. */
 export function ensureDepartment(q: Queryable, organisationId: string, name: string, now: Date): Promise<string> {
   return ensureNamed(q, departments, organisationId, name, now);
 }
 
-/** Returns the id of the Site with this name in the Organisation, creating it if needed. */
+/** The id of the Site with this name in the Organisation, creating it if needed. For roster and login data. */
 export function ensureSite(q: Queryable, organisationId: string, name: string, now: Date): Promise<string> {
   return ensureNamed(q, sites, organisationId, name, now);
 }
 
+async function findNamed(q: Queryable, table: NamedTable, organisationId: string, name: string): Promise<string | undefined> {
+  const [row] = await q
+    .select({ id: table.id })
+    .from(table)
+    .where(and(eq(table.organisationId, organisationId), eq(table.nameKey, nameKey(name))))
+    .limit(1);
+  return row?.id;
+}
+
 async function ensureNamed(q: Queryable, table: NamedTable, organisationId: string, name: string, now: Date): Promise<string> {
-  const key = nameKey(name);
   const [inserted] = await q
     .insert(table)
-    .values({ organisationId, name: name.trim(), nameKey: key, createdAt: now })
+    .values({ organisationId, name: name.trim(), nameKey: nameKey(name), createdAt: now })
     .onConflictDoNothing({ target: [table.organisationId, table.nameKey] })
     .returning({ id: table.id });
   if (inserted) return inserted.id;
-  const [existing] = await q
-    .select({ id: table.id })
-    .from(table)
-    .where(and(eq(table.organisationId, organisationId), eq(table.nameKey, key)))
-    .limit(1);
+  const existing = await findNamed(q, table, organisationId, name);
   if (!existing) throw new Error(`ensureNamed: "${name}" neither inserted nor found`);
-  return existing.id;
+  return existing;
 }
 
 /** Department and Site names of one Organisation, each list in name order. */

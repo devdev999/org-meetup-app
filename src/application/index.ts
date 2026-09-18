@@ -1,6 +1,8 @@
 import type { Pool } from "pg";
 import { bootstrap, type BootstrapConfig } from "./lib/bootstrap";
 import { connectDatabase } from "./lib/db";
+import type { Deps } from "./lib/deps";
+import { InvalidInputError, type InvalidInputCode } from "./lib/errors";
 import {
   asMember,
   type MemberActions,
@@ -22,21 +24,12 @@ import {
 } from "./lib/sign-in";
 import type { Clock, IdentityPort } from "./ports";
 
-export { SignInError };
-
-/**
- * Recognises a `SignInError` by shape rather than class identity: the web
- * process is bundled into several layers (pages, route handlers, server
- * actions) that each hold their own copy of this module, so `instanceof`
- * across them is false.
- */
-export function isSignInError(error: unknown): error is SignInError {
-  return error instanceof Error && error.name === "SignInError" && typeof (error as SignInError).code === "string";
-}
+export { InvalidInputError, SignInError };
 export type {
   BeginSignInInput,
   BootstrapConfig,
   CompleteSignInInput,
+  InvalidInputCode,
   MemberActions,
   MemberStatus,
   MemberSummary,
@@ -47,6 +40,16 @@ export type {
   UpdateProfileInput,
 };
 export type { ClaimMapping } from "./lib/schema";
+
+/**
+ * Recognises a `SignInError` by shape rather than class identity: the web
+ * process is bundled into several layers (pages, route handlers, server
+ * actions) that each hold their own copy of this module, so `instanceof`
+ * across them is false.
+ */
+export function isSignInError(error: unknown): error is SignInError {
+  return error instanceof Error && error.name === "SignInError" && typeof (error as SignInError).code === "string";
+}
 
 export interface ApplicationDependencies {
   pool: Pool;
@@ -72,14 +75,17 @@ export interface Application {
   asMember(memberId: string): Promise<MemberActions | undefined>;
 }
 
-export function createApplication(deps: ApplicationDependencies): Application {
-  const db = connectDatabase(deps.pool);
-  const { identity, clock } = deps;
+export function createApplication(dependencies: ApplicationDependencies): Application {
+  const deps: Deps = {
+    db: connectDatabase(dependencies.pool),
+    identity: dependencies.identity,
+    clock: dependencies.clock,
+  };
   return {
-    bootstrap: (config) => bootstrap(db, clock, config),
-    signInOptions: () => signInOptions(db),
-    beginSignIn: (input) => beginSignIn(db, identity, clock, input),
-    completeSignIn: (input) => completeSignIn(db, identity, clock, input),
-    asMember: (memberId) => asMember({ db, clock }, memberId),
+    bootstrap: (config) => bootstrap(deps, config),
+    signInOptions: () => signInOptions(deps),
+    beginSignIn: (input) => beginSignIn(deps, input),
+    completeSignIn: (input) => completeSignIn(deps, input),
+    asMember: (memberId) => asMember(deps, memberId),
   };
 }

@@ -26,6 +26,17 @@ export const ministryB: BootstrapConfig = {
   platformAdmin: { email: "pat@ministry-b.example", name: "Pat Platform B" },
 };
 
+/** The same Organisation, but its issuer also states where people work: `ou` and `building` claims. */
+export function withDepartmentAndSiteClaims(config: BootstrapConfig): BootstrapConfig {
+  return {
+    ...config,
+    oidc: {
+      ...config.oidc,
+      claimMapping: { email: "email", name: "name", department: "ou", site: "building", staffIdentifier: "employee_number" },
+    },
+  };
+}
+
 export const REDIRECT_URI = "https://meetups.example/auth/callback";
 
 /** Claims for a Member of Ministry A who is not on any roster. */

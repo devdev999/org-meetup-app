@@ -27,6 +27,23 @@ export function identityProvider(env: NodeJS.ProcessEnv = process.env): "oidc" |
   return identityProviderSchema.parse(present(env).IDENTITY_PROVIDER);
 }
 
+/** Whether the built-in fake issuer, and its sign-in page, are switched on. */
+export function fakeIssuerEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return identityProvider(env) === "fake";
+}
+
+/**
+ * The fake issuer lets anyone sign in as anyone, so a production build refuses
+ * it unless the deployment says, in so many words, that it is a local run.
+ */
+export function assertFakeIssuerAllowed(env: NodeJS.ProcessEnv = process.env): void {
+  if (env.NODE_ENV === "production" && present(env).ALLOW_FAKE_IDENTITY !== "yes") {
+    throw new Error(
+      "IDENTITY_PROVIDER=fake is refused when NODE_ENV=production. For a local run of the production images set ALLOW_FAKE_IDENTITY=yes; otherwise use IDENTITY_PROVIDER=oidc.",
+    );
+  }
+}
+
 const webSchema = z.object({
   /** Public base URL of the web process, used to build the sign-in redirect URI. */
   APP_URL: z.url().default("http://localhost:3000"),

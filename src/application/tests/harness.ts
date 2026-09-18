@@ -1,9 +1,9 @@
-import { randomBytes } from "node:crypto";
-import { Pool } from "pg";
+import type { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach } from "vitest";
 import { ControllableClock } from "../../adapters/clock/controllable";
 import { FakeIdentity } from "../../adapters/identity/fake";
 import { runMigrations } from "../../db/migrate";
+import { createTestDatabase } from "../../testing/test-database";
 import { createApplication, type Application } from "../index";
 
 /**
@@ -15,9 +15,6 @@ export interface Harness {
   identity: FakeIdentity;
   clock: ControllableClock;
 }
-
-const ADMIN_URL =
-  process.env.TEST_DATABASE_URL ?? "postgres://postgres:postgres@localhost:5439/postgres";
 
 export const START_OF_TEST = new Date("2026-09-18T09:00:00.000Z");
 
@@ -47,40 +44,6 @@ export function harness(): Harness {
   });
 
   return h;
-}
-
-export interface TestDatabase {
-  pool: Pool;
-  connectionString: string;
-  dispose: () => Promise<void>;
-}
-
-/** A throw-away database with a random name, dropped by `dispose`. Not yet migrated. */
-export async function createTestDatabase(): Promise<TestDatabase> {
-  const admin = new Pool({ connectionString: ADMIN_URL, max: 1 });
-  const name = `test_${randomBytes(6).toString("hex")}`;
-  try {
-    await admin.query(`CREATE DATABASE ${name}`);
-  } catch (error) {
-    await admin.end();
-    throw new Error(
-      `Cannot create a test database at ${ADMIN_URL}. Start Postgres with "docker compose up -d postgres" or set TEST_DATABASE_URL.`,
-      { cause: error },
-    );
-  }
-  const url = new URL(ADMIN_URL);
-  url.pathname = `/${name}`;
-  const connectionString = url.toString();
-  const pool = new Pool({ connectionString });
-  return {
-    pool,
-    connectionString,
-    async dispose() {
-      await pool.end();
-      await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
-      await admin.end();
-    },
-  };
 }
 
 async function truncateAll(pool: Pool): Promise<void> {

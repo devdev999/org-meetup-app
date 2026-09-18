@@ -17,15 +17,19 @@ export default async function WelcomePage() {
           <strong>Organisation Admins can see, for each Member:</strong>
         </p>
         <ul>
-          <li>your name, Department and Site;</li>
+          <li>your name, Department, Site and when you were last active;</li>
           <li>the Interests you declare, including whether you Share or Seek each one;</li>
-          <li>the Meetups and Events you host, join and attend, your Connections and your Availability.</li>
+          <li>
+            the Meetups and Events you host, join and attend, including when you said you were going and did not come,
+            your Connections and your Availability;
+          </li>
+          <li>the Flags you raise and any raised about you.</li>
         </ul>
         <p>
-          Every time an admin looks at a Member's individual data or exports it, that access is written to an audit log.
-          Platform Admins see totals only, never individual Members.
+          Every time an Organisation Admin looks at a Member's individual data or exports it, that access is written
+          to an audit log. Platform Admins see totals only, never individual Members.
         </p>
-        <p>Other Members see your name, Department, Site and Interests, never your Availability history or attendance.</p>
+        <p>Other Members see your name, Department, Site and Interests.</p>
       </div>
       <form action={acknowledgeAdminVisibilityNotice}>
         <button type="submit">I understand</button>

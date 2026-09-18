@@ -4,7 +4,7 @@ import { FakeIdentity } from "../adapters/identity/fake";
 import { OidcIdentity } from "../adapters/identity/oidc";
 import { createApplication, type Application } from "../application/index";
 import type { IdentityPort } from "../application/ports";
-import { databaseUrl, identityProvider } from "./env";
+import { assertFakeIssuerAllowed, databaseUrl, fakeIssuerEnabled } from "./env";
 
 /**
  * Production wiring, shared by the web process, the worker and the setup
@@ -17,7 +17,8 @@ export function connectPool(): Pool {
 }
 
 export function identityFromEnv(): IdentityPort {
-  if (identityProvider() === "fake") {
+  if (fakeIssuerEnabled()) {
+    assertFakeIssuerAllowed();
     console.warn("IDENTITY_PROVIDER=fake: anyone can sign in as anyone. Local development only.");
     return new FakeIdentity();
   }

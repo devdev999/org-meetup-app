@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { identityProvider, webConfig } from "../../../config/env";
+import { fakeIssuerEnabled, webConfig } from "../../../config/env";
 import { issueClaims } from "./actions";
 
 /** Whether this page exists depends on the environment at run time, never at build time. */
@@ -14,7 +14,7 @@ export default async function DevIdpAuthorizePage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  if (identityProvider() !== "fake") notFound();
+  if (!fakeIssuerEnabled()) notFound();
   const params = await searchParams;
   const authorizationUrl = new URL("/dev-idp/authorize", webConfig().APP_URL);
   for (const [key, value] of Object.entries(params)) {

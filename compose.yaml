@@ -14,6 +14,8 @@ x-app-environment: &app-environment
   APP_URL: http://localhost:${WEB_PORT:-3000}
   SESSION_SECRET: local-development-only-secret-do-not-use-anywhere-else-0123456789
   IDENTITY_PROVIDER: fake
+  # The web image runs with NODE_ENV=production, which refuses the fake issuer unless a local run says so.
+  ALLOW_FAKE_IDENTITY: "yes"
   BOOTSTRAP_ORGANISATION_SLUG: ministry-a
   BOOTSTRAP_ORGANISATION_NAME: Ministry A
   BOOTSTRAP_OIDC_ISSUER: http://localhost:${WEB_PORT:-3000}/dev-idp
