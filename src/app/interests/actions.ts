@@ -25,6 +25,16 @@ export interface InterestSaveState {
   saved?: boolean;
 }
 
+function inputErrorState(error: unknown): { error: string } {
+  if (isInvalidInputError(error)) return { error: error.message };
+  throw error;
+}
+
+function revalidateInterests(): void {
+  revalidatePath("/interests");
+  revalidatePath("/members", "layout");
+}
+
 export async function previewInterest(form: FormData): Promise<InterestPreviewState> {
   const { member, profile } = await requireMemberPastWelcome();
   const phrase = formText(form.get("phrase")) ?? "";
@@ -38,8 +48,7 @@ export async function previewInterest(form: FormData): Promise<InterestPreviewSt
     const token = seal(pending, webConfig().SESSION_SECRET, 15 * 60 * 1000);
     return { preview: { resolution, kind, stance, token } };
   } catch (error) {
-    if (isInvalidInputError(error)) return { error: error.message };
-    throw error;
+    return inputErrorState(error);
   }
 }
 
@@ -63,11 +72,9 @@ export async function confirmInterest(form: FormData): Promise<InterestSaveState
   try {
     await member.confirmInterest({ phrase: pending.resolution.phrase, selection, stance: pending.stance });
   } catch (error) {
-    if (isInvalidInputError(error)) return { error: error.message };
-    throw error;
+    return inputErrorState(error);
   }
-  revalidatePath("/interests");
-  revalidatePath("/members", "layout");
+  revalidateInterests();
   return { saved: true };
 }
 
@@ -78,10 +85,8 @@ export async function updateInterestStance(form: FormData): Promise<InterestSave
   try {
     await member.setInterestStance({ interestId: formText(form.get("interestId")) ?? "", stance });
   } catch (error) {
-    if (isInvalidInputError(error)) return { error: error.message };
-    throw error;
+    return inputErrorState(error);
   }
-  revalidatePath("/interests");
-  revalidatePath("/members", "layout");
+  revalidateInterests();
   return { saved: true };
 }

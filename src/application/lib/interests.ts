@@ -27,6 +27,11 @@ export interface ConfirmInterestInput {
   stance: Stance;
 }
 
+const SHORTLIST_SIZE = 5;
+const MIN_SHORTLIST_SCORE = 0.2;
+const FALLBACK_PROPOSAL_SCORE = 0.6;
+const SUBSTRING_SIMILARITY = 0.8;
+
 const phraseSchema = z.string().min(1).max(120).refine((value) => value.trim().length > 0);
 const kindSchema = z.enum(["skill", "hobby"]);
 const selectionSchema = z.union([
@@ -39,9 +44,9 @@ const confirmSchema = z.object({
   stance: z.enum(["shares", "seeks"]),
 });
 
-function parse<T>(schema: z.ZodType<T>, input: unknown): T {
+function parse<T>(schema: z.ZodType<T>, input: unknown, message: string): T {
   const result = schema.safeParse(input);
-  if (!result.success) throw new InvalidInputError("invalid-interest", "Enter an Interest of up to 120 characters and choose a kind and Stance.");
+  if (!result.success) throw new InvalidInputError("invalid-interest", message);
   return result.data;
 }
 
@@ -75,32 +80,32 @@ export function memberInterestList({ db }: Deps, actor: Actor, memberId = actor.
 }
 
 export async function resolveInterest(deps: Deps, actor: Actor, input: { phrase: string; kind: InterestKind }): Promise<InterestResolution> {
-  const { phrase, kind } = parse(z.object({ phrase: phraseSchema, kind: kindSchema }), input);
+  const { phrase, kind } = parse(z.object({ phrase: phraseSchema, kind: kindSchema }), input,
+    "Enter an Interest of up to 120 characters and choose Skill or Hobby.");
   const catalog = await listInterests(deps, actor);
   const aliases = await deps.db.select({ interestId: interestAliases.interestId, phrase: interestAliases.phrase })
     .from(interestAliases).where(eq(interestAliases.organisationId, actor.organisationId));
   const ranked = catalog.map((interest) => ({
     interest,
     score: Math.max(similarity(phrase, interest.name), ...aliases.filter((alias) => alias.interestId === interest.interestId).map((alias) => similarity(phrase, alias.phrase))),
-  })).filter(({ score }) => score > 0.2).sort((a, b) => b.score - a.score || a.interest.name.localeCompare(b.interest.name));
-  const shortlist = ranked.slice(0, 5).map(({ interest }) => interest);
+  })).filter(({ score }) => score > MIN_SHORTLIST_SCORE).sort((a, b) => b.score - a.score || a.interest.name.localeCompare(b.interest.name));
+  const shortlist = ranked.slice(0, SHORTLIST_SIZE).map(({ interest }) => interest);
   const closest = ranked[0];
-  let proposed: InterestSelection = closest && closest.score >= 0.6 ? { interestId: closest.interest.interestId } : { name: phrase.trim(), kind };
+  let proposed: InterestSelection = closest && closest.score >= FALLBACK_PROPOSAL_SCORE ? { interestId: closest.interest.interestId } : { name: phrase.trim(), kind };
   const counts = await deps.db.select({ interestId: memberInterests.interestId, count: count() }).from(memberInterests)
     .innerJoin(members, and(eq(members.organisationId, memberInterests.organisationId), eq(members.id, memberInterests.memberId)))
     .where(and(eq(memberInterests.organisationId, actor.organisationId), inArray(members.status, VISIBLE_MEMBER_STATUSES)))
     .groupBy(memberInterests.interestId);
-  try {
-    const result = await deps.ai.resolveInterest({ phrase, shortlist: shortlist.map(({ interestId, name, kind }) => ({ name, kind, count: counts.find((entry) => entry.interestId === interestId)?.count ?? 0 })) });
-    if ("existingName" in result) {
-      const existing = shortlist.find((interest) => interest.name.toLowerCase() === result.existingName.toLowerCase());
-      if (existing) proposed = { interestId: existing.interestId };
-    } else {
-      const valid = selectionSchema.safeParse(result);
-      if (valid.success) proposed = valid.data;
-    }
-  } catch {
-    return { phrase, proposed, shortlist };
+  const result = await deps.ai.resolveInterest({
+    phrase,
+    shortlist: shortlist.map(({ interestId, name, kind }) => ({ name, kind, count: counts.find((entry) => entry.interestId === interestId)?.count ?? 0 })),
+  }).catch(() => undefined);
+  if (result && "existingName" in result) {
+    const existing = shortlist.find((interest) => interest.name.toLowerCase() === result.existingName.toLowerCase());
+    if (existing) proposed = { interestId: existing.interestId };
+  } else if (result) {
+    const valid = selectionSchema.safeParse(result);
+    if (valid.success) proposed = valid.data;
   }
   return { phrase, proposed, shortlist };
 }
@@ -109,7 +114,7 @@ function similarity(left: string, right: string): number {
   const a = left.trim().toLowerCase();
   const b = right.trim().toLowerCase();
   if (a === b) return 1;
-  if (a.includes(b) || b.includes(a)) return 0.8;
+  if (a.includes(b) || b.includes(a)) return SUBSTRING_SIMILARITY;
   let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
   for (let i = 0; i < a.length; i++) {
     const current = [i + 1];
@@ -122,7 +127,8 @@ function similarity(left: string, right: string): number {
 }
 
 export async function confirmInterest(deps: Deps, actor: Actor, input: ConfirmInterestInput): Promise<MemberInterest[]> {
-  const { phrase, selection, stance } = parse(confirmSchema, input);
+  const { phrase, selection, stance } = parse(confirmSchema, input,
+    "Enter an Interest of up to 120 characters, choose its listing, and choose Shares or Seeks.");
   await deps.db.transaction(async (tx) => {
     await requireActiveMember(tx, actor);
     let interestId: string;
@@ -145,7 +151,8 @@ export async function confirmInterest(deps: Deps, actor: Actor, input: ConfirmIn
 }
 
 export async function setInterestStance(deps: Deps, actor: Actor, input: { interestId: string; stance: Stance }): Promise<MemberInterest[]> {
-  const selection = parse(z.object({ interestId: z.uuid(), stance: z.enum(["shares", "seeks"]) }), input);
+  const selection = parse(z.object({ interestId: z.uuid(), stance: z.enum(["shares", "seeks"]) }), input,
+    "Choose a declared Interest and select Shares or Seeks.");
   const updated = await deps.db.update(memberInterests).set({ stance: selection.stance })
     .where(and(eq(memberInterests.organisationId, actor.organisationId), eq(memberInterests.memberId, actor.memberId), eq(memberInterests.interestId, selection.interestId)))
     .returning({ interestId: memberInterests.interestId });
