@@ -34,7 +34,7 @@ Organisation Admin access is checked for each command and query. Roster views, p
 
 ## Meetups
 
-Open Meetups from your profile to create one, join one or manage one you Host. Physical Meetups default to the Host's Site as their audience, even when the Place is at another Site. Virtual Meetups default to the whole Organisation. The Host can instead choose a Site, the Organisation or invite-only. Invite-only Meetups are visible only to their Host until Invites arrive in issue #6.
+Open Meetups from your profile to create one, join one or manage one you Host. Physical Meetups default to the Host's Site as their audience, even when the Place is at another Site. Virtual Meetups default to the whole Organisation. The Host can instead choose a Site, the Organisation or invite-only. Invite-only Meetups are visible only to their Host until Invites arrive in issue #7.
 
 Meetup input, display and notices use UTC for this deployment. Configurable deployment time zones belong to issue #15. Existing Participants and waitlisted Members keep access if their profile Site changes, so they can still leave their Meetup.
 
