@@ -138,6 +138,22 @@ test("CSV upload handles quoted names, a byte-order mark and optional staff iden
   ]);
 });
 
+test("quoted multiline CSV values can be committed after form submission", async () => {
+  await h.app.bootstrap(config);
+  const admin = await signInAdmin();
+  const csv = 'email,name,department,site\nana.silva@ministry-a.example,"Ana\nSilva",Legal,Harbour House\n';
+  const preview = await admin.previewRoster([...administrators, ...parseRosterCsv(csv)]);
+  const form = new FormData();
+  form.set("csv", csv);
+  const submitted = await new Request("http://localhost/admin/roster", { method: "POST", body: form }).formData();
+
+  await admin.commitRoster([...administrators, ...parseRosterCsv(submitted.get("csv")!.toString())], preview.revision);
+
+  expect(await admin.roster()).toContainEqual(
+    expect.objectContaining({ email: anaRow.email, name: "Ana\nSilva", status: "provisioned" }),
+  );
+});
+
 test("roster changes and preview revisions cannot cross Organisations", async () => {
   await h.app.bootstrap(config);
   await h.app.bootstrap({ ...ministryB, organisationAdmin: adminPerson });

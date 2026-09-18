@@ -4,7 +4,7 @@ import { InvalidInputError, type RosterRow } from "../../application/index";
 export function parseRosterCsv(csv: string): RosterRow[] {
   let records: string[][];
   try {
-    records = parse(csv, { bom: true, trim: true, skip_empty_lines: true });
+    records = parse(csv.replace(/\r\n?/g, "\n"), { bom: true, trim: true, skip_empty_lines: true });
   } catch {
     throw new InvalidInputError("invalid-roster", "the CSV has an invalid row or quotation mark");
   }
