@@ -1,6 +1,7 @@
 import { normaliseEmail } from "./db";
 import { ensureDepartment, ensureSite } from "./departments-and-sites";
 import type { Deps } from "./deps";
+import { seedActivities } from "./organisation-lists";
 import { members, organisationOidcSettings, organisations, type ClaimMapping } from "./schema";
 
 /**
@@ -22,6 +23,7 @@ export interface BootstrapConfig {
     claimMapping: ClaimMapping;
   };
   platformAdmin: { email: string; name: string };
+  organisationAdmin?: { email: string; name: string };
 }
 
 export async function bootstrap({ db, clock }: Deps, config: BootstrapConfig): Promise<void> {
@@ -33,6 +35,7 @@ export async function bootstrap({ db, clock }: Deps, config: BootstrapConfig): P
       .onConflictDoUpdate({ target: organisations.slug, set: { name: config.organisation.name } })
       .returning({ id: organisations.id });
     if (!organisation) throw new Error("bootstrap: Organisation upsert returned no row");
+    await seedActivities(tx, organisation.id, now);
 
     for (const name of config.organisation.departments ?? []) {
       await ensureDepartment(tx, organisation.id, name, now);
@@ -68,5 +71,19 @@ export async function bootstrap({ db, clock }: Deps, config: BootstrapConfig): P
         target: [members.organisationId, members.email],
         set: { isPlatformAdmin: true, updatedAt: now },
       });
+    if (config.organisationAdmin) {
+      await tx.insert(members).values({
+        organisationId: organisation.id,
+        email: normaliseEmail(config.organisationAdmin.email),
+        name: config.organisationAdmin.name,
+        status: "provisioned",
+        isOrganisationAdmin: true,
+        createdAt: now,
+        updatedAt: now,
+      }).onConflictDoUpdate({
+        target: [members.organisationId, members.email],
+        set: { isOrganisationAdmin: true, updatedAt: now },
+      });
+    }
   });
 }

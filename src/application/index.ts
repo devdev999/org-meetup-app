@@ -2,7 +2,7 @@ import type { Pool } from "pg";
 import { bootstrap, type BootstrapConfig } from "./lib/bootstrap";
 import { connectDatabase } from "./lib/db";
 import type { Deps } from "./lib/deps";
-import { AdminVisibilityNoticeRequiredError, InvalidInputError, type InvalidInputCode } from "./lib/errors";
+import { AccessDeniedError, AdminVisibilityNoticeRequiredError, InvalidInputError, type InvalidInputCode } from "./lib/errors";
 import {
   asMember,
   type AdminVisibilityNotice,
@@ -25,7 +25,10 @@ import {
 } from "./lib/sign-in";
 import type { Clock, IdentityPort } from "./ports";
 
-export { AdminVisibilityNoticeRequiredError, InvalidInputError, SignInError };
+export { AccessDeniedError, AdminVisibilityNoticeRequiredError, InvalidInputError, SignInError };
+export type { AdminAuditEntry, OrganisationAdminActions, UnknownLoginNotice } from "./lib/organisation-admin";
+export type { OrganisationListEntry, OrganisationListKind, OrganisationLists } from "./lib/organisation-lists";
+export type { RosterRow, RosterMember, RosterPreview } from "./lib/roster";
 export type {
   AdminVisibilityNotice,
   BeginSignInInput,
@@ -55,6 +58,14 @@ export function isSignInError(error: unknown): error is SignInError {
 
 export function isAdminVisibilityNoticeRequiredError(error: unknown): error is AdminVisibilityNoticeRequiredError {
   return error instanceof Error && error.name === "AdminVisibilityNoticeRequiredError";
+}
+
+export function isAccessDeniedError(error: unknown): error is AccessDeniedError {
+  return error instanceof Error && error.name === "AccessDeniedError";
+}
+
+export function isInvalidInputError(error: unknown): error is InvalidInputError {
+  return error instanceof Error && error.name === "InvalidInputError";
 }
 
 export interface ApplicationDependencies {

@@ -1,4 +1,4 @@
-import { boolean, foreignKey, jsonb, pgEnum, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, foreignKey, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 /**
  * Every table except platform configuration carries `organisationId`
@@ -50,6 +50,7 @@ export const departments = pgTable(
     name: text().notNull(),
     /** `name` lower-cased and trimmed, so "Finance" and "finance" are one Department. */
     nameKey: text().notNull(),
+    retired: boolean().notNull().default(false),
     createdAt: timestamptz().notNull(),
   },
   (table) => [
@@ -68,6 +69,7 @@ export const sites = pgTable(
       .references(() => organisations.id),
     name: text().notNull(),
     nameKey: text().notNull(),
+    retired: boolean().notNull().default(false),
     createdAt: timestamptz().notNull(),
   },
   (table) => [
@@ -78,6 +80,31 @@ export const sites = pgTable(
 
 /** Provisioned until first login, Active after it, Suspended or Departed by an admin or the roster. */
 export const memberStatus = pgEnum("member_status", ["provisioned", "active", "suspended", "departed"]);
+
+export const activities = pgTable("activities", {
+  id: uuid().primaryKey().defaultRandom(),
+  organisationId: uuid().notNull().references(() => organisations.id),
+  name: text().notNull(),
+  nameKey: text().notNull(),
+  retired: boolean().notNull().default(false),
+  createdAt: timestamptz().notNull(),
+}, (table) => [
+  uniqueIndex("activities_organisation_name_key_unique").on(table.organisationId, table.nameKey),
+  unique("activities_organisation_id_id_unique").on(table.organisationId, table.id),
+]);
+
+export const siteShares = pgTable("site_shares", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  siteId: uuid().notNull(),
+  sharedWithOrganisationId: uuid().notNull().references(() => organisations.id),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.siteId, table.sharedWithOrganisationId] }),
+  foreignKey({
+    name: "site_shares_site_same_organisation_fk",
+    columns: [table.organisationId, table.siteId],
+    foreignColumns: [sites.organisationId, sites.id],
+  }),
+]);
 
 export const members = pgTable(
   "members",
@@ -97,6 +124,7 @@ export const members = pgTable(
     /** The Organisation's own identifier for the person, from the roster or the login. */
     staffIdentifier: text(),
     isPlatformAdmin: boolean().notNull().default(false),
+    isOrganisationAdmin: boolean().notNull().default(false),
     /** When the Member acknowledged the first-login notice about what admins can see (ADR 0006). */
     adminVisibilityNoticeAcknowledgedAt: timestamptz(),
     createdAt: timestamptz().notNull(),
@@ -120,6 +148,19 @@ export const members = pgTable(
 
 /** Something an Organisation Admin should look at, raised by the application. */
 export const organisationAdminNoticeKind = pgEnum("organisation_admin_notice_kind", ["unknown_login"]);
+
+export const adminAuditEntries = pgTable("admin_audit_entries", {
+  id: uuid().primaryKey().defaultRandom(),
+  organisationId: uuid().notNull().references(() => organisations.id),
+  actorMemberId: uuid().notNull(),
+  action: text().notNull(),
+  filter: jsonb().$type<Record<string, string>>().notNull(),
+  createdAt: timestamptz().notNull(),
+}, (table) => [foreignKey({
+  name: "admin_audit_entries_actor_same_organisation_fk",
+  columns: [table.organisationId, table.actorMemberId],
+  foreignColumns: [members.organisationId, members.id],
+})]);
 
 export const organisationAdminNotices = pgTable(
   "organisation_admin_notices",

@@ -1,4 +1,4 @@
-export type InvalidInputCode = "unknown-department" | "unknown-site";
+export type InvalidInputCode = "unknown-department" | "unknown-site" | "invalid-roster" | "stale-roster" | "invalid-list-entry" | "duplicate-list-entry";
 
 /** Thrown when input names something the actor's Organisation does not have. */
 export class InvalidInputError extends Error {
@@ -15,5 +15,12 @@ export class AdminVisibilityNoticeRequiredError extends Error {
   constructor() {
     super("acknowledge the notice about Organisation Admin visibility before continuing");
     this.name = "AdminVisibilityNoticeRequiredError";
+  }
+}
+
+export class AccessDeniedError extends Error {
+  constructor() {
+    super("this Member cannot access this area");
+    this.name = "AccessDeniedError";
   }
 }

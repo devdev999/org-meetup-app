@@ -1,8 +1,9 @@
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import {
   isAdminVisibilityNoticeRequiredError,
+  isAccessDeniedError,
   type MemberActions,
   type PendingSignIn,
   type Profile,
@@ -34,6 +35,16 @@ export function cookieOptions(timeToLiveMs: number) {
     path: "/",
     maxAge: Math.floor(timeToLiveMs / 1000),
   } as const;
+}
+
+export async function requireOrganisationAdmin() {
+  const { member } = await requireMemberPastWelcome();
+  try {
+    return await member.organisationAdmin();
+  } catch (error) {
+    if (isAccessDeniedError(error)) notFound();
+    throw error;
+  }
 }
 
 export function sealSession(memberId: string): string {

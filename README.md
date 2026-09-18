@@ -18,6 +18,20 @@ Then open <http://localhost:3000>. Compose starts Postgres, applies migrations a
 
 The worker logs a heartbeat once a minute: `docker compose logs -f worker`.
 
+Sign in as `olivia@ministry-a.example` for the seeded Organisation Admin. Open the admin area from the profile to upload a roster, manage Departments, Sites and Activities, or review unknown logins and the audit log. The Platform Admin account has no Organisation Admin access unless separately assigned that role.
+
+### Roster uploads
+
+The CSV must have `email,name,department,site` columns and may include `staff_identifier`. Column names ignore case, spaces, underscores and hyphens. Quoted values and UTF-8 byte-order marks are supported. Email and name are required in every row; Department, Site and staff identifier may be blank. Uploads are limited to 1 MB.
+
+Upload the complete Organisation roster, including the Organisation Admin and Platform Admin rows if they should retain access. The preview shows additions, changed fields and departures. Committing updates Members by email within the Organisation. Missing Members become Departed immediately. Their records remain, but their profiles disappear from Member views and their sessions and sign-ins are refused. A returning Member keeps the same identity and becomes Provisioned until their next login. A stale preview must be uploaded again before committing.
+
+New Members are Provisioned and visible before first login. Sign-in makes them Active without replacing populated roster fields. Roster uploads can correct name, Department, Site and staff identifier for existing Members. The application accepts structured roster rows through `previewRoster` and `commitRoster`; CSV parsing lives in an adapter so directory sync can use those commands later.
+
+Retired Departments and Sites disappear from profile choices. Existing assignments remain visible and can be kept or cleared. Renaming an entry updates all references. Each Organisation starts with coffee, lunch, walk, game, sport, learning session and other Activities. The Site-sharing table records the future sharing relationship; no application command or query uses it yet.
+
+Organisation Admin access is checked for each command and query. Roster views, previews and unknown-login lists record the actor, view, filter and time in the audit log.
+
 ## Develop
 
 Needs Node 22.12 or newer (the containers use 24) and pnpm 10.
@@ -69,9 +83,9 @@ One deep module holds every rule. Its interface is a set of commands and queries
 
 Only `index.ts` and `ports.ts` are importable from outside; `lib/` and `tests/` are private. `pnpm lint:boundaries` (dependency-cruiser, config in `.dependency-cruiser.cjs`) enforces this, plus: the application never imports an adapter or a process, and the web process and the worker never import each other.
 
-Before acknowledgement, a Member can query `adminVisibilityNotice()` for the welcome page and call `acknowledgeAdminVisibilityNotice()`. The application refuses `profile`, `updateProfile`, `departmentsAndSites` and `viewMember` with `AdminVisibilityNoticeRequiredError` until then; the web translates that error into a redirect. The notice query returns nothing once acknowledged, and repeat acknowledgements retain the original timestamp.
+Before acknowledgement, a Member can query `adminVisibilityNotice()` for the welcome page and call `acknowledgeAdminVisibilityNotice()`. The application refuses protected Member commands and `organisationAdmin()` with `AdminVisibilityNoticeRequiredError` until then; the web translates that error into a redirect. The notice query returns nothing once acknowledged, and repeat acknowledgements retain the original timestamp.
 
-Departments and Sites are the Organisation's lists. Bootstrap configuration, the login (directory data) and, from the roster ticket on, the Organisation Admin add to them; a Member only chooses from them. A Member's corrections, including clearing a populated field to "Not set", survive later logins. Saving one field leaves an untouched blank in the other eligible for later login data.
+Departments and Sites are the Organisation's lists. Bootstrap configuration, login directory data, roster uploads and the Organisation Admin add to them; a Member only chooses from them. A Member's corrections, including clearing a populated field to "Not set", survive later logins. Saving one field leaves an untouched blank in the other eligible for later login data.
 
 ### Ports and adapters
 
@@ -97,6 +111,7 @@ All from the environment; see [`.env.example`](./.env.example).
 | `IDENTITY_PROVIDER` | `oidc` (default) for real issuers, `fake` for the built-in issuer. A production build (`NODE_ENV=production`) refuses `fake` unless `ALLOW_FAKE_IDENTITY=yes`, which compose sets for the local run. |
 | `BOOTSTRAP_*`       | The first Organisation, its OIDC settings and claim mapping, and the first Platform Admin. Unset to skip. |
 | `BOOTSTRAP_DEPARTMENTS`, `BOOTSTRAP_SITES` | Optional JSON arrays of names to seed the Organisation's profile choices, such as `["Finance","Legal"]` and `["Harbour House"]`. |
+| `BOOTSTRAP_ORGANISATION_ADMIN_EMAIL`, `BOOTSTRAP_ORGANISATION_ADMIN_NAME` | Optional first Organisation Admin. Set both together. This role is separate from Platform Admin. |
 
 Supply these lists when the issuer does not provide Department or Site claims, so Members still have profile choices. Names are trimmed and matched ignoring case. Re-running `pnpm db:setup` adds new choices without removing existing ones or changing a Member's selections. Unset lists default to empty; blank names or malformed JSON are rejected. Compose supplies sample lists, and `.env.example` shows the format for local development.
 

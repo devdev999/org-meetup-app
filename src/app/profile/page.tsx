@@ -1,14 +1,16 @@
+import Link from "next/link";
 import { requireMemberPastWelcome } from "../../web/session";
 import { signOut, updateProfile } from "./actions";
 
 export default async function ProfilePage() {
   const { member, profile } = await requireMemberPastWelcome();
   const choices = await member.departmentsAndSites();
-  const nothingToChoose = choices.departments.length === 0 && choices.sites.length === 0;
+  const nothingToChoose = choices.departments.length === 0 && choices.sites.length === 0 && profile.department === null && profile.site === null;
 
   return (
     <main>
       <h1>{profile.name}</h1>
+      {profile.isOrganisationAdmin && <p><Link href="/admin">Open Organisation Admin area</Link></p>}
       <dl>
         <dt>Organisation</dt>
         <dd>{profile.organisation.name}</dd>
@@ -44,6 +46,7 @@ export default async function ProfilePage() {
               Department
               <select name="department" defaultValue={profile.department ?? ""}>
                 <option value="">Not set</option>
+                {profile.department && !choices.departments.includes(profile.department) && <option value={profile.department}>{profile.department}, retired</option>}
                 {choices.departments.map((name) => (
                   <option key={name} value={name}>
                     {name}
@@ -55,6 +58,7 @@ export default async function ProfilePage() {
               Site
               <select name="site" defaultValue={profile.site ?? ""}>
                 <option value="">Not set</option>
+                {profile.site && !choices.sites.includes(profile.site) && <option value={profile.site}>{profile.site}, retired</option>}
                 {choices.sites.map((name) => (
                   <option key={name} value={name}>
                     {name}
