@@ -4,6 +4,7 @@ import { currentMember, type SignInFailure } from "../../web/session";
 
 /** Plain-language explanations for the reasons a sign-in can fail. */
 const SIGN_IN_FAILURES: Record<SignInFailure, string> = {
+  "inactive-member": "Your access has ended or been suspended. Contact your Organisation Admin.",
   expired: "That sign-in took too long. Please start again.",
   rejected: "Your Organisation's login did not accept that sign-in. Please start again.",
   "unknown-organisation": "That Organisation is not set up on this platform.",

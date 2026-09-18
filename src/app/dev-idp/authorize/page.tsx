@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { fakeIssuerEnabled, webConfig } from "../../../config/env";
-import { issueClaims } from "./actions";
 
 /** Whether this page exists depends on the environment at run time, never at build time. */
 export const dynamic = "force-dynamic";
@@ -31,7 +30,7 @@ export default async function DevIdpAuthorizePage({
         This is the built-in fake identity provider. It stands in for your Organisation's real login while developing
         locally. Whoever you say you are, you are.
       </p>
-      <form action={issueClaims}>
+      <form action="/dev-idp/claims" method="post">
         <input type="hidden" name="authorization_url" value={authorizationUrl.href} />
         <label>
           Email

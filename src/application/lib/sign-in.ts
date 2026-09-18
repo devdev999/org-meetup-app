@@ -37,7 +37,7 @@ export interface PendingSignIn {
   startedAt: string;
 }
 
-export type SignInErrorCode = "unknown-organisation" | "expired" | "rejected" | "no-email" | "unverified-email";
+export type SignInErrorCode = "unknown-organisation" | "expired" | "rejected" | "no-email" | "unverified-email" | "inactive-member";
 
 export class SignInError extends Error {
   constructor(
@@ -124,6 +124,7 @@ export async function completeSignIn(
   const person = mapClaims(claims, claimMapping);
 
   return db.transaction(async (tx) => {
+    await tx.select({ id: organisations.id }).from(organisations).where(eq(organisations.id, organisation.id)).for("update");
     const memberId = await bindMember(tx, organisation.id, person, now);
     await fillBlanksFromLogin(tx, organisation.id, memberId, person, now);
     return { memberId };
@@ -139,6 +140,9 @@ async function bindMember(tx: Queryable, organisationId: string, person: Person,
     .where(byEmail)
     .limit(1);
   if (existing) {
+    if (existing.status === "departed" || existing.status === "suspended") {
+      throw new SignInError("inactive-member", "this Member no longer has access; contact your Organisation Admin");
+    }
     const changes: Partial<typeof members.$inferInsert> = {};
     if (existing.status === "provisioned") changes.status = "active";
     // A Member created by a login that stated no name carries their email as a placeholder.

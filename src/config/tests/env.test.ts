@@ -39,3 +39,13 @@ test.each([
 ])("bootstrap rejects invalid names in %s: %s", (variable, value) => {
   expect(() => bootstrapConfig({ ...bootstrapEnvironment, [variable]: value })).toThrow(variable);
 });
+
+test("bootstrap configures an Organisation Admin separately from the Platform Admin", () => {
+  expect(bootstrapConfig({
+    ...bootstrapEnvironment,
+    BOOTSTRAP_ORGANISATION_ADMIN_EMAIL: "olivia@ministry-a.example",
+    BOOTSTRAP_ORGANISATION_ADMIN_NAME: "Olivia Admin",
+  })?.organisationAdmin).toEqual({ email: "olivia@ministry-a.example", name: "Olivia Admin" });
+  expect(() => bootstrapConfig({ ...bootstrapEnvironment, BOOTSTRAP_ORGANISATION_ADMIN_EMAIL: "olivia@ministry-a.example" })).toThrow();
+  expect(() => bootstrapConfig({ ...bootstrapEnvironment, BOOTSTRAP_ORGANISATION_ADMIN_NAME: "Olivia Admin" })).toThrow();
+});

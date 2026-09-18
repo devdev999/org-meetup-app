@@ -96,7 +96,7 @@ label {
   font-weight: 500;
 }
 
-input {
+input, select {
   font: inherit;
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--line);
@@ -137,4 +137,66 @@ ul.options a {
   text-decoration: none;
   color: var(--ink);
   font-weight: 500;
+}
+
+.admin-area {
+  max-width: 72rem;
+}
+
+.admin-area nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.table-scroll {
+  overflow-x: auto;
+  margin-bottom: 1.5rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+th, td {
+  padding: 0.6rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+th {
+  background: var(--panel);
+}
+
+.member-status {
+  text-transform: capitalize;
+}
+
+.roster-preview {
+  padding: 1rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+}
+
+.managed-list {
+  list-style: none;
+  padding: 0;
+}
+
+.managed-list li, .list-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.managed-list li {
+  border-bottom: 1px solid var(--line);
+  padding-top: 0.75rem;
 }

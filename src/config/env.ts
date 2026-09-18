@@ -82,6 +82,10 @@ const bootstrapSchema = z.object({
   BOOTSTRAP_OIDC_CLAIM_STAFF_IDENTIFIER: z.string().optional(),
   BOOTSTRAP_PLATFORM_ADMIN_EMAIL: z.email(),
   BOOTSTRAP_PLATFORM_ADMIN_NAME: z.string().min(1),
+  BOOTSTRAP_ORGANISATION_ADMIN_EMAIL: z.email().optional(),
+  BOOTSTRAP_ORGANISATION_ADMIN_NAME: z.string().trim().min(1).optional(),
+}).refine((value) => Boolean(value.BOOTSTRAP_ORGANISATION_ADMIN_EMAIL) === Boolean(value.BOOTSTRAP_ORGANISATION_ADMIN_NAME), {
+  message: "BOOTSTRAP_ORGANISATION_ADMIN_EMAIL and BOOTSTRAP_ORGANISATION_ADMIN_NAME must be set together",
 });
 
 /**
@@ -112,5 +116,8 @@ export function bootstrapConfig(env: NodeJS.ProcessEnv = process.env): Bootstrap
       },
     },
     platformAdmin: { email: v.BOOTSTRAP_PLATFORM_ADMIN_EMAIL, name: v.BOOTSTRAP_PLATFORM_ADMIN_NAME },
+    ...(v.BOOTSTRAP_ORGANISATION_ADMIN_EMAIL && v.BOOTSTRAP_ORGANISATION_ADMIN_NAME ? {
+      organisationAdmin: { email: v.BOOTSTRAP_ORGANISATION_ADMIN_EMAIL, name: v.BOOTSTRAP_ORGANISATION_ADMIN_NAME },
+    } : {}),
   };
 }

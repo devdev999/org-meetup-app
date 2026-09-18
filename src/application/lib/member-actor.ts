@@ -1,8 +1,10 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { requireActiveMember, type Actor } from "./actor";
 import { findDepartment, findSite, listDepartmentsAndSites } from "./departments-and-sites";
 import type { Deps } from "./deps";
-import { AdminVisibilityNoticeRequiredError, InvalidInputError } from "./errors";
+import { InvalidInputError } from "./errors";
 import { blankToNull, isUuid } from "./input";
+import { organisationAdmin, type OrganisationAdminActions } from "./organisation-admin";
 import { departments, members, organisations, sites } from "./schema";
 
 export type MemberStatus = (typeof members.status.enumValues)[number];
@@ -17,6 +19,7 @@ export interface Profile {
   department: string | null;
   site: string | null;
   isPlatformAdmin: boolean;
+  isOrganisationAdmin: boolean;
   /** Null until the Member has acknowledged the notice about what Organisation Admins can see. */
   adminVisibilityNoticeAcknowledgedAt: Date | null;
 }
@@ -50,6 +53,7 @@ const VISIBLE_STATUSES: MemberStatus[] = ["provisioned", "active"];
  * to it, so nothing a page passes in can reach another Organisation.
  */
 export interface MemberActions {
+  organisationAdmin(): Promise<OrganisationAdminActions>;
   adminVisibilityNotice(): Promise<AdminVisibilityNotice | undefined>;
   profile(): Promise<Profile>;
   /** Records that the Member has read the notice about admin visibility. The first time counts. */
@@ -60,11 +64,6 @@ export interface MemberActions {
   departmentsAndSites(): Promise<{ departments: string[]; sites: string[] }>;
   /** Another Member of the same Organisation, or undefined if there is no such visible Member there. */
   viewMember(memberId: string): Promise<MemberSummary | undefined>;
-}
-
-interface Actor {
-  memberId: string;
-  organisationId: string;
 }
 
 /** Resolves a session's Member to an actor, or undefined if they are not an Active Member. */
@@ -79,17 +78,12 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
   const actor: Actor = { memberId, organisationId: row.organisationId };
 
   async function afterNotice<T>(operation: () => Promise<T>): Promise<T> {
-    const [member] = await deps.db
-      .select({ acknowledgedAt: members.adminVisibilityNoticeAcknowledgedAt })
-      .from(members)
-      .where(self(actor))
-      .limit(1);
-    if (!member) throw new Error("the signed-in Member no longer exists");
-    if (member.acknowledgedAt === null) throw new AdminVisibilityNoticeRequiredError();
+    await requireActiveMember(deps.db, actor);
     return operation();
   }
 
   return {
+    organisationAdmin: () => organisationAdmin(deps, actor),
     adminVisibilityNotice: () => adminVisibilityNotice(deps, actor),
     profile: () => afterNotice(() => profile(deps, actor)),
     acknowledgeAdminVisibilityNotice: () => acknowledgeAdminVisibilityNotice(deps, actor),
@@ -114,6 +108,7 @@ function sameOrganisation(
 }
 
 async function adminVisibilityNotice({ db }: Deps, actor: Actor): Promise<AdminVisibilityNotice | undefined> {
+  await requireActiveMember(db, actor, false);
   const [notice] = await db
     .select({ name: members.name, organisation: { slug: organisations.slug, name: organisations.name } })
     .from(members)
@@ -134,6 +129,7 @@ async function profile({ db }: Deps, actor: Actor): Promise<Profile> {
       department: departments.name,
       site: sites.name,
       isPlatformAdmin: members.isPlatformAdmin,
+      isOrganisationAdmin: members.isOrganisationAdmin,
       adminVisibilityNoticeAcknowledgedAt: members.adminVisibilityNoticeAcknowledgedAt,
     })
     .from(members)
@@ -147,6 +143,7 @@ async function profile({ db }: Deps, actor: Actor): Promise<Profile> {
 }
 
 async function acknowledgeAdminVisibilityNotice({ db, clock }: Deps, actor: Actor): Promise<void> {
+  await requireActiveMember(db, actor, false);
   const now = clock.now();
   await db
     .update(members)
@@ -158,11 +155,12 @@ async function updateProfile(deps: Deps, actor: Actor, input: UpdateProfileInput
   const { db, clock } = deps;
   const department = blankToNull(input.department);
   const site = blankToNull(input.site);
-  const departmentId = department === null ? null : await findDepartment(db, actor.organisationId, department);
+  const current = await requireActiveMember(db, actor);
+  const departmentId = department === null ? null : await findDepartment(db, actor.organisationId, department, current.departmentId);
   if (departmentId === undefined) {
     throw new InvalidInputError("unknown-department", `"${department}" is not a Department of this Organisation`);
   }
-  const siteId = site === null ? null : await findSite(db, actor.organisationId, site);
+  const siteId = site === null ? null : await findSite(db, actor.organisationId, site, current.siteId);
   if (siteId === undefined) {
     throw new InvalidInputError("unknown-site", `"${site}" is not a Site of this Organisation`);
   }
