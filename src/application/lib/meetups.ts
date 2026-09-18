@@ -220,6 +220,14 @@ function membershipWhere(organisationId: string, meetupId: string) {
   return and(eq(gatheringMembers.organisationId, organisationId), eq(gatheringMembers.gatheringId, meetupId));
 }
 
+function firstName(name: string) {
+  return name.split(/\s+/)[0];
+}
+
+function noticeRecipients(meetup: MeetupDetail): string[] {
+  return [...meetup.participants, ...(meetup.waitlist ?? [])].map((person) => person.memberId);
+}
+
 async function notify(db: Queryable, organisationId: string, meetup: MeetupSummary, recipients: string[], kind: Notice["kind"], message: string, now: Date) {
   const place = meetup.place.kind === "physical" ? meetup.place.spot : meetup.place.url;
   const time = `${meetup.startsAt.toISOString().slice(0, 16).replace("T", " ")} UTC`;
@@ -244,7 +252,7 @@ export async function joinMeetup(deps: Deps, actor: Actor, id: string): Promise<
     if (meetup.audience.kind !== "open") throw new AccessDeniedError();
     const status = meetup.participantCount < meetup.capacity ? "participant" : "waitlisted";
     await db.insert(gatheringMembers).values({ organisationId: actor.organisationId, gatheringId: id, memberId: actor.memberId, status });
-    if (status === "participant") await notify(db, actor.organisationId, meetup, [meetup.host.memberId], "meetup-joined", `${current.name.split(/\s+/)[0]} joined your Meetup.`, deps.clock.now());
+    if (status === "participant") await notify(db, actor.organisationId, meetup, [meetup.host.memberId], "meetup-joined", `${firstName(current.name)} joined your Meetup.`, deps.clock.now());
     return status;
   });
 }
@@ -267,7 +275,7 @@ export async function leaveMeetup(deps: Deps, actor: Actor, id: string): Promise
     if (!meetup.membership) return;
     await db.delete(gatheringMembers).where(and(membershipWhere(actor.organisationId, id), eq(gatheringMembers.memberId, actor.memberId)));
     if (meetup.membership === "participant") {
-      await notify(db, actor.organisationId, meetup, [meetup.host.memberId], "meetup-left", `${current.name.split(/\s+/)[0]} left your Meetup.`, now);
+      await notify(db, actor.organisationId, meetup, [meetup.host.memberId], "meetup-left", `${firstName(current.name)} left your Meetup.`, now);
       await promoteWaitlist(db, actor.organisationId, meetup, now);
     }
   });
@@ -301,7 +309,7 @@ export async function editMeetup(deps: Deps, actor: Actor, id: string, input: Ed
     }).where(meetupWhere(actor.organisationId, id));
     const updated = (await readMeetup(db, actor, id, current.siteId, now))!;
     if (changed) await notify(db, actor.organisationId, updated,
-      [...meetup.participants, ...(meetup.waitlist ?? [])].filter((person) => person.memberId !== actor.memberId).map((person) => person.memberId),
+      noticeRecipients(meetup).filter((memberId) => memberId !== actor.memberId),
       "meetup-edited", "The Host changed the time or Place of this Meetup.", now);
     await promoteWaitlist(db, actor.organisationId, updated, now);
   });
@@ -318,8 +326,8 @@ export async function handOverMeetup(deps: Deps, actor: Actor, id: string, parti
       .where(and(eq(members.organisationId, actor.organisationId), eq(members.id, nextHost.memberId), eq(members.status, "active")));
     if (!active) invalid("Choose an Active Participant as Host.");
     await db.update(gatherings).set({ hostMemberId: nextHost.memberId }).where(meetupWhere(actor.organisationId, id));
-    await notify(db, actor.organisationId, meetup, [...meetup.participants, ...(meetup.waitlist ?? [])].map((person) => person.memberId),
-      "meetup-handed-over", `${nextHost.name.split(/\s+/)[0]} is now Host of this Meetup.`, now);
+    await notify(db, actor.organisationId, meetup, noticeRecipients(meetup),
+      "meetup-handed-over", `${firstName(nextHost.name)} is now Host of this Meetup.`, now);
   });
 }
 
@@ -329,8 +337,7 @@ export async function cancelMeetup(deps: Deps, actor: Actor, id: string): Promis
     const meetup = await requireScheduledMeetup(db, actor, id, current.siteId, now);
     requireHost(meetup, actor);
     await db.update(gatherings).set({ status: "cancelled" }).where(meetupWhere(actor.organisationId, id));
-    const recipients = [...meetup.participants, ...(meetup.waitlist ?? [])].map((person) => person.memberId);
-    await notify(db, actor.organisationId, meetup, recipients, "meetup-cancelled", "The Host cancelled this Meetup.", now);
+    await notify(db, actor.organisationId, meetup, noticeRecipients(meetup), "meetup-cancelled", "The Host cancelled this Meetup.", now);
     await db.delete(gatheringMembers).where(and(membershipWhere(actor.organisationId, id), eq(gatheringMembers.status, "waitlisted")));
   });
 }
