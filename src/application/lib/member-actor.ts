@@ -1,7 +1,7 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { findDepartment, findSite, listDepartmentsAndSites } from "./departments-and-sites";
 import type { Deps } from "./deps";
-import { InvalidInputError } from "./errors";
+import { AdminVisibilityNoticeRequiredError, InvalidInputError } from "./errors";
 import { blankToNull, isUuid } from "./input";
 import { departments, members, organisations, sites } from "./schema";
 
@@ -20,6 +20,8 @@ export interface Profile {
   /** Null until the Member has acknowledged the notice about what Organisation Admins can see. */
   adminVisibilityNoticeAcknowledgedAt: Date | null;
 }
+
+export type AdminVisibilityNotice = Pick<Profile, "name" | "organisation">;
 
 /**
  * Department and Site by name, chosen from the Organisation's own lists and
@@ -48,6 +50,7 @@ const VISIBLE_STATUSES: MemberStatus[] = ["provisioned", "active"];
  * to it, so nothing a page passes in can reach another Organisation.
  */
 export interface MemberActions {
+  adminVisibilityNotice(): Promise<AdminVisibilityNotice | undefined>;
   profile(): Promise<Profile>;
   /** Records that the Member has read the notice about admin visibility. The first time counts. */
   acknowledgeAdminVisibilityNotice(): Promise<void>;
@@ -74,12 +77,25 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     .limit(1);
   if (!row) return undefined;
   const actor: Actor = { memberId, organisationId: row.organisationId };
+
+  async function afterNotice<T>(operation: () => Promise<T>): Promise<T> {
+    const [member] = await deps.db
+      .select({ acknowledgedAt: members.adminVisibilityNoticeAcknowledgedAt })
+      .from(members)
+      .where(self(actor))
+      .limit(1);
+    if (!member) throw new Error("the signed-in Member no longer exists");
+    if (member.acknowledgedAt === null) throw new AdminVisibilityNoticeRequiredError();
+    return operation();
+  }
+
   return {
-    profile: () => profile(deps, actor),
+    adminVisibilityNotice: () => adminVisibilityNotice(deps, actor),
+    profile: () => afterNotice(() => profile(deps, actor)),
     acknowledgeAdminVisibilityNotice: () => acknowledgeAdminVisibilityNotice(deps, actor),
-    updateProfile: (input) => updateProfile(deps, actor, input),
-    departmentsAndSites: () => listDepartmentsAndSites(deps.db, actor.organisationId),
-    viewMember: (id) => viewMember(deps, actor, id),
+    updateProfile: (input) => afterNotice(() => updateProfile(deps, actor, input)),
+    departmentsAndSites: () => afterNotice(() => listDepartmentsAndSites(deps.db, actor.organisationId)),
+    viewMember: (id) => afterNotice(() => viewMember(deps, actor, id)),
   };
 }
 
@@ -95,6 +111,16 @@ function sameOrganisation(
   organisationId: typeof departments.organisationId | typeof sites.organisationId,
 ) {
   return and(eq(id, memberColumn), eq(organisationId, members.organisationId));
+}
+
+async function adminVisibilityNotice({ db }: Deps, actor: Actor): Promise<AdminVisibilityNotice | undefined> {
+  const [notice] = await db
+    .select({ name: members.name, organisation: { slug: organisations.slug, name: organisations.name } })
+    .from(members)
+    .innerJoin(organisations, eq(organisations.id, members.organisationId))
+    .where(and(self(actor), isNull(members.adminVisibilityNoticeAcknowledgedAt)))
+    .limit(1);
+  return notice;
 }
 
 async function profile({ db }: Deps, actor: Actor): Promise<Profile> {
@@ -140,7 +166,16 @@ async function updateProfile(deps: Deps, actor: Actor, input: UpdateProfileInput
   if (siteId === undefined) {
     throw new InvalidInputError("unknown-site", `"${site}" is not a Site of this Organisation`);
   }
-  await db.update(members).set({ departmentId, siteId, updatedAt: clock.now() }).where(self(actor));
+  await db
+    .update(members)
+    .set({
+      departmentId,
+      siteId,
+      departmentCorrectedByMember: sql`${members.departmentCorrectedByMember} or (${members.departmentId} is distinct from ${departmentId}::uuid)`,
+      siteCorrectedByMember: sql`${members.siteCorrectedByMember} or (${members.siteId} is distinct from ${siteId}::uuid)`,
+      updatedAt: clock.now(),
+    })
+    .where(self(actor));
   return profile(deps, actor);
 }
 

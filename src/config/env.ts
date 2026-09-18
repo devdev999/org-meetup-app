@@ -3,8 +3,8 @@ import type { BootstrapConfig } from "../application/index";
 
 /**
  * Everything the processes read from the environment, parsed once and
- * validated. Secrets come from the environment only (spec: Configuration and
- * operations); nothing here is ever written to the database.
+ * validated. Bootstrap configuration is passed to the application to seed
+ * the first Organisation, its choices, its OIDC settings and its Platform Admin.
  */
 
 export const DEFAULT_DATABASE_URL = "postgres://postgres:postgres@localhost:5439/org_meetup";
@@ -58,9 +58,20 @@ export function webConfig(env: NodeJS.ProcessEnv = process.env): WebConfig {
   return webSchema.parse(present(env));
 }
 
+const bootstrapNamesSchema = z.string().transform((value, context): unknown => {
+  try {
+    return JSON.parse(value);
+  } catch {
+    context.addIssue({ code: "custom", message: "expected a JSON array of names" });
+    return z.NEVER;
+  }
+}).pipe(z.array(z.string().trim().min(1))).default([]);
+
 const bootstrapSchema = z.object({
   BOOTSTRAP_ORGANISATION_SLUG: z.string().regex(/^[a-z0-9-]+$/, "slug: lower-case letters, digits and hyphens"),
   BOOTSTRAP_ORGANISATION_NAME: z.string().min(1),
+  BOOTSTRAP_DEPARTMENTS: bootstrapNamesSchema,
+  BOOTSTRAP_SITES: bootstrapNamesSchema,
   BOOTSTRAP_OIDC_ISSUER: z.url(),
   BOOTSTRAP_OIDC_CLIENT_ID: z.string().min(1),
   BOOTSTRAP_OIDC_CLIENT_SECRET: z.string().optional(),
@@ -82,7 +93,12 @@ export function bootstrapConfig(env: NodeJS.ProcessEnv = process.env): Bootstrap
   if (!Object.keys(values).some((key) => key.startsWith("BOOTSTRAP_"))) return undefined;
   const v = bootstrapSchema.parse(values);
   return {
-    organisation: { slug: v.BOOTSTRAP_ORGANISATION_SLUG, name: v.BOOTSTRAP_ORGANISATION_NAME },
+    organisation: {
+      slug: v.BOOTSTRAP_ORGANISATION_SLUG,
+      name: v.BOOTSTRAP_ORGANISATION_NAME,
+      departments: v.BOOTSTRAP_DEPARTMENTS,
+      sites: v.BOOTSTRAP_SITES,
+    },
     oidc: {
       issuer: v.BOOTSTRAP_OIDC_ISSUER,
       clientId: v.BOOTSTRAP_OIDC_CLIENT_ID,

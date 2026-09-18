@@ -1,0 +1,2 @@
+ALTER TABLE "members" ADD COLUMN "department_corrected_by_member" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "members" ADD COLUMN "site_corrected_by_member" boolean DEFAULT false NOT NULL;

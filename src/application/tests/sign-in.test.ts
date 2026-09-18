@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { FakeIdentity } from "../../adapters/identity/fake";
-import { ana, ministryA, REDIRECT_URI, signInAs, signInForId } from "./fixtures";
+import { ana, ministryA, REDIRECT_URI, signInAndAcknowledgeAs, signInAs, signInForId } from "./fixtures";
 import { harness } from "./harness";
 
 const h = harness();
@@ -15,6 +15,7 @@ test("an email nobody knows signs in and becomes an Active Member of the issuer'
   const { memberId } = await h.app.completeSignIn({ pending: started.pending, callbackUrl });
 
   const actor = await h.app.asMember(memberId);
+  await actor?.acknowledgeAdminVisibilityNotice();
   expect(await actor?.profile()).toMatchObject({
     memberId,
     name: "Ana Silva",
@@ -30,7 +31,7 @@ test("an email nobody knows signs in and becomes an Active Member of the issuer'
 test("a Provisioned Member who signs in becomes that Member, Active, keeping their roster name", async () => {
   await h.app.bootstrap(ministryA);
 
-  const pat = await signInAs(h, "ministry-a", {
+  const pat = await signInAndAcknowledgeAs(h, "ministry-a", {
     sub: "pat-1",
     email: "PAT@ministry-a.example",
     name: "Patricia Platform",
@@ -56,14 +57,20 @@ test("signing in again binds to the same Member", async () => {
 test("the first sign-in asks the Member to acknowledge what Organisation Admins can see, once", async () => {
   await h.app.bootstrap(ministryA);
   const actor = await signInAs(h, "ministry-a", ana);
-  expect((await actor.profile()).adminVisibilityNoticeAcknowledgedAt).toBeNull();
+  expect(await actor.adminVisibilityNotice()).toEqual({
+    name: "Ana Silva",
+    organisation: { slug: "ministry-a", name: "Ministry A" },
+  });
 
   h.clock.set(new Date("2026-09-18T09:05:00.000Z"));
   await actor.acknowledgeAdminVisibilityNotice();
+  expect(await actor.adminVisibilityNotice()).toBeUndefined();
   expect((await actor.profile()).adminVisibilityNoticeAcknowledgedAt).toEqual(new Date("2026-09-18T09:05:00.000Z"));
 
   h.clock.set(new Date("2026-09-19T08:00:00.000Z"));
   const nextDay = await signInAs(h, "ministry-a", ana);
+  expect(await nextDay.adminVisibilityNotice()).toBeUndefined();
+  await nextDay.acknowledgeAdminVisibilityNotice();
   expect((await nextDay.profile()).adminVisibilityNoticeAcknowledgedAt).toEqual(new Date("2026-09-18T09:05:00.000Z"));
 });
 
@@ -125,7 +132,7 @@ test("a login whose issuer says the email is not verified is refused", async () 
 
 test("a login that states no name shows the email as the name until a later login supplies one", async () => {
   await h.app.bootstrap(ministryA);
-  const nameless = await signInAs(h, "ministry-a", { sub: "ana-1", email: "ana.silva@ministry-a.example" });
+  const nameless = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana-1", email: "ana.silva@ministry-a.example" });
   expect((await nameless.profile()).name).toBe("ana.silva@ministry-a.example");
 
   const named = await signInAs(h, "ministry-a", ana);

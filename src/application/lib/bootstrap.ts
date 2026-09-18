@@ -1,4 +1,5 @@
 import { normaliseEmail } from "./db";
+import { ensureDepartment, ensureSite } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { members, organisationOidcSettings, organisations, type ClaimMapping } from "./schema";
 
@@ -8,7 +9,12 @@ import { members, organisationOidcSettings, organisations, type ClaimMapping } f
  * until the Platform Admin ticket replaces this.
  */
 export interface BootstrapConfig {
-  organisation: { slug: string; name: string };
+  organisation: {
+    slug: string;
+    name: string;
+    departments?: string[];
+    sites?: string[];
+  };
   oidc: {
     issuer: string;
     clientId: string;
@@ -27,6 +33,13 @@ export async function bootstrap({ db, clock }: Deps, config: BootstrapConfig): P
       .onConflictDoUpdate({ target: organisations.slug, set: { name: config.organisation.name } })
       .returning({ id: organisations.id });
     if (!organisation) throw new Error("bootstrap: Organisation upsert returned no row");
+
+    for (const name of config.organisation.departments ?? []) {
+      await ensureDepartment(tx, organisation.id, name, now);
+    }
+    for (const name of config.organisation.sites ?? []) {
+      await ensureSite(tx, organisation.id, name, now);
+    }
 
     const oidc = {
       issuer: config.oidc.issuer,

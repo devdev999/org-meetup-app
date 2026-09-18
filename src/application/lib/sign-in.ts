@@ -178,10 +178,10 @@ async function bindMember(tx: Queryable, organisationId: string, person: Person,
 
 /**
  * The login fills in Department, Site and staff identifier only where the
- * Member has none: what the roster or the Member themselves set stays. Each
- * field is filled with COALESCE in one statement, so a correction saved a
- * moment earlier is never overwritten. The login's Department and Site are
- * directory data, so unknown names are added to the Organisation's lists.
+ * Member has none and has not corrected the field, including clearing it.
+ * Each field checks the correction marker and current value in one statement,
+ * so a correction saved a moment earlier is never overwritten. The login's
+ * Department and Site are directory data, so unknown names are added to the Organisation's lists.
  */
 async function fillBlanksFromLogin(
   tx: Queryable,
@@ -193,11 +193,13 @@ async function fillBlanksFromLogin(
   const changes: Partial<Record<"departmentId" | "siteId" | "staffIdentifier", ReturnType<typeof sql>>> = {};
   if (person.department) {
     const departmentId = await ensureDepartment(tx, organisationId, person.department, now);
-    changes.departmentId = sql`coalesce(${members.departmentId}, ${departmentId}::uuid)`;
+    changes.departmentId = sql`case when ${members.departmentCorrectedByMember}
+      then ${members.departmentId} else coalesce(${members.departmentId}, ${departmentId}::uuid) end`;
   }
   if (person.site) {
     const siteId = await ensureSite(tx, organisationId, person.site, now);
-    changes.siteId = sql`coalesce(${members.siteId}, ${siteId}::uuid)`;
+    changes.siteId = sql`case when ${members.siteCorrectedByMember}
+      then ${members.siteId} else coalesce(${members.siteId}, ${siteId}::uuid) end`;
   }
   if (person.staffIdentifier) {
     changes.staffIdentifier = sql`coalesce(${members.staffIdentifier}, ${person.staffIdentifier})`;

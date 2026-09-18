@@ -10,3 +10,10 @@ export class InvalidInputError extends Error {
     this.name = "InvalidInputError";
   }
 }
+
+export class AdminVisibilityNoticeRequiredError extends Error {
+  constructor() {
+    super("acknowledge the notice about Organisation Admin visibility before continuing");
+    this.name = "AdminVisibilityNoticeRequiredError";
+  }
+}

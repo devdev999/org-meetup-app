@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { RawClaims } from "../ports";
-import { ana, ministryA, ministryB, signInAs, signInForId, withDepartmentAndSiteClaims } from "./fixtures";
+import { ana, ministryA, ministryB, signInAndAcknowledgeAs, signInForId, withDepartmentAndSiteClaims } from "./fixtures";
 import { harness } from "./harness";
 
 const h = harness();
@@ -13,7 +13,7 @@ test("a Member sees another Member of their own Organisation and nothing of anot
   await h.app.bootstrap(ministryB);
   const anaId = await signInForId(h, "ministry-a", ana);
   const cleoId = await signInForId(h, "ministry-b", cleo);
-  const boActor = await signInAs(h, "ministry-a", bo);
+  const boActor = await signInAndAcknowledgeAs(h, "ministry-a", bo);
 
   expect(await boActor.viewMember(anaId)).toEqual({ memberId: anaId, name: "Ana Silva", department: null, site: null });
   expect(await boActor.viewMember(cleoId)).toBeUndefined();
@@ -23,8 +23,8 @@ test("the same email signing in with two Organisations' issuers is two separate 
   await h.app.bootstrap(ministryA);
   await h.app.bootstrap(ministryB);
 
-  const inA = await signInAs(h, "ministry-a", ana);
-  const inB = await signInAs(h, "ministry-b", ana);
+  const inA = await signInAndAcknowledgeAs(h, "ministry-a", ana);
+  const inB = await signInAndAcknowledgeAs(h, "ministry-b", ana);
 
   const profileA = await inA.profile();
   const profileB = await inB.profile();
@@ -36,8 +36,8 @@ test("the same email signing in with two Organisations' issuers is two separate 
 test("Departments and Sites are settings of one Organisation: never offered to, nor choosable by, another", async () => {
   await h.app.bootstrap(ministryA);
   await h.app.bootstrap(withDepartmentAndSiteClaims(ministryB));
-  const cleoActor = await signInAs(h, "ministry-b", { ...cleo, ou: "Finance", building: "Harbour House" });
-  const anaActor = await signInAs(h, "ministry-a", ana);
+  const cleoActor = await signInAndAcknowledgeAs(h, "ministry-b", { ...cleo, ou: "Finance", building: "Harbour House" });
+  const anaActor = await signInAndAcknowledgeAs(h, "ministry-a", ana);
 
   expect(await anaActor.departmentsAndSites()).toEqual({ departments: [], sites: [] });
   await expect(anaActor.updateProfile({ department: "Finance", site: null })).rejects.toMatchObject({

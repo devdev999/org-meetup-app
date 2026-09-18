@@ -50,6 +50,12 @@ export async function signInAs(h: Harness, organisationSlug: string, claims: Raw
   return actor;
 }
 
+export async function signInAndAcknowledgeAs(h: Harness, organisationSlug: string, claims: RawClaims): Promise<MemberActions> {
+  const actor = await signInAs(h, organisationSlug, claims);
+  await actor.acknowledgeAdminVisibilityNotice();
+  return actor;
+}
+
 export async function signInForId(h: Harness, organisationSlug: string, claims: RawClaims): Promise<string> {
   const started = await h.app.beginSignIn({ organisationSlug, redirectUri: REDIRECT_URI });
   const callbackUrl = FakeIdentity.callbackUrl(started.authorizationUrl, claims);

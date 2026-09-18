@@ -14,7 +14,7 @@ Needs Docker.
 docker compose up --build
 ```
 
-Then open <http://localhost:3000>. Compose starts Postgres, applies migrations and seeds the first Organisation ("Ministry A") with its first Platform Admin, then starts the web process and the worker. Sign-in goes through the built-in fake issuer (`IDENTITY_PROVIDER=fake`): a page where you type who you are. Sign in as `pat@ministry-a.example` to be the seeded Platform Admin, or as anyone else to see an unknown login create a new Member. The Department and Site fields on that page stand in for the directory claims a real issuer would send; they add to the Organisation's lists, which a Member then chooses from on their profile.
+Then open <http://localhost:3000>. Compose starts Postgres, applies migrations and seeds the first Organisation ("Ministry A") with its first Platform Admin, Departments ("Finance", "Legal") and Site ("Harbour House"), then starts the web process and the worker. Sign-in goes through the built-in fake issuer (`IDENTITY_PROVIDER=fake`): a page where you type who you are. Sign in as `pat@ministry-a.example` to be the seeded Platform Admin, or as anyone else to see an unknown login create a new Member. The Department and Site fields on that page stand in for the directory claims a real issuer would send; they add to the Organisation's lists, which a Member then chooses from on their profile. Leave those fields blank to choose from the seeded lists after acknowledging the first-login notice.
 
 The worker logs a heartbeat once a minute: `docker compose logs -f worker`.
 
@@ -69,7 +69,9 @@ One deep module holds every rule. Its interface is a set of commands and queries
 
 Only `index.ts` and `ports.ts` are importable from outside; `lib/` and `tests/` are private. `pnpm lint:boundaries` (dependency-cruiser, config in `.dependency-cruiser.cjs`) enforces this, plus: the application never imports an adapter or a process, and the web process and the worker never import each other.
 
-Departments and Sites are the Organisation's lists. The login (directory data) and, from the roster ticket on, the Organisation Admin add to them; a Member only chooses from them.
+Before acknowledgement, a Member can query `adminVisibilityNotice()` for the welcome page and call `acknowledgeAdminVisibilityNotice()`. The application refuses `profile`, `updateProfile`, `departmentsAndSites` and `viewMember` with `AdminVisibilityNoticeRequiredError` until then; the web translates that error into a redirect. The notice query returns nothing once acknowledged, and repeat acknowledgements retain the original timestamp.
+
+Departments and Sites are the Organisation's lists. Bootstrap configuration, the login (directory data) and, from the roster ticket on, the Organisation Admin add to them; a Member only chooses from them. A Member's corrections, including clearing a populated field to "Not set", survive later logins. Saving one field leaves an untouched blank in the other eligible for later login data.
 
 ### Ports and adapters
 
@@ -94,6 +96,9 @@ All from the environment; see [`.env.example`](./.env.example).
 | `SESSION_SECRET`    | At least 32 characters; seals the session and pending-sign-in cookies.                      |
 | `IDENTITY_PROVIDER` | `oidc` (default) for real issuers, `fake` for the built-in issuer. A production build (`NODE_ENV=production`) refuses `fake` unless `ALLOW_FAKE_IDENTITY=yes`, which compose sets for the local run. |
 | `BOOTSTRAP_*`       | The first Organisation, its OIDC settings and claim mapping, and the first Platform Admin. Unset to skip. |
+| `BOOTSTRAP_DEPARTMENTS`, `BOOTSTRAP_SITES` | Optional JSON arrays of names to seed the Organisation's profile choices, such as `["Finance","Legal"]` and `["Harbour House"]`. |
+
+Supply these lists when the issuer does not provide Department or Site claims, so Members still have profile choices. Names are trimmed and matched ignoring case. Re-running `pnpm db:setup` adds new choices without removing existing ones or changing a Member's selections. Unset lists default to empty; blank names or malformed JSON are rejected. Compose supplies sample lists, and `.env.example` shows the format for local development.
 
 Per-Organisation OIDC settings (issuer, client id, client secret, claim mapping) are held in the database and seeded from `BOOTSTRAP_*` until the Platform Admin ticket replaces the bootstrap. The client authenticates at the token endpoint with `client_secret_basic` when the issuer advertises it or advertises nothing, otherwise `client_secret_post`; a client without a secret relies on PKCE alone. A login whose claims carry `email_verified: false` is refused; an absent claim is accepted because the issuer is the Organisation's own directory.
 

@@ -1,7 +1,13 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
-import type { MemberActions, PendingSignIn, Profile, SignInErrorCode } from "../application/index";
+import {
+  isAdminVisibilityNoticeRequiredError,
+  type MemberActions,
+  type PendingSignIn,
+  type Profile,
+  type SignInErrorCode,
+} from "../application/index";
 import { webConfig } from "../config/env";
 import { application } from "./application";
 import { seal, unseal } from "./sealed";
@@ -71,10 +77,13 @@ export async function requireMember(): Promise<MemberActions> {
   return member;
 }
 
-/** Everything past the welcome page needs the first-login notice acknowledged first. */
+/** Translates the application's notice prerequisite into a browser redirect. */
 export async function requireMemberPastWelcome(): Promise<{ member: MemberActions; profile: Profile }> {
   const member = await requireMember();
-  const profile = await member.profile();
-  if (profile.adminVisibilityNoticeAcknowledgedAt === null) redirect("/welcome");
-  return { member, profile };
+  try {
+    return { member, profile: await member.profile() };
+  } catch (error) {
+    if (isAdminVisibilityNoticeRequiredError(error)) redirect("/welcome");
+    throw error;
+  }
 }

@@ -2,9 +2,10 @@ import type { Pool } from "pg";
 import { bootstrap, type BootstrapConfig } from "./lib/bootstrap";
 import { connectDatabase } from "./lib/db";
 import type { Deps } from "./lib/deps";
-import { InvalidInputError, type InvalidInputCode } from "./lib/errors";
+import { AdminVisibilityNoticeRequiredError, InvalidInputError, type InvalidInputCode } from "./lib/errors";
 import {
   asMember,
+  type AdminVisibilityNotice,
   type MemberActions,
   type MemberStatus,
   type MemberSummary,
@@ -24,8 +25,9 @@ import {
 } from "./lib/sign-in";
 import type { Clock, IdentityPort } from "./ports";
 
-export { InvalidInputError, SignInError };
+export { AdminVisibilityNoticeRequiredError, InvalidInputError, SignInError };
 export type {
+  AdminVisibilityNotice,
   BeginSignInInput,
   BootstrapConfig,
   CompleteSignInInput,
@@ -51,6 +53,10 @@ export function isSignInError(error: unknown): error is SignInError {
   return error instanceof Error && error.name === "SignInError" && typeof (error as SignInError).code === "string";
 }
 
+export function isAdminVisibilityNoticeRequiredError(error: unknown): error is AdminVisibilityNoticeRequiredError {
+  return error instanceof Error && error.name === "AdminVisibilityNoticeRequiredError";
+}
+
 export interface ApplicationDependencies {
   pool: Pool;
   identity: IdentityPort;
@@ -63,7 +69,7 @@ export interface ApplicationDependencies {
  * Organisation the application derives itself, never from input.
  */
 export interface Application {
-  /** Seeds the first Organisation, its OIDC settings and the first Platform Admin. Idempotent. */
+  /** Seeds the first Organisation, its choices, its OIDC settings and the first Platform Admin. Idempotent. */
   bootstrap(config: BootstrapConfig): Promise<void>;
   /** Anonymous: the Organisations a visitor can sign in to, in name order. */
   signInOptions(): Promise<SignInOption[]>;

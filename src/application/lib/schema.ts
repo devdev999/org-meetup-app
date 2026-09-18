@@ -92,6 +92,8 @@ export const members = pgTable(
     status: memberStatus().notNull(),
     departmentId: uuid(),
     siteId: uuid(),
+    departmentCorrectedByMember: boolean().notNull().default(false),
+    siteCorrectedByMember: boolean().notNull().default(false),
     /** The Organisation's own identifier for the person, from the roster or the login. */
     staffIdentifier: text(),
     isPlatformAdmin: boolean().notNull().default(false),

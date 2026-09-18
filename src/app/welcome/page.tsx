@@ -5,13 +5,13 @@ import { acknowledgeAdminVisibilityNotice } from "./actions";
 /** The first-login notice: what Organisation Admins can see (ADR 0006). Shown once. */
 export default async function WelcomePage() {
   const member = await requireMember();
-  const profile = await member.profile();
-  if (profile.adminVisibilityNoticeAcknowledgedAt !== null) redirect("/profile");
+  const notice = await member.adminVisibilityNotice();
+  if (!notice) redirect("/profile");
 
   return (
     <main>
-      <h1>Welcome, {profile.name}</h1>
-      <p>Before you start, here is what the Organisation Admins of {profile.organisation.name} can see about you.</p>
+      <h1>Welcome, {notice.name}</h1>
+      <p>Before you start, here is what the Organisation Admins of {notice.organisation.name} can see about you.</p>
       <div className="notice">
         <p>
           <strong>Organisation Admins can see, for each Member:</strong>
