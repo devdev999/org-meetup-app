@@ -1,0 +1,3 @@
+# .claude/skills holds machine-local junctions into .agents/skills, created by the skills CLI.
+# The canonical skill files live in .agents/skills and are committed; the links are recreated on install.
+.claude/skills/
