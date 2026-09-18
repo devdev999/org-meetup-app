@@ -1,12 +1,15 @@
 "use client";
 
 import { useActionState } from "react";
-import type { RosterPreview, RosterRow } from "../../../application/index";
-import { commitRosterUpload, previewRosterUpload } from "./actions";
+import type { RosterPreview } from "../../../application/index";
+import { commitRosterUpload, previewRosterUpload, type UploadState } from "./actions";
 import { RosterTable } from "./roster-table";
 
 export function RosterUpload() {
-  const [state, action, pending] = useActionState(previewRosterUpload, {});
+  const [state, action, pending] = useActionState<UploadState, FormData>(
+    (_previous, form) => previewRosterUpload(form),
+    {},
+  );
   return (
     <section>
       <h2>Upload a roster</h2>
@@ -29,15 +32,18 @@ export function RosterUpload() {
           </p>
         )}
       </form>
-      {!pending && state.preview && state.rows && (
-        <RosterCommit key={state.preview.revision} rows={state.rows} preview={state.preview} />
+      {!pending && state.preview && state.csv !== undefined && (
+        <RosterCommit key={state.preview.revision} csv={state.csv} preview={state.preview} />
       )}
     </section>
   );
 }
 
-function RosterCommit({ rows, preview }: { rows: RosterRow[]; preview: RosterPreview }) {
-  const [state, action, pending] = useActionState(commitRosterUpload, {});
+function RosterCommit({ csv, preview }: { csv: string; preview: RosterPreview }) {
+  const [state, action, pending] = useActionState<Awaited<ReturnType<typeof commitRosterUpload>>, FormData>(
+    (_previous, form) => commitRosterUpload(form),
+    {},
+  );
   if (state.saved)
     return (
       <p className="notice" role="status">
@@ -62,7 +68,7 @@ function RosterCommit({ rows, preview }: { rows: RosterRow[]; preview: RosterPre
       <h3>Departures: {preview.departures.length}</h3>
       {preview.departures.length > 0 && <RosterTable rows={preview.departures} />}
       <form action={action}>
-        <input type="hidden" name="rows" value={JSON.stringify(rows)} />
+        <input type="hidden" name="csv" value={csv} />
         <input type="hidden" name="revision" value={preview.revision} />
         <button disabled={pending}>{pending ? "Committing..." : "Commit roster"}</button>
         {state.error && (

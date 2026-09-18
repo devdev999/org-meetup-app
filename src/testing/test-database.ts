@@ -33,11 +33,16 @@ export async function createTestDatabase(): Promise<TestDatabase> {
   url.pathname = `/${name}`;
   const connectionString = url.toString();
   const pool = new Pool({ connectionString });
+  const closedConnections: Promise<void>[] = [];
+  pool.on("connect", (client) => {
+    closedConnections.push(new Promise((resolve) => client.once("end", resolve)));
+  });
   return {
     pool,
     connectionString,
     async dispose() {
       await pool.end();
+      await Promise.all(closedConnections);
       await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
       await admin.end();
     },

@@ -108,34 +108,20 @@ export async function commitRoster(
     );
   }
   for (const row of preview.additions) {
-    const departmentId =
-      row.department === null ? null : await ensureDepartment(db, organisationId, row.department, now);
-    const siteId = row.site === null ? null : await ensureSite(db, organisationId, row.site, now);
     await db.insert(members).values({
+      ...(await rosterFields(db, organisationId, row, now)),
       organisationId,
       email: row.email,
-      name: row.name,
-      staffIdentifier: row.staffIdentifier,
-      departmentId,
-      siteId,
       status: "provisioned",
       createdAt: now,
-      updatedAt: now,
     });
   }
   for (const { before, after } of preview.changes) {
-    const departmentId =
-      after.department === null ? null : await ensureDepartment(db, organisationId, after.department, now);
-    const siteId = after.site === null ? null : await ensureSite(db, organisationId, after.site, now);
     await db
       .update(members)
       .set({
-        name: after.name,
-        departmentId,
-        siteId,
-        staffIdentifier: after.staffIdentifier,
+        ...(await rosterFields(db, organisationId, after, now)),
         status: after.status,
-        updatedAt: now,
       })
       .where(and(eq(members.organisationId, organisationId), eq(members.id, before.memberId)));
   }
@@ -153,6 +139,16 @@ export async function commitRoster(
         ),
       );
   }
+}
+
+async function rosterFields(db: Queryable, organisationId: string, row: RosterRow, now: Date) {
+  return {
+    name: row.name,
+    staffIdentifier: row.staffIdentifier,
+    departmentId: row.department === null ? null : await ensureDepartment(db, organisationId, row.department, now),
+    siteId: row.site === null ? null : await ensureSite(db, organisationId, row.site, now),
+    updatedAt: now,
+  };
 }
 
 export function readRoster(db: Queryable, organisationId: string): Promise<RosterMember[]> {
