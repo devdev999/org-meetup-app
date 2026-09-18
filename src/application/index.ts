@@ -45,6 +45,7 @@ export type {
   UpdateProfileInput,
 };
 export type { ClaimMapping } from "./lib/schema";
+export type { CreateMeetupInput, EditMeetupInput, MeetupAudience, MeetupChoices, MeetupDetail, MeetupPerson, MeetupPlace, MeetupSummary, Notice } from "./lib/meetups";
 
 /**
  * Recognises a `SignInError` by shape rather than class identity: the web

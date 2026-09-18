@@ -22,6 +22,20 @@
       "when": 1789744610191,
       "tag": "0002_roster_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789753608708,
+      "tag": "0003_meetups",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789753731218,
+      "tag": "0004_meetup_notices",
+      "breakpoints": true
     }
   ]
 }

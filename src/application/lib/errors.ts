@@ -1,4 +1,4 @@
-export type InvalidInputCode = "unknown-department" | "unknown-site" | "invalid-roster" | "stale-roster" | "invalid-list-entry" | "duplicate-list-entry";
+export type InvalidInputCode = "unknown-department" | "unknown-site" | "invalid-roster" | "stale-roster" | "invalid-list-entry" | "duplicate-list-entry" | "invalid-meetup";
 
 /** Thrown when input names something the actor's Organisation does not have. */
 export class InvalidInputError extends Error {

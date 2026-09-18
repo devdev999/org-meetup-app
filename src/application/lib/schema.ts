@@ -1,4 +1,4 @@
-import { boolean, foreignKey, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, foreignKey, integer, jsonb, pgEnum, pgTable, primaryKey, serial, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 /**
  * Every table except platform configuration carries `organisationId`
@@ -182,3 +182,59 @@ export const organisationAdminNotices = pgTable(
     }),
   ],
 );
+
+export const gatheringKind = pgEnum("gathering_kind", ["meetup", "event"]);
+export const gatheringStatus = pgEnum("gathering_status", ["scheduled", "cancelled", "completed", "proposed", "rejected"]);
+
+export const gatherings = pgTable("gatherings", {
+  id: uuid().primaryKey().defaultRandom(),
+  organisationId: uuid().notNull().references(() => organisations.id),
+  kind: gatheringKind().notNull(),
+  hostMemberId: uuid().notNull(),
+  activityId: uuid().notNull(),
+  startsAt: timestamptz().notNull(),
+  durationMinutes: integer().notNull(),
+  placeKind: text().$type<"physical" | "virtual">().notNull(),
+  placeSiteId: uuid(),
+  placeSpot: text(),
+  placeUrl: text(),
+  capacity: integer().notNull(),
+  audienceKind: text().$type<"open" | "invite-only">().notNull(),
+  audienceScope: text().$type<"site" | "organisation">(),
+  audienceSiteId: uuid(),
+  description: text().notNull().default(""),
+  status: gatheringStatus().notNull(),
+  createdAt: timestamptz().notNull(),
+}, (table) => [
+  unique("gatherings_organisation_id_id_unique").on(table.organisationId, table.id),
+  foreignKey({ columns: [table.organisationId, table.hostMemberId], foreignColumns: [members.organisationId, members.id] }),
+  foreignKey({ columns: [table.organisationId, table.activityId], foreignColumns: [activities.organisationId, activities.id] }),
+  foreignKey({ columns: [table.organisationId, table.placeSiteId], foreignColumns: [sites.organisationId, sites.id] }),
+  foreignKey({ columns: [table.organisationId, table.audienceSiteId], foreignColumns: [sites.organisationId, sites.id] }),
+]);
+
+export const gatheringMembers = pgTable("gathering_members", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  gatheringId: uuid().notNull(),
+  memberId: uuid().notNull(),
+  status: text().$type<"participant" | "waitlisted">().notNull(),
+  position: serial().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.gatheringId, table.memberId] }),
+  foreignKey({ columns: [table.organisationId, table.gatheringId], foreignColumns: [gatherings.organisationId, gatherings.id] }),
+  foreignKey({ columns: [table.organisationId, table.memberId], foreignColumns: [members.organisationId, members.id] }),
+]);
+
+export const notices = pgTable("notices", {
+  id: uuid().primaryKey().defaultRandom(),
+  organisationId: uuid().notNull().references(() => organisations.id),
+  memberId: uuid().notNull(),
+  gatheringId: uuid().notNull(),
+  kind: text().$type<"meetup-joined" | "meetup-left" | "meetup-promoted" | "meetup-edited" | "meetup-cancelled" | "meetup-handed-over">().notNull(),
+  message: text().notNull(),
+  createdAt: timestamptz().notNull(),
+  position: serial().notNull(),
+}, (table) => [
+  foreignKey({ columns: [table.organisationId, table.memberId], foreignColumns: [members.organisationId, members.id] }),
+  foreignKey({ columns: [table.organisationId, table.gatheringId], foreignColumns: [gatherings.organisationId, gatherings.id] }),
+]);

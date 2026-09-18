@@ -96,12 +96,16 @@ label {
   font-weight: 500;
 }
 
-input, select {
+input, select, textarea {
   font: inherit;
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--line);
   border-radius: 0.4rem;
   width: 100%;
+}
+
+textarea {
+  resize: vertical;
 }
 
 button {
@@ -199,4 +203,35 @@ th {
 .managed-list li {
   border-bottom: 1px solid var(--line);
   padding-top: 0.75rem;
+}
+
+.member-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.meetup-list {
+  list-style: none;
+  padding: 0;
+}
+
+.meetup-list > li {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.meetup-list h2 {
+  margin-top: 0;
+}
+
+.meetup-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }

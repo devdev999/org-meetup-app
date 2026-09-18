@@ -9,6 +9,10 @@ export default async function ProfilePage() {
 
   return (
     <main>
+      <nav className="member-nav" aria-label="Member navigation">
+        <Link href="/meetups">Meetups</Link>
+        <Link href="/inbox">Inbox</Link>
+      </nav>
       <h1>{profile.name}</h1>
       {profile.isOrganisationAdmin && <p><Link href="/admin">Open Organisation Admin area</Link></p>}
       <dl>
