@@ -1,5 +1,5 @@
 import { and, asc, eq, exists, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
-import { requireActiveMember, type Actor } from "./actor";
+import { requireActiveMember, VISIBLE_MEMBER_STATUSES, type Actor } from "./actor";
 import { findDepartment, findSite, listDepartmentsAndSites } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
@@ -55,9 +55,6 @@ export interface MemberSearch {
   department?: string;
   site?: string;
 }
-
-/** Members in these statuses appear in Member-facing views; Suspended and Departed ones are hidden. */
-const VISIBLE_STATUSES: MemberStatus[] = ["provisioned", "active"];
 
 /**
  * The actor-scoped interface: everything a signed-in Member can do. The
@@ -212,7 +209,7 @@ async function viewMember(deps: Deps, actor: Actor, memberId: string): Promise<M
       and(
         eq(members.id, memberId),
         eq(members.organisationId, actor.organisationId),
-        inArray(members.status, VISIBLE_STATUSES),
+        inArray(members.status, VISIBLE_MEMBER_STATUSES),
       ),
     )
     .limit(1);
@@ -231,7 +228,7 @@ async function searchMembers({ db }: Deps, actor: Actor, input: MemberSearch): P
     .where(and(
       eq(members.organisationId, actor.organisationId),
       ne(members.id, actor.memberId),
-      inArray(members.status, VISIBLE_STATUSES),
+      inArray(members.status, VISIBLE_MEMBER_STATUSES),
       department ? eq(departments.nameKey, department) : undefined,
       site ? eq(sites.nameKey, site) : undefined,
       pattern ? exists(db.select({ id: memberInterests.interestId }).from(memberInterests)

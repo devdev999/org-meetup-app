@@ -131,6 +131,8 @@ Per-Organisation OIDC settings (issuer, client id, client secret, claim mapping)
 
 `AI_PROVIDER=memory` is the default. It makes no outbound requests and provides deterministic Interest resolution for local development and tests. Set `AI_PROVIDER=chat-completion` in production and supply `AI_BASE_URL`, `AI_API_KEY` and `AI_MODEL`. The base URL must include the provider's API prefix, such as `https://chat.example/v1`. The adapter appends `/chat/completions`, authenticates with a bearer key, and requests a JSON object through the [Chat Completions protocol](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create). The chosen endpoint and model must support JSON mode.
 
+To check a configured endpoint, set `AI_CONTRACT_TEST=yes` and the three `AI_*` connection variables in the shell, then run `pnpm test src/adapters/ai/tests/live-contract.test.ts`. This makes three live requests using fixed Interest phrases. The contract tests skip unless explicitly enabled with credentials.
+
 The AI receives only the typed Interest phrase and shortlisted Interest names, kinds and counts. It receives no Member or Organisation identifiers or profile fields. Requests time out after five seconds. If the provider fails, refuses, or returns an invalid result, the application uses similarity matching and still asks the Member to confirm. The production adapter lives in `src/adapters/ai/chat-completion.ts`; `MemoryAi` records requests and accepts scripted results or errors for application tests. An HTTP adapter test verifies the request and failure handling against a local stub endpoint.
 
 ## Migrations

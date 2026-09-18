@@ -14,7 +14,7 @@ export function InterestGroups({ interests, editable = false }: { interests: Mem
                 {group.map((interest) => (
                   <li key={interest.interestId}>
                     <span><strong>{interest.name}</strong> <span className="muted">{interest.stance === "shares" ? "Shares" : "Seeks"}</span></span>
-                    {editable && <StanceForm interest={interest} />}
+                    {editable && <StanceForm key={`${interest.interestId}:${interest.stance}`} interest={interest} />}
                   </li>
                 ))}
               </ul>

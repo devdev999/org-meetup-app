@@ -1,7 +1,7 @@
 import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import type { InterestKind } from "../ports";
-import { requireActiveMember, type Actor } from "./actor";
+import { requireActiveMember, VISIBLE_MEMBER_STATUSES, type Actor } from "./actor";
 import type { Database } from "./db";
 import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
@@ -88,7 +88,7 @@ export async function resolveInterest(deps: Deps, actor: Actor, input: { phrase:
   let proposed: InterestSelection = closest && closest.score >= 0.6 ? { interestId: closest.interest.interestId } : { name: phrase.trim(), kind };
   const counts = await deps.db.select({ interestId: memberInterests.interestId, count: count() }).from(memberInterests)
     .innerJoin(members, and(eq(members.organisationId, memberInterests.organisationId), eq(members.id, memberInterests.memberId)))
-    .where(and(eq(memberInterests.organisationId, actor.organisationId), inArray(members.status, ["active", "provisioned"])))
+    .where(and(eq(memberInterests.organisationId, actor.organisationId), inArray(members.status, VISIBLE_MEMBER_STATUSES)))
     .groupBy(memberInterests.interestId);
   try {
     const result = await deps.ai.resolveInterest({ phrase, shortlist: shortlist.map(({ interestId, name, kind }) => ({ name, kind, count: counts.find((entry) => entry.interestId === interestId)?.count ?? 0 })) });

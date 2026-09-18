@@ -46,7 +46,7 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
         </label>
         <div className="form-actions"><button>Search Members</button><Link href="/members">Clear filters</Link></div>
       </form>
-      <h2>{members.length} {members.length === 1 ? "Member" : "Members"}</h2>
+      <h2>{`${members.length} ${members.length === 1 ? "Member" : "Members"}`}</h2>
       {members.length === 0 ? <p className="muted">No Members match these filters.</p> : (
         <ul className="member-list">
           {members.map((person) => (
