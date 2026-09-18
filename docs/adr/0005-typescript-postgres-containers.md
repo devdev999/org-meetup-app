@@ -1,0 +1,5 @@
+# TypeScript end to end, Postgres, containers
+
+One language, TypeScript, covers the web app, the Telegram bot and the AI adapter, so a small team moves across all three without switching runtimes. Postgres is the single store, and every table carries an Organisation key so tenancy scoping is enforced in every query. Everything ships as containers so it lands on whichever government cloud a deployment is given; none was specified when this was decided. A Python AI service and a .NET or Java backend were considered; neither offered enough to justify a second runtime, and nothing mandated them.
+
+It is deployed as a modular monolith: one web process that also serves the Telegram webhook and the AI adapter, plus one worker process for scheduled jobs such as recurrence generation, RSVP prompts and notification sending. Defaults are Next.js, Drizzle, pg-boss so the job queue lives in Postgres, and grammY for Telegram. The module boundaries inside the monolith are the lines it would be split along if that ever became necessary.

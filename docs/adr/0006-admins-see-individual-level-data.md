@@ -1,0 +1,3 @@
+# Organisation Admins see individual-level data, including Interests
+
+Organisation Admins can see, per Member, their participation (Meetups and Events hosted, joined and attended, Connections, Availability) and their declared Interests with Stances, including what a Member Seeks. The obvious privacy-preserving design exposes aggregates only, and Seeks in particular read like self-declared weaknesses, but the admins who sponsor a rollout need full data to report on it, and that need was judged to outweigh the risk. Mitigations: Platform Admins see aggregates only, every individual-level view and export is written to an audit log, and Members are told at first login exactly what admins can see.

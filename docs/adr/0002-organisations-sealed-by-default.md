@@ -1,0 +1,3 @@
+# Organisations are sealed by default; sharing is explicit
+
+Members of one Organisation cannot see, be suggested to or join Members of another unless an Organisation Admin opens a specific seam: a Site shared with another Organisation, or an Event opened to several. Sealed-by-default is the right baseline for government staff data and keeps each admin in control of their own people's exposure, but the strongest cross-ministry use case, colleagues from two agencies in one building having lunch, needs the seam, so it is modelled from the start and built in a later phase. A single shared pool was rejected because no admin could control exposure; permanent isolation was rejected because it forecloses the shared-building case.

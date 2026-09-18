@@ -1,0 +1,3 @@
+# Multi-tenant from day one
+
+The first deployment serves one organisation, but the platform is meant to roll out to other organisations and ministries. We are building Organisation in as a first-class boundary from the start: every Member, Interest declaration, Meetup, Event and report is scoped to one, and per-organisation configuration such as Departments, Sites and the Interest list is held as data rather than code. The alternative, a single-tenant build split later, is far more expensive because tenancy touches every table and every query; the cost we accept is more up-front work in identity, authorisation and reporting. How much, if anything, is shared across Organisations is a separate decision.
