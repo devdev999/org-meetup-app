@@ -2,9 +2,13 @@ import { parse } from "csv-parse/sync";
 import { InvalidInputError, type RosterRow } from "../../application/index";
 
 export function parseRosterCsv(csv: string): RosterRow[] {
+  const normalized = csv.replace(/\r\n?/g, "\n");
+  if (Buffer.byteLength(normalized, "utf8") > 1_000_000) {
+    throw new InvalidInputError("invalid-roster", "Choose a CSV file up to 1 MB.");
+  }
   let records: string[][];
   try {
-    records = parse(csv.replace(/\r\n?/g, "\n"), { bom: true, trim: true, skip_empty_lines: true });
+    records = parse(normalized, { bom: true, trim: true, skip_empty_lines: true });
   } catch {
     throw new InvalidInputError("invalid-roster", "the CSV has an invalid row or quotation mark");
   }

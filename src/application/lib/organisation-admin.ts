@@ -46,6 +46,12 @@ export type AdminAuditEntry = Pick<
 > & { actorName: string };
 
 export async function organisationAdmin(deps: Deps, actor: Actor): Promise<OrganisationAdminActions> {
+  async function requireAdmin(db: Queryable) {
+    const member = await requireActiveMember(db, actor);
+    if (!member.isOrganisationAdmin) throw new AccessDeniedError();
+  }
+  await requireAdmin(deps.db);
+
   async function authorised<T>(operation: (db: Queryable) => Promise<T>, auditAction?: string): Promise<T> {
     return deps.db.transaction(async (tx) => {
       await tx
@@ -53,8 +59,7 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
         .from(organisations)
         .where(eq(organisations.id, actor.organisationId))
         .for("update");
-      const member = await requireActiveMember(tx, actor);
-      if (!member.isOrganisationAdmin) throw new AccessDeniedError();
+      await requireAdmin(tx);
       const result = await operation(tx);
       if (auditAction)
         await tx.insert(adminAuditEntries).values({
@@ -67,7 +72,7 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
       return result;
     });
   }
-  return authorised(async () => ({
+  return {
     roster: () => authorised((db) => readRoster(db, actor.organisationId), "roster"),
     previewRoster: (rows) => authorised((db) => previewRoster(db, actor.organisationId, rows), "roster-preview"),
     commitRoster: (rows, revision) =>
@@ -127,5 +132,5 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
           .where(eq(adminAuditEntries.organisationId, actor.organisationId))
           .orderBy(adminAuditEntries.createdAt, adminAuditEntries.id),
       ),
-  }));
+  };
 }

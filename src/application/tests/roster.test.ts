@@ -138,10 +138,26 @@ test("CSV upload handles quoted names, a byte-order mark and optional staff iden
   ]);
 });
 
-test("quoted multiline CSV values can be committed after form submission", async () => {
+test("CSV size is checked in UTF-8 bytes before preview and commit", async () => {
   await h.app.bootstrap(config);
   const admin = await signInAdmin();
-  const csv = 'email,name,department,site\nana.silva@ministry-a.example,"Ana\nSilva",Legal,Harbour House\n';
+  const preview = await admin.previewRoster(administrators);
+  const csv = `email,name,department,site\nana.silva@ministry-a.example,${"é".repeat(500_000)},,\n`;
+
+  await expect(async () =>
+    admin.commitRoster([...administrators, ...parseRosterCsv(csv)], preview.revision),
+  ).rejects.toMatchObject({ code: "invalid-roster" });
+  expect(() => parseRosterCsv(csv)).toThrow("Choose a CSV file up to 1 MB.");
+  expect(await admin.roster()).toHaveLength(2);
+});
+
+test("CSV at the size limit retains quoted multiline values through form submission", async () => {
+  await h.app.bootstrap(config);
+  const admin = await signInAdmin();
+  const csv = 'email,name,department,site\nana.silva@ministry-a.example,"Ana\nSilva",Legal,Harbour House\n'.padEnd(
+    1_000_000,
+    "\n",
+  );
   const preview = await admin.previewRoster([...administrators, ...parseRosterCsv(csv)]);
   const form = new FormData();
   form.set("csv", csv);

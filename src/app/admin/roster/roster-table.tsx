@@ -1,6 +1,6 @@
 import type { RosterRow } from "../../../application/index";
 
-export function RosterTable({ rows }: { rows: (RosterRow & { status?: string; version?: string })[] }) {
+export function RosterTable({ rows }: { rows: (RosterRow & { status?: string; label?: string })[] }) {
   return (
     <div className="table-scroll">
       <table>
@@ -18,9 +18,9 @@ export function RosterTable({ rows }: { rows: (RosterRow & { status?: string; ve
           {rows.map((row, index) => (
             <tr key={`${row.email}-${index}`}>
               <td>
-                {row.version && (
+                {row.label && (
                   <strong>
-                    {row.version}
+                    {row.label}
                     <br />
                   </strong>
                 )}

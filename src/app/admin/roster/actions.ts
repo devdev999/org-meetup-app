@@ -15,8 +15,8 @@ export interface UploadState {
 export async function previewRosterUpload(form: FormData): Promise<UploadState> {
   const admin = await requireOrganisationAdmin();
   const file = form.get("roster");
-  if (!(file instanceof File) || file.size === 0 || file.size > 1_000_000) {
-    return { error: "Choose a CSV file up to 1 MB." };
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Choose a CSV file." };
   }
   try {
     const csv = await file.text();

@@ -60,8 +60,8 @@ function RosterCommit({ csv, preview }: { csv: string; preview: RosterPreview })
         <RosterTable
           key={change.before.memberId}
           rows={[
-            { ...change.before, version: "Current" },
-            { ...change.after, version: "After commit" },
+            { ...change.before, label: "Current" },
+            { ...change.after, label: "After commit" },
           ]}
         />
       ))}
