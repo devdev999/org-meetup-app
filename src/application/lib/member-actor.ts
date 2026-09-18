@@ -88,6 +88,15 @@ function self(actor: Actor) {
   return and(eq(members.id, actor.memberId), eq(members.organisationId, actor.organisationId));
 }
 
+/** A join to a Department or Site also insists it belongs to the Member's Organisation (ADR 0005). */
+function sameOrganisation(
+  id: typeof departments.id | typeof sites.id,
+  memberColumn: typeof members.departmentId | typeof members.siteId,
+  organisationId: typeof departments.organisationId | typeof sites.organisationId,
+) {
+  return and(eq(id, memberColumn), eq(organisationId, members.organisationId));
+}
+
 async function profile({ db }: Deps, actor: Actor): Promise<Profile> {
   const [row] = await db
     .select({
@@ -103,8 +112,8 @@ async function profile({ db }: Deps, actor: Actor): Promise<Profile> {
     })
     .from(members)
     .innerJoin(organisations, eq(organisations.id, members.organisationId))
-    .leftJoin(departments, eq(departments.id, members.departmentId))
-    .leftJoin(sites, eq(sites.id, members.siteId))
+    .leftJoin(departments, sameOrganisation(departments.id, members.departmentId, departments.organisationId))
+    .leftJoin(sites, sameOrganisation(sites.id, members.siteId, sites.organisationId))
     .where(self(actor))
     .limit(1);
   if (!row) throw new Error("profile: the signed-in Member no longer exists");
@@ -140,8 +149,8 @@ async function viewMember({ db }: Deps, actor: Actor, memberId: string): Promise
   const [row] = await db
     .select({ memberId: members.id, name: members.name, department: departments.name, site: sites.name })
     .from(members)
-    .leftJoin(departments, eq(departments.id, members.departmentId))
-    .leftJoin(sites, eq(sites.id, members.siteId))
+    .leftJoin(departments, sameOrganisation(departments.id, members.departmentId, departments.organisationId))
+    .leftJoin(sites, sameOrganisation(sites.id, members.siteId, sites.organisationId))
     .where(
       and(
         eq(members.id, memberId),

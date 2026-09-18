@@ -1,11 +1,17 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { IdentityError, type RawClaims } from "../ports";
 import { normaliseEmail } from "./db";
 import { ensureDepartment, ensureSite, type Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { blankToNull } from "./input";
-import { adminNotices, members, organisationOidcSettings, organisations, type ClaimMapping } from "./schema";
+import {
+  members,
+  organisationAdminNotices,
+  organisationOidcSettings,
+  organisations,
+  type ClaimMapping,
+} from "./schema";
 
 /** An Organisation a visitor can sign in to. */
 export interface SignInOption {
@@ -31,7 +37,7 @@ export interface PendingSignIn {
   startedAt: string;
 }
 
-export type SignInErrorCode = "unknown-organisation" | "expired" | "rejected" | "no-email";
+export type SignInErrorCode = "unknown-organisation" | "expired" | "rejected" | "no-email" | "unverified-email";
 
 export class SignInError extends Error {
   constructor(
@@ -119,7 +125,7 @@ export async function completeSignIn(
 
   return db.transaction(async (tx) => {
     const memberId = await bindMember(tx, organisation.id, person, now);
-    await fillDepartmentAndSiteFromLogin(tx, organisation.id, memberId, person, now);
+    await fillBlanksFromLogin(tx, organisation.id, memberId, person, now);
     return { memberId };
   });
 }
@@ -127,12 +133,20 @@ export async function completeSignIn(
 /** Finds the Member this login belongs to, making them Active, or creates one and raises a notice. */
 async function bindMember(tx: Queryable, organisationId: string, person: Person, now: Date): Promise<string> {
   const byEmail = and(eq(members.organisationId, organisationId), eq(members.email, person.email));
-  const [existing] = await tx.select({ id: members.id, status: members.status }).from(members).where(byEmail).limit(1);
+  const [existing] = await tx
+    .select({ id: members.id, status: members.status, name: members.name })
+    .from(members)
+    .where(byEmail)
+    .limit(1);
   if (existing) {
-    if (existing.status === "provisioned") {
+    const changes: Partial<typeof members.$inferInsert> = {};
+    if (existing.status === "provisioned") changes.status = "active";
+    // A Member created by a login that stated no name carries their email as a placeholder.
+    if (existing.name === person.email && person.name) changes.name = person.name;
+    if (Object.keys(changes).length > 0) {
       await tx
         .update(members)
-        .set({ status: "active", updatedAt: now })
+        .set({ ...changes, updatedAt: now })
         .where(memberOf(organisationId, existing.id));
     }
     return existing.id;
@@ -143,7 +157,7 @@ async function bindMember(tx: Queryable, organisationId: string, person: Person,
     .values({
       organisationId,
       email: person.email,
-      name: person.name,
+      name: person.name ?? person.email,
       status: "active",
       createdAt: now,
       updatedAt: now,
@@ -156,45 +170,43 @@ async function bindMember(tx: Queryable, organisationId: string, person: Person,
     if (!raced) throw new Error("completeSignIn: Member vanished during sign-in");
     return raced.id;
   }
-  await tx.insert(adminNotices).values({ organisationId, kind: "unknown_login", memberId: created.id, createdAt: now });
+  await tx
+    .insert(organisationAdminNotices)
+    .values({ organisationId, kind: "unknown_login", memberId: created.id, createdAt: now });
   return created.id;
 }
 
 /**
  * The login fills in Department, Site and staff identifier only where the
- * Member has none: what the roster or the Member themselves set stays.
- * The login's Department and Site are directory data, so unknown names are
- * added to the Organisation's lists.
+ * Member has none: what the roster or the Member themselves set stays. Each
+ * field is filled with COALESCE in one statement, so a correction saved a
+ * moment earlier is never overwritten. The login's Department and Site are
+ * directory data, so unknown names are added to the Organisation's lists.
  */
-async function fillDepartmentAndSiteFromLogin(
+async function fillBlanksFromLogin(
   tx: Queryable,
   organisationId: string,
   memberId: string,
   person: Person,
   now: Date,
 ): Promise<void> {
-  const [current] = await tx
-    .select({ departmentId: members.departmentId, siteId: members.siteId, staffIdentifier: members.staffIdentifier })
-    .from(members)
-    .where(memberOf(organisationId, memberId))
-    .limit(1);
-  if (!current) return;
-  const changes: Partial<typeof members.$inferInsert> = {};
-  if (current.departmentId === null && person.department) {
-    changes.departmentId = await ensureDepartment(tx, organisationId, person.department, now);
+  const changes: Partial<Record<"departmentId" | "siteId" | "staffIdentifier", ReturnType<typeof sql>>> = {};
+  if (person.department) {
+    const departmentId = await ensureDepartment(tx, organisationId, person.department, now);
+    changes.departmentId = sql`coalesce(${members.departmentId}, ${departmentId}::uuid)`;
   }
-  if (current.siteId === null && person.site) {
-    changes.siteId = await ensureSite(tx, organisationId, person.site, now);
+  if (person.site) {
+    const siteId = await ensureSite(tx, organisationId, person.site, now);
+    changes.siteId = sql`coalesce(${members.siteId}, ${siteId}::uuid)`;
   }
-  if (current.staffIdentifier === null && person.staffIdentifier) {
-    changes.staffIdentifier = person.staffIdentifier;
+  if (person.staffIdentifier) {
+    changes.staffIdentifier = sql`coalesce(${members.staffIdentifier}, ${person.staffIdentifier})`;
   }
-  if (Object.keys(changes).length > 0) {
-    await tx
-      .update(members)
-      .set({ ...changes, updatedAt: now })
-      .where(memberOf(organisationId, memberId));
-  }
+  if (Object.keys(changes).length === 0) return;
+  await tx
+    .update(members)
+    .set({ ...changes, updatedAt: now })
+    .where(memberOf(organisationId, memberId));
 }
 
 /** One Member within one Organisation: every query about a Member carries both (ADR 0005). */
@@ -227,11 +239,15 @@ async function issuerOf(db: Deps["db"], organisationSlug: string) {
 
 interface Person {
   email: string;
-  name: string;
+  /** Undefined when the issuer stated no usable name. */
+  name: string | undefined;
   department: string | undefined;
   site: string | undefined;
   staffIdentifier: string | undefined;
 }
+
+/** The standard OpenID Connect claim that says whether the issuer verified the email address. */
+const EMAIL_VERIFIED_CLAIM = "email_verified";
 
 function mapClaims(claims: RawClaims, mapping: ClaimMapping): Person {
   const text = (claim: string | undefined): string | undefined => {
@@ -243,9 +259,14 @@ function mapClaims(claims: RawClaims, mapping: ClaimMapping): Person {
   if (!email) {
     throw new SignInError("no-email", `the issuer supplied no "${mapping.email}" claim, so the login cannot be bound to a Member`);
   }
+  // Absent means the issuer, the Organisation's own directory, does not state it; false means it says no.
+  const verified = claims[EMAIL_VERIFIED_CLAIM];
+  if (verified === false || verified === "false") {
+    throw new SignInError("unverified-email", `the issuer says ${email} is not a verified address, so it cannot be bound to a Member`);
+  }
   return {
     email: normaliseEmail(email),
-    name: text(mapping.name) ?? email,
+    name: text(mapping.name),
     department: text(mapping.department),
     site: text(mapping.site),
     staffIdentifier: text(mapping.staffIdentifier),

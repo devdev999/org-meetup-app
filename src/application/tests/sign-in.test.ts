@@ -111,3 +111,24 @@ test("a login whose claims carry no email cannot be bound to a Member", async ()
     code: "no-email",
   });
 });
+
+test("a login whose issuer says the email is not verified is refused", async () => {
+  await h.app.bootstrap(ministryA);
+  const started = await h.app.beginSignIn({ organisationSlug: "ministry-a", redirectUri: REDIRECT_URI });
+  const callbackUrl = FakeIdentity.callbackUrl(started.authorizationUrl, { ...ana, email_verified: false });
+
+  await expect(h.app.completeSignIn({ pending: started.pending, callbackUrl })).rejects.toMatchObject({
+    name: "SignInError",
+    code: "unverified-email",
+  });
+});
+
+test("a login that states no name shows the email as the name until a later login supplies one", async () => {
+  await h.app.bootstrap(ministryA);
+  const nameless = await signInAs(h, "ministry-a", { sub: "ana-1", email: "ana.silva@ministry-a.example" });
+  expect((await nameless.profile()).name).toBe("ana.silva@ministry-a.example");
+
+  const named = await signInAs(h, "ministry-a", ana);
+
+  expect((await named.profile()).name).toBe("Ana Silva");
+});

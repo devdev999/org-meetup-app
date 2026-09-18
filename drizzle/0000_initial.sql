@@ -1,19 +1,12 @@
-CREATE TYPE "public"."admin_notice_kind" AS ENUM('unknown_login');--> statement-breakpoint
 CREATE TYPE "public"."member_status" AS ENUM('provisioned', 'active', 'suspended', 'departed');--> statement-breakpoint
-CREATE TABLE "admin_notices" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"organisation_id" uuid NOT NULL,
-	"kind" "admin_notice_kind" NOT NULL,
-	"member_id" uuid,
-	"created_at" timestamp with time zone NOT NULL
-);
---> statement-breakpoint
+CREATE TYPE "public"."organisation_admin_notice_kind" AS ENUM('unknown_login');--> statement-breakpoint
 CREATE TABLE "departments" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"organisation_id" uuid NOT NULL,
 	"name" text NOT NULL,
 	"name_key" text NOT NULL,
-	"created_at" timestamp with time zone NOT NULL
+	"created_at" timestamp with time zone NOT NULL,
+	CONSTRAINT "departments_organisation_id_id_unique" UNIQUE("organisation_id","id")
 );
 --> statement-breakpoint
 CREATE TABLE "members" (
@@ -28,7 +21,16 @@ CREATE TABLE "members" (
 	"is_platform_admin" boolean DEFAULT false NOT NULL,
 	"admin_visibility_notice_acknowledged_at" timestamp with time zone,
 	"created_at" timestamp with time zone NOT NULL,
-	"updated_at" timestamp with time zone NOT NULL
+	"updated_at" timestamp with time zone NOT NULL,
+	CONSTRAINT "members_organisation_id_id_unique" UNIQUE("organisation_id","id")
+);
+--> statement-breakpoint
+CREATE TABLE "organisation_admin_notices" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"organisation_id" uuid NOT NULL,
+	"kind" "organisation_admin_notice_kind" NOT NULL,
+	"member_id" uuid,
+	"created_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "organisation_oidc_settings" (
@@ -53,15 +55,16 @@ CREATE TABLE "sites" (
 	"organisation_id" uuid NOT NULL,
 	"name" text NOT NULL,
 	"name_key" text NOT NULL,
-	"created_at" timestamp with time zone NOT NULL
+	"created_at" timestamp with time zone NOT NULL,
+	CONSTRAINT "sites_organisation_id_id_unique" UNIQUE("organisation_id","id")
 );
 --> statement-breakpoint
-ALTER TABLE "admin_notices" ADD CONSTRAINT "admin_notices_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "admin_notices" ADD CONSTRAINT "admin_notices_member_id_members_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."members"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "departments" ADD CONSTRAINT "departments_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "members" ADD CONSTRAINT "members_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "members" ADD CONSTRAINT "members_department_id_departments_id_fk" FOREIGN KEY ("department_id") REFERENCES "public"."departments"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "members" ADD CONSTRAINT "members_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "members" ADD CONSTRAINT "members_department_same_organisation_fk" FOREIGN KEY ("organisation_id","department_id") REFERENCES "public"."departments"("organisation_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "members" ADD CONSTRAINT "members_site_same_organisation_fk" FOREIGN KEY ("organisation_id","site_id") REFERENCES "public"."sites"("organisation_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "organisation_admin_notices" ADD CONSTRAINT "organisation_admin_notices_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "organisation_admin_notices" ADD CONSTRAINT "organisation_admin_notices_member_same_organisation_fk" FOREIGN KEY ("organisation_id","member_id") REFERENCES "public"."members"("organisation_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "organisation_oidc_settings" ADD CONSTRAINT "organisation_oidc_settings_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sites" ADD CONSTRAINT "sites_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "departments_organisation_name_key_unique" ON "departments" USING btree ("organisation_id","name_key");--> statement-breakpoint

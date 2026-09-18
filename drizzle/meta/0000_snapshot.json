@@ -1,81 +1,9 @@
 {
-  "id": "e9dae68a-bf03-4a82-915b-41bd6d234714",
+  "id": "f4fcfe9a-c418-4503-8c16-d57b2ac5dd81",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.admin_notices": {
-      "name": "admin_notices",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organisation_id": {
-          "name": "organisation_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "admin_notice_kind",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "member_id": {
-          "name": "member_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "admin_notices_organisation_id_organisations_id_fk": {
-          "name": "admin_notices_organisation_id_organisations_id_fk",
-          "tableFrom": "admin_notices",
-          "tableTo": "organisations",
-          "columnsFrom": [
-            "organisation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "admin_notices_member_id_members_id_fk": {
-          "name": "admin_notices_member_id_members_id_fk",
-          "tableFrom": "admin_notices",
-          "tableTo": "members",
-          "columnsFrom": [
-            "member_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.departments": {
       "name": "departments",
       "schema": "",
@@ -151,7 +79,16 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "departments_organisation_id_id_unique": {
+          "name": "departments_organisation_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organisation_id",
+            "id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -273,12 +210,97 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "members_department_id_departments_id_fk": {
-          "name": "members_department_id_departments_id_fk",
+        "members_department_same_organisation_fk": {
+          "name": "members_department_same_organisation_fk",
           "tableFrom": "members",
           "tableTo": "departments",
           "columnsFrom": [
+            "organisation_id",
             "department_id"
+          ],
+          "columnsTo": [
+            "organisation_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "members_site_same_organisation_fk": {
+          "name": "members_site_same_organisation_fk",
+          "tableFrom": "members",
+          "tableTo": "sites",
+          "columnsFrom": [
+            "organisation_id",
+            "site_id"
+          ],
+          "columnsTo": [
+            "organisation_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "members_organisation_id_id_unique": {
+          "name": "members_organisation_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organisation_id",
+            "id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.organisation_admin_notices": {
+      "name": "organisation_admin_notices",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organisation_id": {
+          "name": "organisation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "organisation_admin_notice_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "organisation_admin_notices_organisation_id_organisations_id_fk": {
+          "name": "organisation_admin_notices_organisation_id_organisations_id_fk",
+          "tableFrom": "organisation_admin_notices",
+          "tableTo": "organisations",
+          "columnsFrom": [
+            "organisation_id"
           ],
           "columnsTo": [
             "id"
@@ -286,14 +308,16 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "members_site_id_sites_id_fk": {
-          "name": "members_site_id_sites_id_fk",
-          "tableFrom": "members",
-          "tableTo": "sites",
+        "organisation_admin_notices_member_same_organisation_fk": {
+          "name": "organisation_admin_notices_member_same_organisation_fk",
+          "tableFrom": "organisation_admin_notices",
+          "tableTo": "members",
           "columnsFrom": [
-            "site_id"
+            "organisation_id",
+            "member_id"
           ],
           "columnsTo": [
+            "organisation_id",
             "id"
           ],
           "onDelete": "no action",
@@ -490,20 +514,22 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "sites_organisation_id_id_unique": {
+          "name": "sites_organisation_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organisation_id",
+            "id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
     }
   },
   "enums": {
-    "public.admin_notice_kind": {
-      "name": "admin_notice_kind",
-      "schema": "public",
-      "values": [
-        "unknown_login"
-      ]
-    },
     "public.member_status": {
       "name": "member_status",
       "schema": "public",
@@ -512,6 +538,13 @@
         "active",
         "suspended",
         "departed"
+      ]
+    },
+    "public.organisation_admin_notice_kind": {
+      "name": "organisation_admin_notice_kind",
+      "schema": "public",
+      "values": [
+        "unknown_login"
       ]
     }
   },

@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import type { AuthorizationRequest, OidcSettings } from "../../../application/ports";
 import { OidcIdentity } from "../oidc";
-import { startStubIssuer, type StubIssuer } from "./stub-issuer";
+import { startStubIssuer, type StubIssuer, type StubIssuerOptions } from "./stub-issuer";
 
 /**
  * Contract of the production identity adapter, against a stub issuer that
@@ -19,7 +19,11 @@ afterAll(async () => {
   await stub.close();
 });
 
-const settings = (): OidcSettings => ({ issuer: stub.issuer, clientId: stub.clientId, clientSecret: stub.clientSecret });
+const settingsFor = (issuer: StubIssuer): OidcSettings => ({
+  issuer: issuer.issuer,
+  clientId: issuer.clientId,
+  clientSecret: issuer.clientSecret,
+});
 
 const request: AuthorizationRequest = {
   redirectUri: "http://localhost:3000/auth/callback",
@@ -30,8 +34,23 @@ const request: AuthorizationRequest = {
 
 const identity = () => new OidcIdentity({ allowInsecureRequests: true });
 
+const ana = { sub: "ana-1", email: "ana@ministry-a.example" };
+
+/** Runs the whole flow against an issuer and returns the claims the adapter produced. */
+async function signInThrough(issuer: StubIssuer, adapter = identity()) {
+  const authorizationUrl = await adapter.authorizationUrl(settingsFor(issuer), request);
+  const callbackUrl = issuer.answer(authorizationUrl, { idToken: ana });
+  return adapter.claimsFromCallback(settingsFor(issuer), {
+    callbackUrl,
+    redirectUri: request.redirectUri,
+    expectedState: request.state,
+    expectedNonce: request.nonce,
+    codeVerifier: request.codeVerifier,
+  });
+}
+
 test("sends the browser to the issuer's authorization endpoint with PKCE, state and nonce", async () => {
-  const url = new URL(await identity().authorizationUrl(settings(), request));
+  const url = new URL(await identity().authorizationUrl(settingsFor(stub), request));
 
   expect(url.origin).toBe(stub.issuer);
   expect(url.pathname).toBe("/authorize");
@@ -49,13 +68,13 @@ test("sends the browser to the issuer's authorization endpoint with PKCE, state 
 
 test("turns the issuer's callback into the ID token's claims, filled in from userinfo", async () => {
   const adapter = identity();
-  const authorizationUrl = await adapter.authorizationUrl(settings(), request);
+  const authorizationUrl = await adapter.authorizationUrl(settingsFor(stub), request);
   const callbackUrl = stub.answer(authorizationUrl, {
-    idToken: { sub: "ana-1", email: "ana@ministry-a.example" },
+    idToken: ana,
     userinfo: { name: "Ana Silva", department: "Finance" },
   });
 
-  const claims = await adapter.claimsFromCallback(settings(), {
+  const claims = await adapter.claimsFromCallback(settingsFor(stub), {
     callbackUrl,
     redirectUri: request.redirectUri,
     expectedState: request.state,
@@ -74,12 +93,10 @@ test("turns the issuer's callback into the ID token's claims, filled in from use
 
 test("refuses a callback that answers a sign-in this browser did not start", async () => {
   const adapter = identity();
-  const callbackUrl = stub.answer(await adapter.authorizationUrl(settings(), request), {
-    idToken: { sub: "ana-1", email: "ana@ministry-a.example" },
-  });
+  const callbackUrl = stub.answer(await adapter.authorizationUrl(settingsFor(stub), request), { idToken: ana });
 
   await expect(
-    adapter.claimsFromCallback(settings(), {
+    adapter.claimsFromCallback(settingsFor(stub), {
       callbackUrl,
       redirectUri: request.redirectUri,
       expectedState: "a-different-state",
@@ -91,12 +108,10 @@ test("refuses a callback that answers a sign-in this browser did not start", asy
 
 test("refuses an ID token whose nonce is not the one this browser started with", async () => {
   const adapter = identity();
-  const callbackUrl = stub.answer(await adapter.authorizationUrl(settings(), request), {
-    idToken: { sub: "ana-1", email: "ana@ministry-a.example" },
-  });
+  const callbackUrl = stub.answer(await adapter.authorizationUrl(settingsFor(stub), request), { idToken: ana });
 
   await expect(
-    adapter.claimsFromCallback(settings(), {
+    adapter.claimsFromCallback(settingsFor(stub), {
       callbackUrl,
       redirectUri: request.redirectUri,
       expectedState: request.state,
@@ -108,12 +123,10 @@ test("refuses an ID token whose nonce is not the one this browser started with",
 
 test("refuses a code exchange with the wrong PKCE verifier", async () => {
   const adapter = identity();
-  const callbackUrl = stub.answer(await adapter.authorizationUrl(settings(), request), {
-    idToken: { sub: "ana-1", email: "ana@ministry-a.example" },
-  });
+  const callbackUrl = stub.answer(await adapter.authorizationUrl(settingsFor(stub), request), { idToken: ana });
 
   await expect(
-    adapter.claimsFromCallback(settings(), {
+    adapter.claimsFromCallback(settingsFor(stub), {
       callbackUrl,
       redirectUri: request.redirectUri,
       expectedState: request.state,
@@ -128,3 +141,15 @@ test("an issuer that cannot be discovered is reported, not swallowed", async () 
 
   await expect(identity().authorizationUrl(unreachable, request)).rejects.toMatchObject({ name: "IdentityError" });
 });
+
+test.each<StubIssuerOptions["tokenEndpointAuthMethods"]>([["client_secret_basic"], ["client_secret_post"]])(
+  "authenticates the client the way the issuer accepts: only %s",
+  async (methods) => {
+    const strict = await startStubIssuer({ tokenEndpointAuthMethods: methods });
+    try {
+      expect(await signInThrough(strict)).toMatchObject({ sub: "ana-1", email: "ana@ministry-a.example" });
+    } finally {
+      await strict.close();
+    }
+  },
+);

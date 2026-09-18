@@ -73,23 +73,54 @@ export class OidcIdentity implements IdentityPort {
     const key = `${settings.issuer} ${settings.clientId}`;
     let configuration = this.#configurations.get(key);
     if (!configuration) {
-      configuration = client
-        .discovery(
-          new URL(settings.issuer),
-          settings.clientId,
-          settings.clientSecret ?? undefined,
-          undefined,
-          this.#options.allowInsecureRequests ? { execute: [client.allowInsecureRequests] } : undefined,
-        )
-        .catch((error: unknown) => {
-          this.#configurations.delete(key);
-          throw new IdentityError(
-            `issuer ${settings.issuer} could not be discovered: ${error instanceof Error ? error.message : String(error)}`,
-            { cause: error },
-          );
-        });
+      configuration = this.#discover(settings).catch((error: unknown) => {
+        this.#configurations.delete(key);
+        throw error;
+      });
       this.#configurations.set(key, configuration);
     }
     return configuration;
   }
+
+  /**
+   * Discovers the issuer, then authenticates the client the way the issuer
+   * says it accepts. Public clients (no secret) rely on PKCE alone.
+   */
+  async #discover(settings: OidcSettings): Promise<client.Configuration> {
+    const insecure = this.#options.allowInsecureRequests ? { execute: [client.allowInsecureRequests] } : undefined;
+    let discovered: client.Configuration;
+    try {
+      discovered = await client.discovery(new URL(settings.issuer), settings.clientId, undefined, client.None(), insecure);
+    } catch (error) {
+      throw new IdentityError(
+        `issuer ${settings.issuer} could not be discovered: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      );
+    }
+    if (settings.clientSecret === null) return discovered;
+
+    const server = discovered.serverMetadata();
+    const configuration = new client.Configuration(
+      server,
+      settings.clientId,
+      { client_secret: settings.clientSecret },
+      clientAuthentication(server.token_endpoint_auth_methods_supported, settings.clientSecret),
+    );
+    if (this.#options.allowInsecureRequests) client.allowInsecureRequests(configuration);
+    return configuration;
+  }
+}
+
+/**
+ * The token endpoint authentication method: `client_secret_basic` when the
+ * issuer advertises it or advertises nothing (the default of RFC 8414),
+ * otherwise `client_secret_post`.
+ */
+function clientAuthentication(supported: string[] | undefined, clientSecret: string): client.ClientAuth {
+  const methods = supported ?? ["client_secret_basic"];
+  if (methods.includes("client_secret_basic")) return client.ClientSecretBasic(clientSecret);
+  if (methods.includes("client_secret_post")) return client.ClientSecretPost(clientSecret);
+  throw new IdentityError(
+    `the issuer accepts none of the client authentication methods this platform speaks (it lists: ${methods.join(", ")})`,
+  );
 }

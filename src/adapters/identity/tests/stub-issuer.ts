@@ -5,11 +5,17 @@ import { exportJWK, generateKeyPair, SignJWT } from "jose";
 
 /**
  * A minimal OpenID Connect issuer for testing the production identity adapter:
- * discovery, JWKS, token endpoint (authorization code with PKCE and
- * client_secret_post or client_secret_basic) and userinfo. The test plays the
- * person: `answer` takes the authorization URL the adapter built and returns
- * the callback URL the browser would be sent to.
+ * discovery, JWKS, token endpoint (authorization code with PKCE) and userinfo.
+ * The test plays the person: `answer` takes the authorization URL the adapter
+ * built and returns the callback URL the browser would be sent to.
  */
+export type TokenEndpointAuthMethod = "client_secret_basic" | "client_secret_post";
+
+export interface StubIssuerOptions {
+  /** What the issuer advertises and accepts at its token endpoint. Default: both methods. */
+  tokenEndpointAuthMethods?: TokenEndpointAuthMethod[];
+}
+
 export interface StubIssuer {
   issuer: string;
   clientId: string;
@@ -26,9 +32,10 @@ interface IssuedCode {
   userinfo: Record<string, unknown>;
 }
 
-export async function startStubIssuer(): Promise<StubIssuer> {
+export async function startStubIssuer(options: StubIssuerOptions = {}): Promise<StubIssuer> {
   const clientId = "org-meetups";
   const clientSecret = "stub-secret";
+  const authMethods = options.tokenEndpointAuthMethods ?? ["client_secret_basic", "client_secret_post"];
   const { publicKey, privateKey } = await generateKeyPair("RS256");
   const jwk = { ...(await exportJWK(publicKey)), kid: "stub-1", alg: "RS256", use: "sig" };
   const codes = new Map<string, IssuedCode>();
@@ -53,7 +60,7 @@ export async function startStubIssuer(): Promise<StubIssuer> {
         subject_types_supported: ["public"],
         id_token_signing_alg_values_supported: ["RS256"],
         code_challenge_methods_supported: ["S256"],
-        token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic"],
+        token_endpoint_auth_methods_supported: authMethods,
       });
     }
     if (url.pathname === "/jwks") {
@@ -62,6 +69,9 @@ export async function startStubIssuer(): Promise<StubIssuer> {
     if (url.pathname === "/token" && request.method === "POST") {
       const body = new URLSearchParams(await readBody(request));
       const credentials = clientCredentials(request, body);
+      if (!authMethods.includes(credentials.method)) {
+        return json(401, { error: "invalid_client", error_description: `${credentials.method} is not accepted here` });
+      }
       if (credentials.clientId !== clientId || credentials.clientSecret !== clientSecret) {
         return json(401, { error: "invalid_client" });
       }
@@ -137,13 +147,24 @@ function s256(verifier: string): string {
   return createHash("sha256").update(verifier).digest("base64url");
 }
 
-function clientCredentials(request: IncomingMessage, body: URLSearchParams): { clientId?: string; clientSecret?: string } {
+function clientCredentials(
+  request: IncomingMessage,
+  body: URLSearchParams,
+): { method: TokenEndpointAuthMethod; clientId?: string; clientSecret?: string } {
   const basic = request.headers.authorization?.match(/^Basic (.+)$/);
   if (basic?.[1]) {
     const [id, secret] = Buffer.from(basic[1], "base64").toString("utf8").split(":");
-    return { clientId: decodeURIComponent(id ?? ""), clientSecret: decodeURIComponent(secret ?? "") };
+    return {
+      method: "client_secret_basic",
+      clientId: decodeURIComponent(id ?? ""),
+      clientSecret: decodeURIComponent(secret ?? ""),
+    };
   }
-  return { clientId: body.get("client_id") ?? undefined, clientSecret: body.get("client_secret") ?? undefined };
+  return {
+    method: "client_secret_post",
+    clientId: body.get("client_id") ?? undefined,
+    clientSecret: body.get("client_secret") ?? undefined,
+  };
 }
 
 function readBody(request: IncomingMessage): Promise<string> {

@@ -1,9 +1,11 @@
-import { boolean, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, foreignKey, jsonb, pgEnum, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 /**
  * Every table except platform configuration carries `organisationId`
- * (ADR 0001, ADR 0005). Column names are snake_case through Drizzle's
- * `casing` option, so keys here are camelCase.
+ * (ADR 0001, ADR 0005). Rows that point at rows of another table do so with
+ * composite foreign keys that include the Organisation, so the database
+ * itself refuses an association across Organisations. Column names are
+ * snake_case through Drizzle's `casing` option, so keys here are camelCase.
  */
 
 const timestamptz = () => timestamp({ withTimezone: true });
@@ -50,7 +52,10 @@ export const departments = pgTable(
     nameKey: text().notNull(),
     createdAt: timestamptz().notNull(),
   },
-  (table) => [uniqueIndex("departments_organisation_name_key_unique").on(table.organisationId, table.nameKey)],
+  (table) => [
+    uniqueIndex("departments_organisation_name_key_unique").on(table.organisationId, table.nameKey),
+    unique("departments_organisation_id_id_unique").on(table.organisationId, table.id),
+  ],
 );
 
 /** A Site: a physical location where Members are based. Unique by name, ignoring case. */
@@ -65,7 +70,10 @@ export const sites = pgTable(
     nameKey: text().notNull(),
     createdAt: timestamptz().notNull(),
   },
-  (table) => [uniqueIndex("sites_organisation_name_key_unique").on(table.organisationId, table.nameKey)],
+  (table) => [
+    uniqueIndex("sites_organisation_name_key_unique").on(table.organisationId, table.nameKey),
+    unique("sites_organisation_id_id_unique").on(table.organisationId, table.id),
+  ],
 );
 
 /** Provisioned until first login, Active after it, Suspended or Departed by an admin or the roster. */
@@ -82,8 +90,8 @@ export const members = pgTable(
     email: text().notNull(),
     name: text().notNull(),
     status: memberStatus().notNull(),
-    departmentId: uuid().references(() => departments.id),
-    siteId: uuid().references(() => sites.id),
+    departmentId: uuid(),
+    siteId: uuid(),
     /** The Organisation's own identifier for the person, from the roster or the login. */
     staffIdentifier: text(),
     isPlatformAdmin: boolean().notNull().default(false),
@@ -92,19 +100,42 @@ export const members = pgTable(
     createdAt: timestamptz().notNull(),
     updatedAt: timestamptz().notNull(),
   },
-  (table) => [uniqueIndex("members_organisation_email_unique").on(table.organisationId, table.email)],
+  (table) => [
+    uniqueIndex("members_organisation_email_unique").on(table.organisationId, table.email),
+    unique("members_organisation_id_id_unique").on(table.organisationId, table.id),
+    foreignKey({
+      name: "members_department_same_organisation_fk",
+      columns: [table.organisationId, table.departmentId],
+      foreignColumns: [departments.organisationId, departments.id],
+    }),
+    foreignKey({
+      name: "members_site_same_organisation_fk",
+      columns: [table.organisationId, table.siteId],
+      foreignColumns: [sites.organisationId, sites.id],
+    }),
+  ],
 );
 
 /** Something an Organisation Admin should look at, raised by the application. */
-export const adminNoticeKind = pgEnum("admin_notice_kind", ["unknown_login"]);
+export const organisationAdminNoticeKind = pgEnum("organisation_admin_notice_kind", ["unknown_login"]);
 
-export const adminNotices = pgTable("admin_notices", {
-  id: uuid().primaryKey().defaultRandom(),
-  organisationId: uuid()
-    .notNull()
-    .references(() => organisations.id),
-  kind: adminNoticeKind().notNull(),
-  /** The Member the notice is about, when there is one. */
-  memberId: uuid().references(() => members.id),
-  createdAt: timestamptz().notNull(),
-});
+export const organisationAdminNotices = pgTable(
+  "organisation_admin_notices",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    organisationId: uuid()
+      .notNull()
+      .references(() => organisations.id),
+    kind: organisationAdminNoticeKind().notNull(),
+    /** The Member the notice is about, when there is one. */
+    memberId: uuid(),
+    createdAt: timestamptz().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "organisation_admin_notices_member_same_organisation_fk",
+      columns: [table.organisationId, table.memberId],
+      foreignColumns: [members.organisationId, members.id],
+    }),
+  ],
+);

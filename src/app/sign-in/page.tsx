@@ -9,6 +9,8 @@ const SIGN_IN_FAILURES: Record<SignInFailure, string> = {
   "unknown-organisation": "That Organisation is not set up on this platform.",
   "no-email":
     "Your Organisation's login did not tell us your email address, so we cannot find you. Ask your Organisation Admin.",
+  "unverified-email":
+    "Your Organisation's login says your email address is not verified, so it cannot be used to sign in. Ask your Organisation Admin.",
   "no-pending": "We could not match that login to a sign-in started in this browser. Please start again.",
 };
 
