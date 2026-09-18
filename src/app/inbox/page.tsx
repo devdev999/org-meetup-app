@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireMemberPastWelcome } from "../../web/session";
-import { LocalTime } from "../meetups/local-time";
+import { MeetupTime } from "../meetups/meetup-time";
 
 export default async function InboxPage() {
   const { member } = await requireMemberPastWelcome();
@@ -17,7 +17,7 @@ export default async function InboxPage() {
           {notices.map((notice) => (
             <li key={notice.id}>
               <p>{notice.message}</p>
-              <p className="muted"><LocalTime value={notice.createdAt.toISOString()} /></p>
+              <p className="muted"><MeetupTime value={notice.createdAt.toISOString()} /></p>
               <Link href={`/meetups/${notice.meetupId}`}>View Meetup</Link>
             </li>
           ))}

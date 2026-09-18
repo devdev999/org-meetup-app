@@ -51,6 +51,7 @@ test("a Member creates a Meetup starting in thirty minutes or next week with aud
     capacity: 2,
     participantCount: 1,
     membership: "host",
+    canChange: true,
   });
   expect(virtual.audience).toEqual({ kind: "open", scope: "organisation" });
   expect((await host.listMeetups()).map((meetup) => meetup.id)).toEqual([physical.id, virtual.id]);
@@ -77,6 +78,7 @@ test("Members join first-come, leave and receive FIFO promotions with notices", 
   expect(await cy.inbox()).toEqual([expect.objectContaining({ kind: "meetup-promoted", meetupId: meetup.id })]);
   expect((await host.inbox()).map((notice) => notice.kind)).toEqual(["meetup-left", "meetup-joined"]);
   expect((await host.inbox()).every((notice) => !notice.message.includes("Member"))).toBe(true);
+  expect((await host.inbox())[0]?.message).toContain("2026-09-18 09:30 UTC");
   await di.leaveMeetup(meetup.id);
   expect((await host.viewMeetup(meetup.id))?.waitlist).toEqual([]);
   await expect(host.leaveMeetup(meetup.id)).rejects.toMatchObject({ code: "invalid-meetup" });
@@ -114,7 +116,7 @@ test("cancellation tells every Participant and waitlisted Member, clears the wai
   await bo.joinMeetup(meetup.id);
   await cy.joinMeetup(meetup.id);
   await host.cancelMeetup(meetup.id);
-  expect(await host.viewMeetup(meetup.id)).toMatchObject({ status: "cancelled", waitlist: [], participantCount: 2 });
+  expect(await host.viewMeetup(meetup.id)).toMatchObject({ status: "cancelled", waitlist: [], participantCount: 2, canChange: false });
   for (const actor of [host, bo, cy]) {
     expect(await actor.inbox()).toContainEqual(expect.objectContaining({ kind: "meetup-cancelled", meetupId: meetup.id }));
   }
@@ -224,6 +226,7 @@ test("started Meetups cannot be joined, left, edited, cancelled or handed over",
   const meetup = await host.createMeetup(input);
   await participant.joinMeetup(meetup.id);
   h.clock.set(input.startsAt);
+  expect((await host.viewMeetup(meetup.id))?.canChange).toBe(false);
   for (const operation of [
     () => participant.joinMeetup(meetup.id),
     () => participant.leaveMeetup(meetup.id),
@@ -277,4 +280,25 @@ test("Meetup commands and queries require acknowledgement and refuse a retained 
   const roster = [adminPerson, ministryA.platformAdmin].map((person) => ({ ...person, department: null, site: null }));
   await admin.commitRoster(roster, (await admin.previewRoster(roster)).revision);
   for (const operation of operations) await expect(operation()).rejects.toMatchObject({ name: "AccessDeniedError" });
+});
+
+test("joined Members retain access to leave after moving to another Site", async () => {
+  const host = await setup();
+  const bo = await member("Bo");
+  const cy = await member("Cy");
+  const outsider = await member("Di", "Annex");
+  const meetup = await host.createMeetup(await inputFor(host));
+  await bo.joinMeetup(meetup.id);
+  await cy.joinMeetup(meetup.id);
+  await bo.updateProfile({ department: null, site: "Annex" });
+  await cy.updateProfile({ department: null, site: "Annex" });
+  expect((await bo.viewMeetup(meetup.id))?.membership).toBe("participant");
+  expect((await cy.listMeetups()).map((entry) => entry.id)).toContain(meetup.id);
+  expect(await outsider.viewMeetup(meetup.id)).toBeUndefined();
+  await expect(outsider.joinMeetup(meetup.id)).rejects.toMatchObject({ name: "AccessDeniedError" });
+  await bo.leaveMeetup(meetup.id);
+  expect((await cy.viewMeetup(meetup.id))?.membership).toBe("participant");
+  await cy.leaveMeetup(meetup.id);
+  expect(await cy.viewMeetup(meetup.id)).toBeUndefined();
+  expect((await host.viewMeetup(meetup.id))?.participantCount).toBe(1);
 });

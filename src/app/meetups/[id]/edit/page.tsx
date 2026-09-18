@@ -12,7 +12,7 @@ export default async function EditMeetupPage({ params }: { params: Promise<{ id:
     <main>
       <p><Link href={`/meetups/${meetup.id}`}>Back to Meetup</Link></p>
       <h1>Edit {meetup.activity.name}</h1>
-      {meetup.status !== "scheduled" || meetup.startsAt.getTime() <= Date.now() ? (
+      {!meetup.canChange ? (
         <p>This Meetup can no longer be edited.</p>
       ) : (
         <>

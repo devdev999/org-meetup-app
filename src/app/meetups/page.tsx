@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireMemberPastWelcome } from "../../web/session";
-import { LocalTime } from "./local-time";
+import { MeetupTime } from "./meetup-time";
 
 export default async function MeetupsPage() {
   const { member } = await requireMemberPastWelcome();
@@ -20,7 +20,7 @@ export default async function MeetupsPage() {
           {meetups.map((meetup) => (
             <li key={meetup.id}>
               <h2><Link href={`/meetups/${meetup.id}`}>{meetup.activity.name}</Link></h2>
-              <p><LocalTime value={meetup.startsAt.toISOString()} /> · {meetup.durationMinutes} minutes</p>
+              <p><MeetupTime value={meetup.startsAt.toISOString()} /> · {meetup.durationMinutes} minutes</p>
               <p>{meetup.place.kind === "physical" ? `${meetup.place.siteName ?? "Site"}, ${meetup.place.spot}` : "Virtual"}</p>
               <p>Host: {meetup.host.name} · {meetup.participantCount} of {meetup.capacity} places filled</p>
               {meetup.status === "cancelled" && <p className="error">Cancelled</p>}

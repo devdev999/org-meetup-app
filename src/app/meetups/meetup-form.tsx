@@ -16,12 +16,11 @@ export function MeetupForm({
   const [startsAt, setStartsAt] = useState("");
   useEffect(() => {
     const date = meetup ? new Date(meetup.startsAt) : new Date(Date.now() + 30 * 60 * 1000);
-    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000);
-    setStartsAt(local.toISOString().slice(0, 16));
+    setStartsAt(date.toISOString().slice(0, 16));
   }, [meetup]);
   const [state, action, pending] = useActionState<MeetupActionState, FormData>(
     (_previous, form) => {
-      const start = new Date(String(form.get("startsAt")));
+      const start = new Date(`${String(form.get("startsAt"))}Z`);
       if (Number.isNaN(start.getTime())) return Promise.resolve({ error: "Choose a start time." });
       form.set("startsAt", start.toISOString());
       return saveMeetup(meetup?.id ?? null, form);
@@ -46,10 +45,10 @@ export function MeetupForm({
         </label>
       )}
       <label>
-        Start time
+        Start time in UTC
         <input type="datetime-local" name="startsAt" required value={startsAt} onChange={(change) => setStartsAt(change.target.value)} />
       </label>
-      <p className="muted">Times use your device's time zone.</p>
+      <p className="muted">All Meetup times use UTC.</p>
       <label>
         Duration in minutes
         <input type="number" name="durationMinutes" min="1" max="1440" step="1" required defaultValue={meetup?.durationMinutes ?? 60} />

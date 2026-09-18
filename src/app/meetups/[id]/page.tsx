@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireMemberPastWelcome } from "../../../web/session";
-import { LocalTime } from "../local-time";
+import { MeetupTime } from "../meetup-time";
 import { MeetupAction } from "../meetup-action";
 
 export default async function MeetupPage({ params }: { params: Promise<{ id: string }> }) {
@@ -10,7 +10,6 @@ export default async function MeetupPage({ params }: { params: Promise<{ id: str
   const meetup = await member.viewMeetup(id);
   if (!meetup) notFound();
   const isHost = meetup.membership === "host";
-  const canChange = meetup.status === "scheduled" && meetup.startsAt.getTime() > Date.now();
   const otherParticipants = meetup.participants.filter((participant) => participant.memberId !== meetup.host.memberId);
   return (
     <main>
@@ -23,7 +22,7 @@ export default async function MeetupPage({ params }: { params: Promise<{ id: str
       {meetup.status === "completed" && <p className="notice">This Meetup has ended.</p>}
       <dl>
         <dt>Host</dt><dd>{meetup.host.name}</dd>
-        <dt>Start time</dt><dd><LocalTime value={meetup.startsAt.toISOString()} /></dd>
+        <dt>Start time</dt><dd><MeetupTime value={meetup.startsAt.toISOString()} /></dd>
         <dt>Duration</dt><dd>{meetup.durationMinutes} minutes</dd>
         <dt>Place</dt>
         <dd>{meetup.place.kind === "physical"
@@ -37,10 +36,10 @@ export default async function MeetupPage({ params }: { params: Promise<{ id: str
         <p className="notice">You are on the waitlist. We will notify you in your inbox when a place opens.</p>
       )}
       {meetup.membership === "participant" && meetup.status === "scheduled" && <p className="notice">You joined this Meetup.</p>}
-      {canChange && !meetup.membership && (
+      {meetup.canChange && !meetup.membership && (
         <MeetupAction meetupId={meetup.id} operation="join" label={meetup.participantCount >= meetup.capacity ? "Join waitlist" : "Join Meetup"} />
       )}
-      {canChange && (meetup.membership === "participant" || meetup.membership === "waitlisted") && (
+      {meetup.canChange && (meetup.membership === "participant" || meetup.membership === "waitlisted") && (
         <MeetupAction meetupId={meetup.id} operation="leave" label={meetup.membership === "waitlisted" ? "Leave waitlist" : "Leave Meetup"} />
       )}
       {(isHost || meetup.membership === "participant") && (
@@ -57,7 +56,7 @@ export default async function MeetupPage({ params }: { params: Promise<{ id: str
           )}
         </section>
       )}
-      {isHost && canChange && (
+      {isHost && meetup.canChange && (
         <section>
           <h2>Manage Meetup</h2>
           <p><Link href={`/meetups/${meetup.id}/edit`}>Edit Meetup</Link></p>
