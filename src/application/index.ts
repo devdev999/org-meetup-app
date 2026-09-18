@@ -23,6 +23,16 @@ import {
 import type { Clock, IdentityPort } from "./ports";
 
 export { SignInError };
+
+/**
+ * Recognises a `SignInError` by shape rather than class identity: the web
+ * process is bundled into several layers (pages, route handlers, server
+ * actions) that each hold their own copy of this module, so `instanceof`
+ * across them is false.
+ */
+export function isSignInError(error: unknown): error is SignInError {
+  return error instanceof Error && error.name === "SignInError" && typeof (error as SignInError).code === "string";
+}
 export type {
   BeginSignInInput,
   BootstrapConfig,
