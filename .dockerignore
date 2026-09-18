@@ -1,0 +1,14 @@
+node_modules
+.next
+dist
+.git
+.github
+.agents
+.claude
+docs
+.env
+.env.*
+!.env.example
+*.md
+compose.yaml
+Dockerfile.*

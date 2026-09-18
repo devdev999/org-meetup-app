@@ -1,0 +1,81 @@
+name: org-meetup
+
+# Local run of the whole platform: Postgres, a one-shot database setup, the
+# web process and the worker. Sign-in uses the built-in fake issuer
+# (IDENTITY_PROVIDER=fake) so no real identity provider is needed.
+#
+#   docker compose up --build
+#   open http://localhost:3000
+#
+# For tests, only Postgres is needed: docker compose up -d postgres
+
+x-app-environment: &app-environment
+  DATABASE_URL: postgres://postgres:postgres@postgres:5432/org_meetup
+  APP_URL: http://localhost:${WEB_PORT:-3000}
+  SESSION_SECRET: local-development-only-secret-do-not-use-anywhere-else-0123456789
+  IDENTITY_PROVIDER: fake
+  # The web image runs with NODE_ENV=production, which refuses the fake issuer unless a local run says so.
+  ALLOW_FAKE_IDENTITY: "yes"
+  BOOTSTRAP_ORGANISATION_SLUG: ministry-a
+  BOOTSTRAP_ORGANISATION_NAME: Ministry A
+  BOOTSTRAP_DEPARTMENTS: '["Finance","Legal"]'
+  BOOTSTRAP_SITES: '["Harbour House"]'
+  BOOTSTRAP_OIDC_ISSUER: http://localhost:${WEB_PORT:-3000}/dev-idp
+  BOOTSTRAP_OIDC_CLIENT_ID: org-meetups
+  BOOTSTRAP_OIDC_CLAIM_EMAIL: email
+  BOOTSTRAP_OIDC_CLAIM_NAME: name
+  BOOTSTRAP_OIDC_CLAIM_DEPARTMENT: department
+  BOOTSTRAP_OIDC_CLAIM_SITE: site
+  BOOTSTRAP_PLATFORM_ADMIN_EMAIL: pat@ministry-a.example
+  BOOTSTRAP_PLATFORM_ADMIN_NAME: Pat Platform
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: org_meetup
+    ports:
+      - "${POSTGRES_PORT:-5439}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  # Applies migrations and seeds the first Organisation, then exits.
+  setup:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    image: org-meetup-worker
+    command: ["pnpm", "db:setup"]
+    environment: *app-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: org-meetup-web
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment: *app-environment
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+
+  worker:
+    image: org-meetup-worker
+    environment: *app-environment
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+
+volumes:
+  postgres-data:

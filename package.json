@@ -1,0 +1,46 @@
+{
+  "name": "org-meetup-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "packageManager": "pnpm@10.32.1",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "worker": "tsx --env-file-if-exists=.env src/worker/main.ts",
+    "worker:dev": "tsx watch --env-file-if-exists=.env src/worker/main.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:setup": "tsx --env-file-if-exists=.env src/db/setup.ts",
+    "typecheck": "next typegen && tsc --noEmit",
+    "lint:boundaries": "depcruise src",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "pnpm typecheck && pnpm lint:boundaries && pnpm test"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.2",
+    "next": "16.3.5",
+    "openid-client": "6.8.8",
+    "pg": "8.23.0",
+    "pg-boss": "12.33.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tsx": "4.23.13",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.5",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "dependency-cruiser": "18.3.1",
+    "drizzle-kit": "0.31.10",
+    "jose": "6.2.12",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}
