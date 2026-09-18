@@ -23,7 +23,7 @@ import {
   type SignInErrorCode,
   type SignInOption,
 } from "./lib/sign-in";
-import type { Clock, IdentityPort } from "./ports";
+import type { AiPort, Clock, IdentityPort } from "./ports";
 
 export { AccessDeniedError, AdminVisibilityNoticeRequiredError, InvalidInputError, SignInError };
 export type { AdminAuditEntry, OrganisationAdminActions, UnknownLoginNotice } from "./lib/organisation-admin";
@@ -45,6 +45,9 @@ export type {
   UpdateProfileInput,
 };
 export type { ClaimMapping } from "./lib/schema";
+export type { InterestKind } from "./ports";
+export type { MemberProfile, MemberSearch } from "./lib/member-actor";
+export type { Interest, MemberInterest, InterestResolution, InterestSelection, ConfirmInterestInput, Stance } from "./lib/interests";
 
 /**
  * Recognises a `SignInError` by shape rather than class identity: the web
@@ -72,6 +75,7 @@ export interface ApplicationDependencies {
   pool: Pool;
   identity: IdentityPort;
   clock: Clock;
+  ai: AiPort;
 }
 
 /**
@@ -97,6 +101,7 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     db: connectDatabase(dependencies.pool),
     identity: dependencies.identity,
     clock: dependencies.clock,
+    ai: dependencies.ai,
   };
   return {
     bootstrap: (config) => bootstrap(deps, config),

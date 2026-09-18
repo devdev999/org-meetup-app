@@ -1,11 +1,13 @@
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, exists, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { requireActiveMember, type Actor } from "./actor";
 import { findDepartment, findSite, listDepartmentsAndSites } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
 import { blankToNull, isUuid } from "./input";
 import { organisationAdmin, type OrganisationAdminActions } from "./organisation-admin";
-import { departments, members, organisations, sites } from "./schema";
+import { departments, interestAliases, interests, memberInterests, members, organisations, sites } from "./schema";
+import type { InterestKind } from "../ports";
+import { confirmInterest, listInterests, memberInterestList, resolveInterest, setInterestStance, type ConfirmInterestInput, type Interest, type InterestResolution, type MemberInterest, type Stance } from "./interests";
 
 export type MemberStatus = (typeof members.status.enumValues)[number];
 
@@ -44,6 +46,16 @@ export interface MemberSummary {
   site: string | null;
 }
 
+export interface MemberProfile extends MemberSummary {
+  interests: MemberInterest[];
+}
+
+export interface MemberSearch {
+  interest?: string;
+  department?: string;
+  site?: string;
+}
+
 /** Members in these statuses appear in Member-facing views; Suspended and Departed ones are hidden. */
 const VISIBLE_STATUSES: MemberStatus[] = ["provisioned", "active"];
 
@@ -53,6 +65,11 @@ const VISIBLE_STATUSES: MemberStatus[] = ["provisioned", "active"];
  * to it, so nothing a page passes in can reach another Organisation.
  */
 export interface MemberActions {
+  interests(): Promise<Interest[]>;
+  myInterests(): Promise<MemberInterest[]>;
+  resolveInterest(input: { phrase: string; kind: InterestKind }): Promise<InterestResolution>;
+  confirmInterest(input: ConfirmInterestInput): Promise<MemberInterest[]>;
+  setInterestStance(input: { interestId: string; stance: Stance }): Promise<MemberInterest[]>;
   organisationAdmin(): Promise<OrganisationAdminActions>;
   adminVisibilityNotice(): Promise<AdminVisibilityNotice | undefined>;
   profile(): Promise<Profile>;
@@ -63,7 +80,8 @@ export interface MemberActions {
   /** The Departments and Sites of the Member's Organisation, to choose from. */
   departmentsAndSites(): Promise<{ departments: string[]; sites: string[] }>;
   /** Another Member of the same Organisation, or undefined if there is no such visible Member there. */
-  viewMember(memberId: string): Promise<MemberSummary | undefined>;
+  viewMember(memberId: string): Promise<MemberProfile | undefined>;
+  searchMembers(input?: MemberSearch): Promise<MemberProfile[]>;
 }
 
 /** Resolves a session's Member to an actor, or undefined if they are not an Active Member. */
@@ -83,6 +101,11 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
   }
 
   return {
+    interests: () => afterNotice(() => listInterests(deps, actor)),
+    myInterests: () => afterNotice(() => memberInterestList(deps, actor)),
+    resolveInterest: (input) => afterNotice(() => resolveInterest(deps, actor, input)),
+    confirmInterest: (input) => afterNotice(() => confirmInterest(deps, actor, input)),
+    setInterestStance: (input) => afterNotice(() => setInterestStance(deps, actor, input)),
     organisationAdmin: () => organisationAdmin(deps, actor),
     adminVisibilityNotice: () => adminVisibilityNotice(deps, actor),
     profile: () => afterNotice(() => profile(deps, actor)),
@@ -90,6 +113,7 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     updateProfile: (input) => afterNotice(() => updateProfile(deps, actor, input)),
     departmentsAndSites: () => afterNotice(() => listDepartmentsAndSites(deps.db, actor.organisationId)),
     viewMember: (id) => afterNotice(() => viewMember(deps, actor, id)),
+    searchMembers: (input = {}) => afterNotice(() => searchMembers(deps, actor, input)),
   };
 }
 
@@ -177,9 +201,9 @@ async function updateProfile(deps: Deps, actor: Actor, input: UpdateProfileInput
   return profile(deps, actor);
 }
 
-async function viewMember({ db }: Deps, actor: Actor, memberId: string): Promise<MemberSummary | undefined> {
+async function viewMember(deps: Deps, actor: Actor, memberId: string): Promise<MemberProfile | undefined> {
   if (!isUuid(memberId)) return undefined;
-  const [row] = await db
+  const [row] = await deps.db
     .select({ memberId: members.id, name: members.name, department: departments.name, site: sites.name })
     .from(members)
     .leftJoin(departments, sameOrganisation(departments.id, members.departmentId, departments.organisationId))
@@ -192,5 +216,34 @@ async function viewMember({ db }: Deps, actor: Actor, memberId: string): Promise
       ),
     )
     .limit(1);
-  return row;
+  return row ? { ...row, interests: await memberInterestList(deps, actor, memberId) } : undefined;
+}
+
+async function searchMembers({ db }: Deps, actor: Actor, input: MemberSearch): Promise<MemberProfile[]> {
+  const interest = input.interest?.trim();
+  const department = input.department?.trim().toLowerCase();
+  const site = input.site?.trim().toLowerCase();
+  const pattern = interest ? `%${interest.replace(/[\\%_]/g, "\\$&")}%` : undefined;
+  const rows = await db.select({ memberId: members.id, name: members.name, department: departments.name, site: sites.name })
+    .from(members)
+    .leftJoin(departments, sameOrganisation(departments.id, members.departmentId, departments.organisationId))
+    .leftJoin(sites, sameOrganisation(sites.id, members.siteId, sites.organisationId))
+    .where(and(
+      eq(members.organisationId, actor.organisationId),
+      ne(members.id, actor.memberId),
+      inArray(members.status, VISIBLE_STATUSES),
+      department ? eq(departments.nameKey, department) : undefined,
+      site ? eq(sites.nameKey, site) : undefined,
+      pattern ? exists(db.select({ id: memberInterests.interestId }).from(memberInterests)
+        .innerJoin(interests, and(eq(interests.organisationId, memberInterests.organisationId), eq(interests.id, memberInterests.interestId)))
+        .leftJoin(interestAliases, and(eq(interestAliases.organisationId, interests.organisationId), eq(interestAliases.interestId, interests.id)))
+        .where(and(eq(memberInterests.organisationId, actor.organisationId), eq(memberInterests.memberId, members.id), or(ilike(interests.name, pattern), ilike(interestAliases.phrase, pattern))))) : undefined,
+    )).orderBy(asc(members.name), asc(members.id));
+  if (!rows.length) return [];
+  const declarations = await db.select({ memberId: memberInterests.memberId, interestId: interests.id, name: interests.name, kind: interests.kind, stance: memberInterests.stance })
+    .from(memberInterests)
+    .innerJoin(interests, and(eq(interests.organisationId, memberInterests.organisationId), eq(interests.id, memberInterests.interestId)))
+    .where(and(eq(memberInterests.organisationId, actor.organisationId), inArray(memberInterests.memberId, rows.map((row) => row.memberId))))
+    .orderBy(asc(interests.kind), asc(interests.name));
+  return rows.map((row) => ({ ...row, interests: declarations.filter((declaration) => declaration.memberId === row.memberId).map(({ memberId: _, ...interest }) => interest) }));
 }
