@@ -29,7 +29,7 @@ _Avoid_: office, location, workplace
 ### Interests and matching
 
 **Interest**:
-Something a Member declares about themselves so others can be matched with them. Every Interest is a Skill or a Hobby, which is a category for browsing, and a Member holds it with a Stance, which is what matching uses.
+A Skill or Hobby that describes what a Member Shares or Seeks, or what a Meetup or Event is about. Members hold Interests with a Stance; relevant Interests attached to a Meetup or Event are separate from the Host's own Stances.
 _Avoid_: tag, topic, preference
 
 **Skill**:

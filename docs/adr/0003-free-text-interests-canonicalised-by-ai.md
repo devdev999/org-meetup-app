@@ -1,3 +1,5 @@
 # Free-text Interests, canonicalised by AI
 
 Members type their Interests freely instead of picking from a curated list. An AI service resolves each phrase to an existing canonical Interest or creates a new one, keeps the typed phrase as an Alias, and proposes merges of near-duplicate Interests to an Organisation Admin. We chose this over a curated list, which is what a multi-organisation matching system would normally use, because it removes the burden of maintaining a taxonomy for every Organisation and because the platform is expected to carry a visible AI capability. The risk is fragmentation ("rust", "Rust", "rustlang"), which is exactly what canonicalisation exists to prevent; merges keep their Aliases so a wrong merge can be split again.
+
+Hosts can also select relevant Interests for a Meetup or Event. A small AI model extracts them automatically during creation, and the Host can edit the selection. These Interests describe the Meetup or Event and leave the Host's personal Stances unchanged.
