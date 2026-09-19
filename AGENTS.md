@@ -3,11 +3,14 @@
 A multi-organisation staff meetup platform. Design vocabulary lives in `CONTEXT.md` and decisions in `docs/adr/`; read both before working in an area.
 
 ## IMPORTANT
-- Keep all code minimally viable, readable and simply maintainable.
+- Keep all code minimally viable, readable, simple, clean and maintainable. DRY, KISS, YAGNI
 - Do not add any comments in code unless there are multiple chains, extremely complex logic or major architecture decisions there
 - Be concise in your prose and keep things simple, do not overconvolute
 - Always read and apply the [unslop skill](.agents/skills/unslop/SKILL.md) to every response and any text you write or edit.
 - For every implementation task, create a feature branch from the latest `origin/main`, implement and run required tests, commit before reviewing, then push and open a draft GitHub PR targeting `main` with the issue/spec link and test results; obtain an independent review against the PR base and spec, address findings and push fixes, and require passing CI and explicit human approval before merging—never commit or push directly to `main`.
+- Include `Closes #<issue-number>` in each implementation PR’s description; reconcile the issue’s acceptance criteria before requesting final approval, and leave the issue open until the PR merges into the repository’s default branch.
+- For all UI related changes, use the chrome devtools MCP server to verify all changes in a browser
+- Always use the simplify code skill before pushing any code
 
 ## Agent skills
 
