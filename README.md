@@ -32,6 +32,20 @@ Retired Departments and Sites disappear from profile choices. Existing assignmen
 
 Organisation Admin access is checked for each command and query. Roster views, previews and unknown-login lists record the actor, view, filter and time in the audit log, as required by [ADR 0006](./docs/adr/0006-admins-see-individual-level-data.md). Each view records access; the filter is empty because these views have no filtering controls yet.
 
+## Meetups
+
+Open Meetups from your profile to create one, join one or manage one you Host. Physical Meetups default to the Host's Site as their audience, even when the Place is at another Site. Virtual Meetups default to the whole Organisation. The Host can instead choose a Site, the Organisation or invite-only. Invite-only Meetups are visible only to their Host until Invites arrive in issue #7.
+
+Meetup input, display and notices use UTC for this deployment. Configurable deployment time zones belong to issue #15. Existing Participants and waitlisted Members keep access if their profile Site changes, so they can still leave their Meetup.
+
+Capacity includes the Host and must be between two and thirty. Joining a full Meetup adds the Member to its FIFO waitlist. Leaving or increasing capacity promotes the next Member and adds a notice to their inbox. Repeated joins do not take extra spots, and concurrent joins cannot overfill a Meetup.
+
+The Host can edit the time, Place, duration, description and capacity, cancel, or hand over to a Participant. Handover keeps the previous Host as a Participant, who can then leave. Cancellation notifies Participants and the waitlist, clears the waitlist, and keeps the cancelled Meetup visible. Cancellation notices retain access for former waitlisted Members even after their Site changes. Started or cancelled Meetups cannot change. Participants see each other; only the Host sees the waitlist.
+
+The inbox receives channel-neutral notices for joins, departures, promotions, time or Place changes, cancellations and handovers. Message content uses first names, Activity, time and Place. Telegram and email delivery belong to issue #6; Member lifecycle effects on Meetups belong to issue #13.
+
+The application stores Meetups and future Events together with a kind. All commands and queries derive the Organisation from the Member actor. Mutations use the same Organisation transaction lock as roster and admin changes, so seating and notices commit together.
+
 ## Interests and finding Members
 
 Open **Your Interests** from your profile. Enter a phrase, choose Skill or Hobby, and choose Shares or Seeks. The preview shows the proposed canonical Interest. Confirm it, choose another shortlisted Interest, or keep your phrase. Saving retains the original phrase as an Alias and replaces any previous Stance for that Interest.

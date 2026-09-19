@@ -6,6 +6,7 @@ import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
 import { blankToNull, isUuid } from "./input";
 import { organisationAdmin, type OrganisationAdminActions } from "./organisation-admin";
+import { cancelMeetup, createMeetup, editMeetup, handOverMeetup, inbox, joinMeetup, leaveMeetup, listMeetups, meetupChoices, viewMeetup, type CreateMeetupInput, type EditMeetupInput, type MeetupChoices, type MeetupDetail, type MeetupSummary, type Notice } from "./meetups";
 import { departments, interestAliases, interests, memberInterests, members, organisations, sites } from "./schema";
 import type { InterestKind } from "../ports";
 import { confirmInterest, listInterests, memberInterestList, resolveInterest, setInterestStance, type ConfirmInterestInput, type Interest, type InterestResolution, type MemberInterest, type Stance } from "./interests";
@@ -63,6 +64,16 @@ export interface MemberSearch {
  * to it, so nothing a page passes in can reach another Organisation.
  */
 export interface MemberActions {
+  meetupChoices(): Promise<MeetupChoices>;
+  createMeetup(input: CreateMeetupInput): Promise<MeetupDetail>;
+  listMeetups(): Promise<MeetupSummary[]>;
+  viewMeetup(id: string): Promise<MeetupDetail | undefined>;
+  joinMeetup(id: string): Promise<"participant" | "waitlisted">;
+  leaveMeetup(id: string): Promise<void>;
+  inbox(): Promise<Notice[]>;
+  editMeetup(id: string, input: EditMeetupInput): Promise<void>;
+  cancelMeetup(id: string): Promise<void>;
+  handOverMeetup(id: string, participantMemberId: string): Promise<void>;
   interests(): Promise<Interest[]>;
   myInterests(): Promise<MemberInterest[]>;
   resolveInterest(input: { phrase: string; kind: InterestKind }): Promise<InterestResolution>;
@@ -103,6 +114,16 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
   }
 
   return {
+    meetupChoices: () => meetupChoices(deps, actor),
+    createMeetup: (input) => createMeetup(deps, actor, input),
+    listMeetups: () => listMeetups(deps, actor),
+    viewMeetup: (id) => viewMeetup(deps, actor, id),
+    joinMeetup: (id) => joinMeetup(deps, actor, id),
+    leaveMeetup: (id) => leaveMeetup(deps, actor, id),
+    inbox: () => inbox(deps, actor),
+    editMeetup: (id, input) => editMeetup(deps, actor, id, input),
+    cancelMeetup: (id) => cancelMeetup(deps, actor, id),
+    handOverMeetup: (id, participantMemberId) => handOverMeetup(deps, actor, id, participantMemberId),
     interests: () => afterNotice(() => listInterests(deps, actor)),
     myInterests: () => afterNotice(() => memberInterestList(deps, actor)),
     resolveInterest: (input) => afterNotice(() => resolveInterest(deps, actor, input)),

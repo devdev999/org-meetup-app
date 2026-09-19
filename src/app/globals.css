@@ -96,12 +96,16 @@ label {
   font-weight: 500;
 }
 
-input, select {
+input, select, textarea {
   font: inherit;
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--line);
   border-radius: 0.4rem;
   width: 100%;
+}
+
+textarea {
+  resize: vertical;
 }
 
 button {
@@ -212,9 +216,19 @@ th {
   margin-bottom: 1.5rem;
 }
 
-.interest-list, .member-list {
+.interest-list, .member-list, .meetup-list {
   list-style: none;
   padding: 0;
+}
+
+.meetup-list > li {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.meetup-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .interest-list li {
@@ -244,7 +258,7 @@ th {
   margin: 1rem 0 0.5rem;
 }
 
-.member-list h2 {
+.member-list h2, .meetup-list h2 {
   margin-top: 0;
 }
 
