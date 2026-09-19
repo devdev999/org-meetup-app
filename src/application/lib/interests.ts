@@ -33,6 +33,10 @@ const FALLBACK_PROPOSAL_SCORE = 0.6;
 const SUBSTRING_SIMILARITY = 0.8;
 const ALIAS_WHITESPACE = "\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
 
+function aliasKey(phrase: string) {
+  return sql`lower(btrim(${phrase}, ${ALIAS_WHITESPACE}))`;
+}
+
 const phraseSchema = z.string().min(1).max(120).refine((value) => value.trim().length > 0);
 const kindSchema = z.enum(["skill", "hobby"]);
 const selectionSchema = z.union([
@@ -84,8 +88,12 @@ export async function resolveInterest(deps: Deps, actor: Actor, input: { phrase:
   const { phrase, kind } = parse(z.object({ phrase: phraseSchema, kind: kindSchema }), input,
     "Enter an Interest of up to 120 characters and choose Skill or Hobby.");
   const catalog = await listInterests(deps, actor);
-  const aliases = await deps.db.select({ interestId: interestAliases.interestId, phrase: interestAliases.phrase })
+  const aliases = await deps.db.select({
+    interestId: interestAliases.interestId, phrase: interestAliases.phrase,
+    matchesPhrase: eq(interestAliases.phraseKey, aliasKey(phrase)),
+  })
     .from(interestAliases).where(eq(interestAliases.organisationId, actor.organisationId));
+  const knownAlias = aliases.find((alias) => alias.matchesPhrase);
   const ranked = catalog.map((interest) => ({
     interest,
     score: Math.max(similarity(phrase, interest.name), ...aliases.filter((alias) => alias.interestId === interest.interestId).map((alias) => similarity(phrase, alias.phrase))),
@@ -108,13 +116,14 @@ export async function resolveInterest(deps: Deps, actor: Actor, input: { phrase:
     const valid = selectionSchema.safeParse(result);
     if (valid.success) proposed = valid.data;
   }
-  if ("name" in proposed) {
-    const nameKey = proposed.name.trim().toLowerCase();
-    const existing = catalog.find((interest) => interest.name.toLowerCase() === nameKey);
-    if (existing) {
-      proposed = { interestId: existing.interestId };
-      if (!shortlist.some((interest) => interest.interestId === existing.interestId)) shortlist.unshift(existing);
-    }
+  if (knownAlias) proposed = { interestId: knownAlias.interestId };
+  const selection = proposed;
+  const existing = "name" in selection
+    ? catalog.find((interest) => interest.name.toLowerCase() === selection.name.trim().toLowerCase())
+    : catalog.find((interest) => interest.interestId === selection.interestId);
+  if (existing) {
+    proposed = { interestId: existing.interestId };
+    if (!shortlist.some((interest) => interest.interestId === existing.interestId)) shortlist.unshift(existing);
   }
   return { phrase, proposed, shortlist };
 }
@@ -157,7 +166,7 @@ export async function confirmInterest(deps: Deps, actor: Actor, input: ConfirmIn
       interestId = interest!.id;
     }
     const [alias] = await tx.insert(interestAliases).values({
-      organisationId: actor.organisationId, interestId, phrase, phraseKey: sql`lower(btrim(${phrase}, ${ALIAS_WHITESPACE}))`, createdAt: deps.clock.now(),
+      organisationId: actor.organisationId, interestId, phrase, phraseKey: aliasKey(phrase), createdAt: deps.clock.now(),
     }).onConflictDoUpdate({
       target: [interestAliases.organisationId, interestAliases.phraseKey],
       set: { phrase },

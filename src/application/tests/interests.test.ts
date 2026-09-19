@@ -203,6 +203,10 @@ test.each([["\u00a0SQL\u00a0", "sql"], ["\ufeffSQL\ufeff", "sql"], ["İ", "i"], 
     const sql = (await member.interests()).find((interest) => interest.name === "SQL")!;
     const rust = (await member.interests()).find((interest) => interest.name === "Rust")!;
     await member.confirmInterest({ phrase, selection: { interestId: sql.interestId }, stance: "shares" });
+    h.ai.responses.push(new Error("offline"));
+    const preview = await member.resolveInterest({ phrase: variant, kind: "skill" });
+    expect(preview.proposed).toEqual({ interestId: sql.interestId });
+    await member.confirmInterest({ phrase: preview.phrase, selection: preview.proposed, stance: "shares" });
     await expect(member.confirmInterest({ phrase: variant, selection: { interestId: rust.interestId }, stance: "seeks" }))
       .rejects.toMatchObject({ code: "alias-conflict" });
     expect(await member.myInterests()).toEqual([{ ...sql, stance: "shares" }]);
