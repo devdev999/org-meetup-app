@@ -196,6 +196,19 @@ test("concurrent confirmations keep one Alias mapping and roll back the conflict
   expect([...(await a.myInterests()), ...(await b.myInterests())]).toHaveLength(1);
 });
 
+test.each([["\u00a0SQL\u00a0", "sql"], ["\ufeffSQL\ufeff", "sql"], ["İ", "i"], ["ΟΣ", "οσ"]])(
+  "Alias normalization treats %s and %s as the same phrase", async (phrase, variant) => {
+    await h.app.bootstrap(ministryA);
+    const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
+    const sql = (await member.interests()).find((interest) => interest.name === "SQL")!;
+    const rust = (await member.interests()).find((interest) => interest.name === "Rust")!;
+    await member.confirmInterest({ phrase, selection: { interestId: sql.interestId }, stance: "shares" });
+    await expect(member.confirmInterest({ phrase: variant, selection: { interestId: rust.interestId }, stance: "seeks" }))
+      .rejects.toMatchObject({ code: "alias-conflict" });
+    expect(await member.myInterests()).toEqual([{ ...sql, stance: "shares" }]);
+  },
+);
+
 test("AI proposals with an existing canonical name preview its actual name and kind", async () => {
   await h.app.bootstrap(ministryA);
   const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);

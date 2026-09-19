@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { InterestKind } from "../ports";
 import { requireActiveMember, VISIBLE_MEMBER_STATUSES, type Actor } from "./actor";
@@ -31,6 +31,7 @@ const SHORTLIST_SIZE = 5;
 const MIN_SHORTLIST_SCORE = 0.2;
 const FALLBACK_PROPOSAL_SCORE = 0.6;
 const SUBSTRING_SIMILARITY = 0.8;
+const ALIAS_WHITESPACE = "\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
 
 const phraseSchema = z.string().min(1).max(120).refine((value) => value.trim().length > 0);
 const kindSchema = z.enum(["skill", "hobby"]);
@@ -156,7 +157,7 @@ export async function confirmInterest(deps: Deps, actor: Actor, input: ConfirmIn
       interestId = interest!.id;
     }
     const [alias] = await tx.insert(interestAliases).values({
-      organisationId: actor.organisationId, interestId, phrase, phraseKey: phrase.trim().toLowerCase(), createdAt: deps.clock.now(),
+      organisationId: actor.organisationId, interestId, phrase, phraseKey: sql`lower(btrim(${phrase}, ${ALIAS_WHITESPACE}))`, createdAt: deps.clock.now(),
     }).onConflictDoUpdate({
       target: [interestAliases.organisationId, interestAliases.phraseKey],
       set: { phrase },
