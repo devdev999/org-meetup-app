@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt } from "drizzle-orm";
-import { requireActiveMember, type Actor } from "./actor";
+import { requireActiveMember, withActiveMember, type Actor } from "./actor";
 import type { Deps } from "./deps";
 import { AccessDeniedError, AdminVisibilityNoticeRequiredError, InvalidInputError } from "./errors";
 import { joinMeetup } from "./meetups";
@@ -17,20 +17,17 @@ function hash(code: string): string {
 export async function beginTelegramLink(deps: Deps, actor: Actor): Promise<TelegramLink> {
   if (!deps.telegram.botUsername) throw new InvalidInputError("invalid-telegram-link", "Telegram linking is unavailable.");
   const code = randomBytes(24).toString("base64url");
+  const codeHash = hash(code);
   const expiresAt = new Date(deps.clock.now().getTime() + 10 * 60_000);
-  await deps.db.transaction(async (db) => {
-    await db.select().from(organisations).where(eq(organisations.id, actor.organisationId)).for("update");
-    await requireActiveMember(db, actor);
-    await db.insert(telegramLinkCodes).values({ ...actor, codeHash: hash(code), expiresAt })
-      .onConflictDoUpdate({ target: [telegramLinkCodes.organisationId, telegramLinkCodes.memberId], set: { codeHash: hash(code), expiresAt } });
+  await withActiveMember(deps, actor, async (db) => {
+    await db.insert(telegramLinkCodes).values({ ...actor, codeHash, expiresAt })
+      .onConflictDoUpdate({ target: [telegramLinkCodes.organisationId, telegramLinkCodes.memberId], set: { codeHash, expiresAt } });
   });
   return { url: `https://t.me/${deps.telegram.botUsername}?start=${code}`, expiresAt };
 }
 
 export async function unlinkTelegram(deps: Deps, actor: Actor): Promise<void> {
-  await deps.db.transaction(async (db) => {
-    await db.select().from(organisations).where(eq(organisations.id, actor.organisationId)).for("update");
-    await requireActiveMember(db, actor);
+  await withActiveMember(deps, actor, async (db) => {
     await db.delete(telegramLinks).where(and(eq(telegramLinks.organisationId, actor.organisationId), eq(telegramLinks.memberId, actor.memberId)));
     await db.delete(telegramLinkCodes).where(and(eq(telegramLinkCodes.organisationId, actor.organisationId), eq(telegramLinkCodes.memberId, actor.memberId)));
   });

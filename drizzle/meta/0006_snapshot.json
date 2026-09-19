@@ -1,5 +1,5 @@
 {
-  "id": "e35df9b0-e507-4540-b9aa-83db0c0aaa21",
+  "id": "6bff2415-3f36-45d5-a985-72314642d425",
   "prevId": "6ccd43b9-5072-4dba-b3ca-24bb32234098",
   "version": "7",
   "dialect": "postgresql",
@@ -1030,6 +1030,203 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.notice_deliveries": {
+      "name": "notice_deliveries",
+      "schema": "",
+      "columns": {
+        "organisation_id": {
+          "name": "organisation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notice_id": {
+          "name": "notice_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "channel": {
+          "name": "channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mode": {
+          "name": "mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scheduled_for": {
+          "name": "scheduled_for",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "available_at": {
+          "name": "available_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "notice_deliveries_pending_idx": {
+          "name": "notice_deliveries_pending_idx",
+          "columns": [
+            {
+              "expression": "mode",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "available_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"notice_deliveries\".\"finished_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "notice_deliveries_organisation_id_organisations_id_fk": {
+          "name": "notice_deliveries_organisation_id_organisations_id_fk",
+          "tableFrom": "notice_deliveries",
+          "tableTo": "organisations",
+          "columnsFrom": [
+            "organisation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "notice_deliveries_organisation_id_notice_id_notices_organisation_id_id_fk": {
+          "name": "notice_deliveries_organisation_id_notice_id_notices_organisation_id_id_fk",
+          "tableFrom": "notice_deliveries",
+          "tableTo": "notices",
+          "columnsFrom": [
+            "organisation_id",
+            "notice_id"
+          ],
+          "columnsTo": [
+            "organisation_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "notice_deliveries_organisation_id_notice_id_channel_pk": {
+          "name": "notice_deliveries_organisation_id_notice_id_channel_pk",
+          "columns": [
+            "organisation_id",
+            "notice_id",
+            "channel"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.notice_preferences": {
+      "name": "notice_preferences",
+      "schema": "",
+      "columns": {
+        "organisation_id": {
+          "name": "organisation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "telegram": {
+          "name": "telegram",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "notice_preferences_organisation_id_organisations_id_fk": {
+          "name": "notice_preferences_organisation_id_organisations_id_fk",
+          "tableFrom": "notice_preferences",
+          "tableTo": "organisations",
+          "columnsFrom": [
+            "organisation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "notice_preferences_organisation_id_member_id_members_organisation_id_id_fk": {
+          "name": "notice_preferences_organisation_id_member_id_members_organisation_id_id_fk",
+          "tableFrom": "notice_preferences",
+          "tableTo": "members",
+          "columnsFrom": [
+            "organisation_id",
+            "member_id"
+          ],
+          "columnsTo": [
+            "organisation_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "notice_preferences_organisation_id_member_id_kind_pk": {
+          "name": "notice_preferences_organisation_id_member_id_kind_pk",
+          "columns": [
+            "organisation_id",
+            "member_id",
+            "kind"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.notices": {
       "name": "notices",
       "schema": "",
@@ -1070,6 +1267,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "external_message": {
+          "name": "external_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
         },
         "created_at": {
           "name": "created_at",
@@ -1131,7 +1335,16 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "notices_organisation_id_id_unique": {
+          "name": "notices_organisation_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organisation_id",
+            "id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

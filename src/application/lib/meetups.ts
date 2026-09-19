@@ -1,12 +1,12 @@
 import { and, asc, desc, eq, gt, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { requireActiveMember, type Actor } from "./actor";
+import { requireActiveMember, withActiveMember, type Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
 import { deliverNotices, recordNotices } from "./notifications";
-import { activities, gatheringMembers, gatherings, members, notices, organisations, sites } from "./schema";
+import { activities, gatheringMembers, gatherings, members, notices, sites } from "./schema";
 
 export type MeetupPlace = { kind: "physical"; siteId: string; spot: string } | { kind: "virtual"; url: string };
 export type MeetupAudience =
@@ -109,11 +109,7 @@ function placeColumns(place: MeetupPlace) {
 }
 
 async function authorised<T>(deps: Deps, actor: Actor, operation: (db: Queryable, current: typeof members.$inferSelect) => Promise<T>) {
-  const result = await deps.db.transaction(async (db) => {
-    await db.select({ id: organisations.id }).from(organisations).where(eq(organisations.id, actor.organisationId)).for("update");
-    const current = await requireActiveMember(db, actor);
-    return operation(db, current);
-  });
+  const result = await withActiveMember(deps, actor, operation);
   await deliverNotices(deps, actor.organisationId).catch(() => console.error("notices: immediate delivery deferred to the worker"));
   return result;
 }

@@ -1,4 +1,6 @@
-import { boolean, foreignKey, integer, jsonb, pgEnum, pgTable, primaryKey, serial, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { boolean, foreignKey, index, integer, jsonb, pgEnum, pgTable, primaryKey, serial, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import type { NoticeKind } from "./notice-kinds";
 
 /**
  * Every table except platform configuration carries `organisationId`
@@ -279,7 +281,7 @@ export const notices = pgTable("notices", {
   organisationId: uuid().notNull().references(() => organisations.id),
   memberId: uuid().notNull(),
   gatheringId: uuid().notNull(),
-  kind: text().$type<import("./notice-kinds").NoticeKind>().notNull(),
+  kind: text().$type<NoticeKind>().notNull(),
   message: text().notNull(),
   externalMessage: text().notNull().default(""),
   createdAt: timestamptz().notNull(),
@@ -300,6 +302,7 @@ export const noticeDeliveries = pgTable("notice_deliveries", {
   finishedAt: timestamptz(),
 }, (table) => [
   primaryKey({ columns: [table.organisationId, table.noticeId, table.channel] }),
+  index("notice_deliveries_pending_idx").on(table.mode, table.availableAt).where(sql`${table.finishedAt} is null`),
   foreignKey({ columns: [table.organisationId, table.noticeId], foreignColumns: [notices.organisationId, notices.id] }),
 ]);
 
@@ -315,7 +318,7 @@ export const telegramLinks = pgTable("telegram_links", {
 export const noticePreferences = pgTable("notice_preferences", {
   organisationId: uuid().notNull().references(() => organisations.id),
   memberId: uuid().notNull(),
-  kind: text().$type<import("./notice-kinds").NoticeKind>().notNull(),
+  kind: text().$type<NoticeKind>().notNull(),
   telegram: boolean().notNull(),
   email: boolean().notNull(),
 }, (table) => [

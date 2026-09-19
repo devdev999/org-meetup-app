@@ -1,11 +1,11 @@
 import { and, eq, inArray, isNull, lte } from "drizzle-orm";
 import { z } from "zod";
-import { requireActiveMember, type Actor } from "./actor";
+import { requireActiveMember, withActiveMember, type Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
 import { NOTICE_KINDS, type NoticeKind } from "./notice-kinds";
-import { gatherings, members, noticeDeliveries, noticePreferences, notices, organisations, telegramLinks } from "./schema";
+import { gatherings, members, noticeDeliveries, noticePreferences, notices, telegramLinks } from "./schema";
 
 export interface NoticePreference { kind: NoticeKind; telegram: boolean; email: boolean }
 
@@ -39,9 +39,7 @@ export async function notificationSettings(deps: Deps, actor: Actor): Promise<No
 export async function setNoticePreference(deps: Deps, actor: Actor, input: NoticePreference): Promise<void> {
   const parsed = z.object({ kind: z.enum(NOTICE_KINDS), telegram: z.boolean(), email: z.boolean() }).safeParse(input);
   if (!parsed.success) throw new InvalidInputError("invalid-notice-preference", "Choose a notice kind and a preference for each channel.");
-  await deps.db.transaction(async (db) => {
-    await db.select().from(organisations).where(eq(organisations.id, actor.organisationId)).for("update");
-    await requireActiveMember(db, actor);
+  await withActiveMember(deps, actor, async (db) => {
     await db.insert(noticePreferences).values({ ...actor, ...parsed.data }).onConflictDoUpdate({
       target: [noticePreferences.organisationId, noticePreferences.memberId, noticePreferences.kind],
       set: { telegram: parsed.data.telegram, email: parsed.data.email },
