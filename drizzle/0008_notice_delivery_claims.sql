@@ -1,0 +1,1 @@
+ALTER TABLE "notice_deliveries" ADD COLUMN "claim_token" uuid;

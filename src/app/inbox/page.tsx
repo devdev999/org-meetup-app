@@ -10,6 +10,7 @@ export default async function InboxPage() {
       <nav className="member-nav" aria-label="Member navigation">
         <Link href="/meetups">Meetups</Link>
         <Link href="/profile">Profile</Link>
+        <Link href="/notifications">Notification settings</Link>
       </nav>
       <h1>Inbox</h1>
       {notices.length === 0 ? <p className="muted">You have no notices yet.</p> : (

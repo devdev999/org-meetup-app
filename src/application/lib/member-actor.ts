@@ -10,6 +10,8 @@ import { cancelMeetup, createMeetup, editMeetup, handOverMeetup, inbox, joinMeet
 import { departments, interestAliases, interests, memberInterests, members, organisations, sites } from "./schema";
 import type { InterestKind } from "../ports";
 import { confirmInterest, listInterests, memberInterestList, resolveInterest, setInterestStance, type ConfirmInterestInput, type Interest, type InterestResolution, type MemberInterest, type Stance } from "./interests";
+import { beginTelegramLink, unlinkTelegram, type TelegramLink } from "./telegram";
+import { deliverSoon, notificationSettings, setNoticePreference, type NotificationSettings, type NoticePreference } from "./notifications";
 
 export type MemberStatus = (typeof members.status.enumValues)[number];
 
@@ -64,6 +66,10 @@ export interface MemberSearch {
  * to it, so nothing a page passes in can reach another Organisation.
  */
 export interface MemberActions {
+  beginTelegramLink(): Promise<TelegramLink>;
+  unlinkTelegram(): Promise<void>;
+  notificationSettings(): Promise<NotificationSettings>;
+  setNoticePreference(input: NoticePreference): Promise<void>;
   meetupChoices(): Promise<MeetupChoices>;
   createMeetup(input: CreateMeetupInput): Promise<MeetupDetail>;
   listMeetups(): Promise<MeetupSummary[]>;
@@ -113,17 +119,27 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     return result;
   }
 
+  async function withNotices<T>(gatheringId: string, operation: () => Promise<T>): Promise<T> {
+    const result = await operation();
+    await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId });
+    return result;
+  }
+
   return {
+    beginTelegramLink: () => beginTelegramLink(deps, actor),
+    unlinkTelegram: () => unlinkTelegram(deps, actor),
+    notificationSettings: () => notificationSettings(deps, actor),
+    setNoticePreference: (input) => setNoticePreference(deps, actor, input),
     meetupChoices: () => meetupChoices(deps, actor),
     createMeetup: (input) => createMeetup(deps, actor, input),
     listMeetups: () => listMeetups(deps, actor),
     viewMeetup: (id) => viewMeetup(deps, actor, id),
-    joinMeetup: (id) => joinMeetup(deps, actor, id),
-    leaveMeetup: (id) => leaveMeetup(deps, actor, id),
+    joinMeetup: (id) => withNotices(id, () => joinMeetup(deps, actor, id)),
+    leaveMeetup: (id) => withNotices(id, () => leaveMeetup(deps, actor, id)),
     inbox: () => inbox(deps, actor),
-    editMeetup: (id, input) => editMeetup(deps, actor, id, input),
-    cancelMeetup: (id) => cancelMeetup(deps, actor, id),
-    handOverMeetup: (id, participantMemberId) => handOverMeetup(deps, actor, id, participantMemberId),
+    editMeetup: (id, input) => withNotices(id, () => editMeetup(deps, actor, id, input)),
+    cancelMeetup: (id) => withNotices(id, () => cancelMeetup(deps, actor, id)),
+    handOverMeetup: (id, participantMemberId) => withNotices(id, () => handOverMeetup(deps, actor, id, participantMemberId)),
     interests: () => afterNotice(() => listInterests(deps, actor)),
     myInterests: () => afterNotice(() => memberInterestList(deps, actor)),
     resolveInterest: (input) => afterNotice(() => resolveInterest(deps, actor, input)),

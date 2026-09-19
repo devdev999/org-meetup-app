@@ -16,6 +16,13 @@ x-app-environment: &app-environment
   IDENTITY_PROVIDER: fake
   # The web image runs with NODE_ENV=production, which refuses the fake issuer unless a local run says so.
   ALLOW_FAKE_IDENTITY: "yes"
+  TELEGRAM_PROVIDER: ${TELEGRAM_PROVIDER:-memory}
+  TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+  EMAIL_PROVIDER: ${EMAIL_PROVIDER:-memory}
+  SMTP_URL: ${SMTP_URL:-}
+  EMAIL_FROM: ${EMAIL_FROM:-}
   BOOTSTRAP_ORGANISATION_SLUG: ministry-a
   BOOTSTRAP_ORGANISATION_NAME: Ministry A
   BOOTSTRAP_DEPARTMENTS: '["Finance","Legal"]'

@@ -56,6 +56,7 @@ export class IdentityError extends Error {
 /** The clock, so that time-dependent behaviour is testable. */
 export interface Clock {
   now(): Date;
+  every(milliseconds: number, action: () => Promise<void>): () => Promise<void>;
 }
 
 export type InterestKind = "skill" | "hobby";
@@ -69,4 +70,27 @@ export type AiInterestResolution = { existingName: string } | { name: string; ki
 
 export interface AiPort {
   resolveInterest(input: AiInterestRequest): Promise<AiInterestResolution>;
+}
+
+export interface TelegramMessage {
+  chatId: string;
+  text: string;
+  joinMeetupId?: string;
+}
+
+export interface TelegramPort {
+  readonly botUsername: string | null;
+  sendMessage(message: TelegramMessage): Promise<void>;
+  answerCallback(input: { callbackId: string; text: string }): Promise<void>;
+}
+
+export interface EmailMessage {
+  id: string;
+  to: string;
+  subject: string;
+  text: string;
+}
+
+export interface EmailPort {
+  sendMessage(message: EmailMessage): Promise<void>;
 }

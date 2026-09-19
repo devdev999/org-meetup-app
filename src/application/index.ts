@@ -23,7 +23,13 @@ import {
   type SignInErrorCode,
   type SignInOption,
 } from "./lib/sign-in";
-import type { AiPort, Clock, IdentityPort } from "./ports";
+import type { AiPort, Clock, EmailPort, IdentityPort, TelegramPort } from "./ports";
+import { handleTelegram, type TelegramCommand } from "./lib/telegram";
+import { deliverNotices, sendDailyDigests } from "./lib/notifications";
+
+export type { TelegramCommand, TelegramLink } from "./lib/telegram";
+export type { NotificationSettings, NoticePreference } from "./lib/notifications";
+export { NOTICE_KINDS, type NoticeKind } from "./lib/notice-kinds";
 
 export { AccessDeniedError, AdminVisibilityNoticeRequiredError, InvalidInputError, SignInError };
 export type { AdminAuditEntry, OrganisationAdminActions, UnknownLoginNotice } from "./lib/organisation-admin";
@@ -77,6 +83,8 @@ export interface ApplicationDependencies {
   identity: IdentityPort;
   clock: Clock;
   ai: AiPort;
+  telegram: TelegramPort;
+  email: EmailPort;
 }
 
 /**
@@ -85,6 +93,9 @@ export interface ApplicationDependencies {
  * Organisation the application derives itself, never from input.
  */
 export interface Application {
+  deliverNotices(): Promise<void>;
+  sendDailyDigests(): Promise<void>;
+  handleTelegram(command: TelegramCommand): Promise<void>;
   /** Seeds the first Organisation, its choices, its OIDC settings and the first Platform Admin. Idempotent. */
   bootstrap(config: BootstrapConfig): Promise<void>;
   /** Anonymous: the Organisations a visitor can sign in to, in name order. */
@@ -103,8 +114,13 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     identity: dependencies.identity,
     clock: dependencies.clock,
     ai: dependencies.ai,
+    telegram: dependencies.telegram,
+    email: dependencies.email,
   };
   return {
+    deliverNotices: () => deliverNotices(deps),
+    sendDailyDigests: () => sendDailyDigests(deps),
+    handleTelegram: (command) => handleTelegram(deps, command),
     bootstrap: (config) => bootstrap(deps, config),
     signInOptions: () => signInOptions(deps),
     beginSignIn: (input) => beginSignIn(deps, input),

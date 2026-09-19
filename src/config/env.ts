@@ -43,6 +43,31 @@ export function aiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig {
 
 const identityProviderSchema = z.enum(["oidc", "fake"]).default("oidc");
 
+export function telegramConfig(env: NodeJS.ProcessEnv = process.env) {
+  const values = present(env);
+  const provider = z.enum(["memory", "telegram"]).default("memory").parse(values.TELEGRAM_PROVIDER);
+  const botUsername = z.string().regex(/^[A-Za-z0-9_]{5,32}$/).optional().parse(values.TELEGRAM_BOT_USERNAME);
+  const webhookSecret = z.string().regex(/^[A-Za-z0-9_-]{16,256}$/).optional().parse(values.TELEGRAM_WEBHOOK_SECRET);
+  if (provider === "memory") return { provider, botUsername: botUsername ?? null, webhookSecret: webhookSecret ?? null };
+  return {
+    provider,
+    botUsername: z.string().min(1).parse(botUsername),
+    webhookSecret: z.string().min(1).parse(webhookSecret),
+    token: z.string().min(1).parse(values.TELEGRAM_BOT_TOKEN),
+  };
+}
+
+export function emailConfig(env: NodeJS.ProcessEnv = process.env) {
+  const values = present(env);
+  const provider = z.enum(["memory", "smtp"]).default("memory").parse(values.EMAIL_PROVIDER);
+  if (provider === "memory") return { provider };
+  return {
+    provider,
+    url: z.url({ protocol: /^smtps?$/ }).parse(values.SMTP_URL),
+    from: z.email().parse(values.EMAIL_FROM),
+  };
+}
+
 /** Which identity adapter to wire: the real OIDC one, or the in-memory issuer for local runs. */
 export function identityProvider(env: NodeJS.ProcessEnv = process.env): "oidc" | "fake" {
   return identityProviderSchema.parse(present(env).IDENTITY_PROVIDER);

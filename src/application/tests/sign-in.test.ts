@@ -79,7 +79,7 @@ test("a sign-in that takes longer than ten minutes is refused", async () => {
   const started = await h.app.beginSignIn({ organisationSlug: "ministry-a", redirectUri: REDIRECT_URI });
   const callbackUrl = FakeIdentity.callbackUrl(started.authorizationUrl, ana);
 
-  h.clock.advance(11 * 60 * 1000);
+  await h.clock.advance(11 * 60 * 1000);
 
   await expect(h.app.completeSignIn({ pending: started.pending, callbackUrl })).rejects.toMatchObject({
     name: "SignInError",

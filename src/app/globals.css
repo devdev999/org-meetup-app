@@ -266,3 +266,23 @@ button:disabled {
   cursor: wait;
   opacity: 0.65;
 }
+
+.notice-preference {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.notice-preference h3, .notice-preference p {
+  margin: 0;
+}
+
+.channel-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.channel-choice input {
+  width: 1.1rem;
+  height: 1.1rem;
+}
