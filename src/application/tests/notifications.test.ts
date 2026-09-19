@@ -27,6 +27,21 @@ async function member(name = "Ana", organisation = "ministry-a") {
   });
 }
 
+async function emailDelivery(mode: "immediate" | "digest") {
+  await h.app.bootstrap(ministryA);
+  const ana = await member();
+  const bo = await member("Bo");
+  const meetup = await createMeetup(ana);
+  if (mode === "digest") {
+    await bo.joinMeetup(meetup.id);
+    await bo.leaveMeetup(meetup.id);
+    h.clock.set(new Date("2026-09-19T09:00:00Z"));
+  }
+  h.email.reset();
+  const drain = () => mode === "digest" ? h.app.sendDailyDigests() : h.app.deliverNotices();
+  return { drain, start: mode === "digest" ? drain : () => bo.joinMeetup(meetup.id) };
+}
+
 test("a Member links Telegram with a ten-minute code that can only be used once", async () => {
   await h.app.bootstrap(ministryA);
   const ana = await member();
@@ -190,6 +205,55 @@ test("a failed delivery leaves the inbox intact and concurrent worker retries do
   h.clock.set(new Date("2026-09-18T09:01:00Z"));
   await Promise.all([h.app.deliverNotices(), h.app.deliverNotices()]);
   expect(h.telegram.outbox).toHaveLength(1);
+  expect(h.email.outbox).toHaveLength(1);
+});
+
+test.each(["immediate", "digest"] as const)("a slow %s email is sent once while another worker drains notices", async (mode) => {
+  const { start, drain } = await emailDelivery(mode);
+  let resume = () => {};
+  h.email.sendDelay = new Promise<void>((resolve) => { resume = resolve; });
+  const first = start();
+  try {
+    await expect.poll(() => h.email.attempts).toHaveLength(1);
+    for (let tick = 0; tick < 4; tick++) await h.clock.advance(20_000);
+    h.email.sendDelay = undefined;
+    await drain();
+    expect(h.email.attempts).toHaveLength(1);
+  } finally {
+    resume();
+    await first;
+  }
+  await h.clock.advance(60_000);
+  await drain();
+  expect(h.email.outbox).toHaveLength(1);
+});
+
+test.each(["immediate", "digest"] as const)("an expired %s email attempt cannot consume the replacement's retry budget", async (mode) => {
+  const { start, drain } = await emailDelivery(mode);
+  h.email.failure = new Error("SMTP is unavailable");
+  await start();
+  for (let attempt = 1; attempt < 13; attempt++) {
+    await h.clock.advance(60_000);
+    await drain();
+  }
+  expect(h.email.attempts).toHaveLength(13);
+  await h.clock.advance(60_000);
+  let failExpired = () => {};
+  h.email.sendDelay = new Promise<void>((_, reject) => { failExpired = () => reject(new Error("Old SMTP connection failed")); });
+  const expired = drain();
+  try {
+    await expect.poll(() => h.email.attempts).toHaveLength(14);
+    h.clock.set(new Date(h.clock.now().getTime() + 61_000));
+    h.email.sendDelay = undefined;
+    await drain();
+    expect(h.email.attempts).toHaveLength(15);
+  } finally {
+    failExpired();
+    await expired;
+  }
+  h.email.failure = undefined;
+  await h.clock.advance(60_000);
+  await drain();
   expect(h.email.outbox).toHaveLength(1);
 });
 

@@ -56,6 +56,7 @@ export class IdentityError extends Error {
 /** The clock, so that time-dependent behaviour is testable. */
 export interface Clock {
   now(): Date;
+  every(milliseconds: number, action: () => Promise<void>): () => Promise<void>;
 }
 
 export type InterestKind = "skill" | "hobby";

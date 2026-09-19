@@ -17,7 +17,7 @@ async function adminAndMember() {
 test("an Organisation Admin's Member profile view records the actor, Member and access time", async () => {
   const { actor, admin, memberId } = await adminAndMember();
   const actorMemberId = (await actor.profile()).memberId;
-  h.clock.advance(60_000);
+  await h.clock.advance(60_000);
 
   expect(await actor.viewMember(memberId)).toMatchObject({
     memberId,
@@ -40,9 +40,9 @@ test("an Organisation Admin's Member search records its effective filters and ti
   const filter = { interest: "  sql ", department: " Legal ", site: " HARBOUR HOUSE " };
 
   expect(await actor.searchMembers(filter)).toMatchObject([{ memberId, interests: [{ name: "SQL", stance: "seeks" }] }]);
-  h.clock.advance(60_000);
+  await h.clock.advance(60_000);
   expect(await actor.searchMembers({ interest: "missing" })).toEqual([]);
-  h.clock.advance(60_000);
+  await h.clock.advance(60_000);
   await actor.searchMembers({ interest: " ", department: " ", site: " " });
 
   expect(await admin.auditLog()).toEqual([

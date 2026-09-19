@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, lte, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { requireActiveMember, withActiveMember, type Actor } from "./actor";
@@ -14,6 +15,7 @@ const URGENT_KINDS: NoticeKind[] = ["meetup-joined", "meetup-promoted", "meetup-
 const DIGEST_HOUR_UTC = 9;
 const BATCH = 100;
 const LEASE_MS = 60_000;
+const RENEW_EVERY_MS = 20_000;
 const RETRY_DELAY_MS = 60_000;
 const MAX_ATTEMPTS = 15;
 
@@ -95,17 +97,32 @@ const digestNoticeJoin = and(eq(notices.organisationId, noticeDeliveries.organis
 
 interface DeliveryJob { where: SQL | undefined; send: () => Promise<void> }
 
+async function claimLease(db: Queryable, where: SQL | undefined, now: Date) {
+  const claimToken = randomUUID();
+  await db.update(noticeDeliveries).set({ claimToken, availableAt: new Date(now.getTime() + LEASE_MS) }).where(where);
+  return and(where, eq(noticeDeliveries.claimToken, claimToken), isNull(noticeDeliveries.finishedAt));
+}
+
 /**
- * The three phases keep every provider call outside a transaction: claim leases the
- * row so no concurrent drain re-sends, send runs with nothing held, settle records
- * the outcome. A crash between phases leaves the lease to expire and the worker to retry.
+ * Provider calls hold no transaction. Renew the claim while sending, then settle
+ * only that claim. A stopped process leaves its lease to expire for another worker.
  */
 async function runJob(deps: Deps, job: DeliveryJob): Promise<void> {
+  const stopRenewing = deps.clock.every(RENEW_EVERY_MS, async () => {
+    try {
+      await deps.db.update(noticeDeliveries)
+        .set({ availableAt: new Date(deps.clock.now().getTime() + LEASE_MS) }).where(job.where);
+    } catch {
+      console.error("notices: delivery lease renewal failed");
+    }
+  });
   let ok = true;
   try {
     await job.send();
   } catch {
     ok = false;
+  } finally {
+    await stopRenewing();
   }
   const now = deps.clock.now();
   await deps.db.transaction(async (db) => {
@@ -139,7 +156,7 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
     if (row && delivery.channel === "telegram") {
       [link] = await db.select().from(telegramLinks).where(and(eq(telegramLinks.organisationId, delivery.organisationId), eq(telegramLinks.memberId, row.member.id)));
     }
-    await db.update(noticeDeliveries).set({ availableAt: new Date(now.getTime() + LEASE_MS) }).where(where);
+    const owned = await claimLease(db, where, now);
     const send = async () => {
       if (!row || row.member.status !== "active" || !channelEnabled(preference, delivery.channel)) return;
       if (delivery.channel === "email") {
@@ -151,7 +168,7 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
         });
       }
     };
-    return { where, send };
+    return { where: owned, send };
   });
 }
 
@@ -190,7 +207,7 @@ async function claimDigest(deps: Deps, group: { organisationId: string; memberId
       .where(and(eq(noticePreferences.organisationId, group.organisationId), eq(noticePreferences.memberId, group.memberId)));
     const enabled = rows.filter(({ notice }) => channelEnabled(preferences.find((preference) => preference.kind === notice.kind), "email"));
     const where = and(eq(noticeDeliveries.organisationId, group.organisationId), eq(noticeDeliveries.channel, "email"), inArray(noticeDeliveries.noticeId, rows.map(({ notice }) => notice.id)));
-    await db.update(noticeDeliveries).set({ availableAt: new Date(now.getTime() + LEASE_MS) }).where(where);
+    const owned = await claimLease(db, where, now);
     const send = async () => {
       if (member?.status !== "active" || !enabled.length) return;
       await deps.email.sendMessage({
@@ -198,7 +215,7 @@ async function claimDigest(deps: Deps, group: { organisationId: string; memberId
         to: member.email, subject: "Daily Meetup digest", text: enabled.map(({ notice }) => notice.message).join("\n\n"),
       });
     };
-    return { where, send };
+    return { where: owned, send };
   });
 }
 
