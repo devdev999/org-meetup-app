@@ -79,6 +79,8 @@ test("Members join first-come, leave and receive FIFO promotions with notices", 
   expect((await host.inbox()).map((notice) => notice.kind)).toEqual(["meetup-left", "meetup-joined"]);
   expect((await host.inbox()).every((notice) => !notice.message.includes("Member"))).toBe(true);
   expect((await host.inbox())[0]?.message).toContain("2026-09-18 09:30 UTC");
+  expect((await host.inbox())[0]?.message).toContain("Harbour House");
+  expect((await host.inbox())[0]?.message).toContain("Lobby table");
   await di.leaveMeetup(meetup.id);
   expect((await host.viewMeetup(meetup.id))?.waitlist).toEqual([]);
   await expect(host.leaveMeetup(meetup.id)).rejects.toMatchObject({ code: "invalid-meetup" });
@@ -98,6 +100,7 @@ test("Host edits notify Participants, increased capacity promotes waitlist and h
   expect(await bo.viewMeetup(meetup.id)).toMatchObject({ startsAt: edited.startsAt, place: edited.place, capacity: 3 });
   expect((await cy.viewMeetup(meetup.id))?.membership).toBe("participant");
   expect((await bo.inbox()).map((notice) => notice.kind)).toEqual(["meetup-edited"]);
+  expect((await bo.inbox())[0]?.message).toContain("https://meet.example/new");
   const boId = (await bo.profile()).memberId;
   await host.handOverMeetup(meetup.id, boId);
   expect(await bo.viewMeetup(meetup.id)).toMatchObject({ host: { memberId: boId }, membership: "host" });
@@ -105,6 +108,20 @@ test("Host edits notify Participants, increased capacity promotes waitlist and h
   await expect(host.cancelMeetup(meetup.id)).rejects.toMatchObject({ name: "AccessDeniedError" });
   await host.leaveMeetup(meetup.id);
   expect((await bo.viewMeetup(meetup.id))?.participantCount).toBe(2);
+});
+
+test("Place change notices identify the new Site when the spot has the same name", async () => {
+  const host = await setup();
+  const bo = await member("Bo");
+  const input = await inputFor(host);
+  const meetup = await host.createMeetup(input);
+  await bo.joinMeetup(meetup.id);
+  const annex = (await host.meetupChoices()).sites.find((site) => site.name === "Annex")!;
+  await host.editMeetup(meetup.id, { ...input, place: { kind: "physical", siteId: annex.id, spot: "Lobby table" } });
+  const [notice] = await bo.inbox();
+  expect(notice?.message).toContain("Annex");
+  expect(notice?.message).toContain("Lobby table");
+  expect(notice?.message).not.toContain("Harbour House");
 });
 
 test("cancellation tells every Participant and waitlisted Member, clears the waitlist and prevents changes", async () => {
@@ -127,6 +144,37 @@ test("cancellation tells every Participant and waitlisted Member, clears the wai
     () => host.cancelMeetup(meetup.id),
     () => host.handOverMeetup(meetup.id, meetup.host.memberId),
   ]) await expect(operation()).rejects.toMatchObject({ code: "invalid-meetup" });
+});
+
+test("cancelled Meetups stay visible to former waitlisted Members after a Site change", async () => {
+  const host = await setup();
+  const bo = await member("Bo");
+  const cy = await member("Cy");
+  const di = await member("Di");
+  const outsider = await member("Eli", "Annex");
+  await h.app.bootstrap({ ...ministryB, organisation: { ...ministryB.organisation, sites: ["Harbour House"] } });
+  const other = await member("Cy", "Harbour House", "ministry-b");
+  const meetup = await host.createMeetup(await inputFor(host));
+  await bo.joinMeetup(meetup.id);
+  await cy.joinMeetup(meetup.id);
+  await di.joinMeetup(meetup.id);
+  await cy.updateProfile({ department: null, site: "Annex" });
+  await host.cancelMeetup(meetup.id);
+  await di.updateProfile({ department: null, site: "Annex" });
+
+  expect(await host.viewMeetup(meetup.id)).toMatchObject({ status: "cancelled", waitlist: [], participantCount: 2 });
+  for (const actor of [cy, di]) {
+    const notice = (await actor.inbox()).find((entry) => entry.kind === "meetup-cancelled");
+    expect(notice).toBeDefined();
+    expect(await actor.viewMeetup(notice!.meetupId)).toMatchObject({ status: "cancelled", membership: null, canChange: false, participants: [], waitlist: null });
+    expect((await actor.listMeetups()).map((entry) => entry.id)).toContain(meetup.id);
+    await expect(actor.joinMeetup(meetup.id)).rejects.toMatchObject({ code: "invalid-meetup" });
+  }
+  for (const actor of [outsider, other]) {
+    expect(await actor.viewMeetup(meetup.id)).toBeUndefined();
+    expect(await actor.listMeetups()).toEqual([]);
+    expect(await actor.inbox()).toEqual([]);
+  }
 });
 
 test("only Members in scope see open Meetups and only the Host sees invite-only Meetups", async () => {

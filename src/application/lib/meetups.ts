@@ -154,6 +154,8 @@ function visibleTo(actor: Actor, siteId: string | null) {
     or(
       eq(gatherings.hostMemberId, actor.memberId),
       sql`exists (select 1 from ${gatheringMembers} where ${gatheringMembers.organisationId} = ${gatherings.organisationId} and ${gatheringMembers.gatheringId} = ${gatherings.id} and ${gatheringMembers.memberId} = ${actor.memberId})`,
+      and(eq(gatherings.status, "cancelled"),
+        sql`exists (select 1 from ${notices} where ${notices.organisationId} = ${gatherings.organisationId} and ${notices.gatheringId} = ${gatherings.id} and ${notices.memberId} = ${actor.memberId} and ${notices.kind} = 'meetup-cancelled')`),
       and(eq(gatherings.audienceKind, "open"),
         or(eq(gatherings.audienceScope, "organisation"), siteId ? eq(gatherings.audienceSiteId, siteId) : undefined)),
     ),
@@ -229,7 +231,7 @@ function noticeRecipients(meetup: MeetupDetail): string[] {
 }
 
 async function notify(db: Queryable, organisationId: string, meetup: MeetupSummary, recipients: string[], kind: Notice["kind"], message: string, now: Date) {
-  const place = meetup.place.kind === "physical" ? meetup.place.spot : meetup.place.url;
+  const place = meetup.place.kind === "physical" ? `${meetup.place.spot}, ${meetup.place.siteName}` : meetup.place.url;
   const time = `${meetup.startsAt.toISOString().slice(0, 16).replace("T", " ")} UTC`;
   const content = `${message} ${meetup.activity.name}, ${time}, ${place}.`;
   if (recipients.length === 0) return;

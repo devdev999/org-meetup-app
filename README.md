@@ -40,7 +40,7 @@ Meetup input, display and notices use UTC for this deployment. Configurable depl
 
 Capacity includes the Host and must be between two and thirty. Joining a full Meetup adds the Member to its FIFO waitlist. Leaving or increasing capacity promotes the next Member and adds a notice to their inbox. Repeated joins do not take extra spots, and concurrent joins cannot overfill a Meetup.
 
-The Host can edit the time, Place, duration, description and capacity, cancel, or hand over to a Participant. Handover keeps the previous Host as a Participant, who can then leave. Cancellation notifies Participants and the waitlist, clears the waitlist, and keeps the cancelled Meetup visible. Started or cancelled Meetups cannot change. Participants see each other; only the Host sees the waitlist.
+The Host can edit the time, Place, duration, description and capacity, cancel, or hand over to a Participant. Handover keeps the previous Host as a Participant, who can then leave. Cancellation notifies Participants and the waitlist, clears the waitlist, and keeps the cancelled Meetup visible. Cancellation notices retain access for former waitlisted Members even after their Site changes. Started or cancelled Meetups cannot change. Participants see each other; only the Host sees the waitlist.
 
 The inbox receives channel-neutral notices for joins, departures, promotions, time or Place changes, cancellations and handovers. Message content uses first names, Activity, time and Place. Telegram and email delivery belong to issue #6; Member lifecycle effects on Meetups belong to issue #13.
 
