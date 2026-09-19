@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lte } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { requireActiveMember, withActiveMember, type Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
@@ -26,10 +26,12 @@ export interface NotificationSettings {
 
 export async function notificationSettings(deps: Deps, actor: Actor): Promise<NotificationSettings> {
   await requireActiveMember(deps.db, actor);
-  const [link] = await deps.db.select().from(telegramLinks)
-    .where(and(eq(telegramLinks.organisationId, actor.organisationId), eq(telegramLinks.memberId, actor.memberId)));
-  const preferences = await deps.db.select({ kind: noticePreferences.kind, telegram: noticePreferences.telegram, email: noticePreferences.email })
-    .from(noticePreferences).where(and(eq(noticePreferences.organisationId, actor.organisationId), eq(noticePreferences.memberId, actor.memberId)));
+  const [[link], preferences] = await Promise.all([
+    deps.db.select().from(telegramLinks)
+      .where(and(eq(telegramLinks.organisationId, actor.organisationId), eq(telegramLinks.memberId, actor.memberId))),
+    deps.db.select({ kind: noticePreferences.kind, telegram: noticePreferences.telegram, email: noticePreferences.email })
+      .from(noticePreferences).where(and(eq(noticePreferences.organisationId, actor.organisationId), eq(noticePreferences.memberId, actor.memberId))),
+  ]);
   return {
     telegramAvailable: deps.telegram.botUsername !== null, telegramLinked: Boolean(link),
     preferences: NOTICE_KINDS.map((kind) => preferences.find((preference) => preference.kind === kind) ?? { kind, telegram: true, email: true }),
@@ -70,14 +72,27 @@ export async function recordNotices(db: Queryable, organisationId: string, recip
   if (deliveries.length) await db.insert(noticeDeliveries).values(deliveries);
 }
 
-function deliveryWhere(delivery: typeof noticeDeliveries.$inferSelect) {
+function deliveryWhere(delivery: Pick<typeof noticeDeliveries.$inferSelect, "organisationId" | "noticeId" | "channel">) {
   return and(eq(noticeDeliveries.organisationId, delivery.organisationId), eq(noticeDeliveries.noticeId, delivery.noticeId), eq(noticeDeliveries.channel, delivery.channel));
+}
+
+function duePredicate(mode: (typeof noticeDeliveries.$inferSelect)["mode"], now: Date) {
+  return and(isNull(noticeDeliveries.finishedAt), eq(noticeDeliveries.mode, mode), lte(noticeDeliveries.availableAt, now));
+}
+
+async function finishOrRetry(db: Queryable, where: SQL | undefined, now: Date, send: () => Promise<void>): Promise<void> {
+  try {
+    await send();
+    await db.update(noticeDeliveries).set({ finishedAt: now }).where(where);
+  } catch {
+    await db.update(noticeDeliveries).set({ availableAt: new Date(now.getTime() + 60_000) }).where(where);
+  }
 }
 
 export async function deliverNotices(deps: Deps, organisationId?: string): Promise<void> {
   const now = deps.clock.now();
-  const due = and(isNull(noticeDeliveries.finishedAt), eq(noticeDeliveries.mode, "immediate"), lte(noticeDeliveries.availableAt, now));
-  const pending = await deps.db.select().from(noticeDeliveries)
+  const due = duePredicate("immediate", now);
+  const pending = await deps.db.select({ organisationId: noticeDeliveries.organisationId, noticeId: noticeDeliveries.noticeId, channel: noticeDeliveries.channel }).from(noticeDeliveries)
     .where(and(due, organisationId ? eq(noticeDeliveries.organisationId, organisationId) : undefined))
     .orderBy(noticeDeliveries.availableAt, noticeDeliveries.noticeId).limit(100);
   for (const candidate of pending) {
@@ -92,7 +107,7 @@ export async function deliverNotices(deps: Deps, organisationId?: string): Promi
       const [preference] = row ? await db.select().from(noticePreferences).where(and(
         eq(noticePreferences.organisationId, delivery.organisationId), eq(noticePreferences.memberId, row.member.id), eq(noticePreferences.kind, row.notice.kind),
       )) : [];
-      try {
+      await finishOrRetry(db, where, now, async () => {
         if (row?.member.status === "active" && preference?.[delivery.channel] !== false) {
           if (delivery.channel === "email") {
             await deps.email.sendMessage({ id: row.notice.id, to: row.member.email, subject: "Meetup notice", text: row.notice.externalMessage });
@@ -105,17 +120,18 @@ export async function deliverNotices(deps: Deps, organisationId?: string): Promi
             });
           }
         }
-        await db.update(noticeDeliveries).set({ finishedAt: now }).where(where);
-      } catch {
-        await db.update(noticeDeliveries).set({ availableAt: new Date(now.getTime() + 60_000) }).where(where);
-      }
+      });
     });
   }
 }
 
+export async function deliverSoon(deps: Deps, organisationId: string): Promise<void> {
+  await deliverNotices(deps, organisationId).catch(() => console.error("notices: immediate delivery deferred to the worker"));
+}
+
 export async function sendDailyDigests(deps: Deps): Promise<void> {
   const now = deps.clock.now();
-  const due = and(isNull(noticeDeliveries.finishedAt), eq(noticeDeliveries.mode, "digest"), lte(noticeDeliveries.availableAt, now));
+  const due = duePredicate("digest", now);
   const sameNotice = and(eq(notices.organisationId, noticeDeliveries.organisationId), eq(notices.id, noticeDeliveries.noticeId));
   const groups = await deps.db.selectDistinct({ organisationId: notices.organisationId, memberId: notices.memberId, scheduledFor: noticeDeliveries.scheduledFor })
     .from(noticeDeliveries).innerJoin(notices, sameNotice).where(due).orderBy(noticeDeliveries.scheduledFor).limit(100);
@@ -131,17 +147,14 @@ export async function sendDailyDigests(deps: Deps): Promise<void> {
         .where(and(eq(noticePreferences.organisationId, group.organisationId), eq(noticePreferences.memberId, group.memberId)));
       const enabled = rows.filter(({ notice }) => preferences.find((preference) => preference.kind === notice.kind)?.email !== false);
       const where = and(eq(noticeDeliveries.organisationId, group.organisationId), eq(noticeDeliveries.channel, "email"), inArray(noticeDeliveries.noticeId, rows.map(({ notice }) => notice.id)));
-      try {
+      await finishOrRetry(db, where, now, async () => {
         if (member?.status === "active" && enabled.length) {
           await deps.email.sendMessage({
             id: `digest:${group.organisationId}:${group.memberId}:${group.scheduledFor.toISOString()}`,
             to: member.email, subject: "Daily Meetup digest", text: enabled.map(({ notice }) => notice.externalMessage).join("\n\n"),
           });
         }
-        await db.update(noticeDeliveries).set({ finishedAt: now }).where(where);
-      } catch {
-        await db.update(noticeDeliveries).set({ availableAt: new Date(now.getTime() + 60_000) }).where(where);
-      }
+      });
     });
   }
 }

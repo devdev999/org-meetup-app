@@ -11,7 +11,7 @@ import { departments, interestAliases, interests, memberInterests, members, orga
 import type { InterestKind } from "../ports";
 import { confirmInterest, listInterests, memberInterestList, resolveInterest, setInterestStance, type ConfirmInterestInput, type Interest, type InterestResolution, type MemberInterest, type Stance } from "./interests";
 import { beginTelegramLink, unlinkTelegram, type TelegramLink } from "./telegram";
-import { deliverNotices, notificationSettings, setNoticePreference, type NotificationSettings, type NoticePreference } from "./notifications";
+import { deliverSoon, notificationSettings, setNoticePreference, type NotificationSettings, type NoticePreference } from "./notifications";
 
 export type MemberStatus = (typeof members.status.enumValues)[number];
 
@@ -121,7 +121,7 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
 
   async function withNotices<T>(operation: () => Promise<T>): Promise<T> {
     const result = await operation();
-    await deliverNotices(deps, actor.organisationId).catch(() => console.error("notices: immediate delivery deferred to the worker"));
+    await deliverSoon(deps, actor.organisationId);
     return result;
   }
 

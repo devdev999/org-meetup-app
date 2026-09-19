@@ -4,7 +4,7 @@ import { requireActiveMember, withActiveMember, type Actor } from "./actor";
 import type { Deps } from "./deps";
 import { AccessDeniedError, AdminVisibilityNoticeRequiredError, InvalidInputError } from "./errors";
 import { joinMeetup } from "./meetups";
-import { deliverNotices } from "./notifications";
+import { deliverSoon } from "./notifications";
 import { organisations, telegramLinkCodes, telegramLinks } from "./schema";
 
 export interface TelegramLink { url: string; expiresAt: Date }
@@ -66,7 +66,7 @@ export async function handleTelegram(deps: Deps, command: TelegramCommand): Prom
       }
     }
     await deps.telegram.answerCallback({ callbackId: command.callbackId, text });
-    if (actor) await deliverNotices(deps, actor.organisationId).catch(() => console.error("notices: immediate delivery deferred to the worker"));
+    if (actor) await deliverSoon(deps, actor.organisationId);
     return;
   }
   let linked = false;

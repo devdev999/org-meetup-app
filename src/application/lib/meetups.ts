@@ -226,10 +226,10 @@ function noticeRecipients(meetup: MeetupDetail): string[] {
 async function notify(db: Queryable, organisationId: string, meetup: MeetupSummary, recipients: string[], kind: Notice["kind"], message: string, now: Date) {
   const place = meetup.place.kind === "physical" ? `${meetup.place.spot}, ${meetup.place.siteName}` : meetup.place.url;
   const time = `${meetup.startsAt.toISOString().slice(0, 16).replace("T", " ")} UTC`;
-  const content = `${message} ${meetup.activity.name}, ${time}, ${place}.`;
   const externalPlace = meetup.place.kind === "physical" ? place : "Online";
+  const line = (at: string) => `${message} ${meetup.activity.name}, ${time}, ${at}.`;
   await recordNotices(db, organisationId, recipients, {
-    gatheringId: meetup.id, kind, message: content, externalMessage: `${message} ${meetup.activity.name}, ${time}, ${externalPlace}.`,
+    gatheringId: meetup.id, kind, message: line(place), externalMessage: line(externalPlace),
   }, now);
 }
 

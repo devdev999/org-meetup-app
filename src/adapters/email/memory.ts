@@ -6,7 +6,7 @@ export class MemoryEmail implements EmailPort {
 
   async sendMessage(message: EmailMessage): Promise<void> {
     if (this.failure) throw this.failure;
-    this.outbox.push({ ...message });
+    this.outbox.push(structuredClone(message));
   }
 
   reset(): void {
