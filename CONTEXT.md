@@ -120,10 +120,6 @@ _Avoid_: super admin, root, operator
 A Member who manages one Organisation: its Departments, Sites, Interests, Events, reports and moderation.
 _Avoid_: admin, HR admin, owner
 
-**Block**:
-One Member's standing instruction that another Member never sees them, is suggested to them, or shares a Meetup or Event with them, in both directions.
-_Avoid_: mute, hide, ban
-
 **Flag**:
 A Member's complaint about a Member, a Meetup or an Event, sent to their Organisation Admin.
 _Avoid_: report, complaint, ticket
