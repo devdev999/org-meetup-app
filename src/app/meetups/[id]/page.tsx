@@ -12,9 +12,7 @@ export default async function MeetupPage({ params }: { params: Promise<{ id: str
   if (!meetup) notFound();
   const isHost = meetup.membership === "host";
   const otherParticipants = meetup.participants.filter((participant) => participant.memberId !== meetup.host.memberId);
-  const invitees = isHost && meetup.canChange ? (await member.searchMembers()).filter((candidate) =>
-    !meetup.participants.some((participant) => participant.memberId === candidate.memberId)
-    && !meetup.invites?.some((invite) => invite.member.memberId === candidate.memberId)) : [];
+  const invitees = isHost && meetup.canChange ? await member.inviteChoices(meetup.id) : [];
   return (
     <main>
       <nav className="member-nav" aria-label="Member navigation">
@@ -71,7 +69,7 @@ export default async function MeetupPage({ params }: { params: Promise<{ id: str
         <section>
           <h2>Manage Meetup</h2>
           <h3>Invite a Member</h3>
-          <InviteForm meetupId={meetup.id} members={invitees.map(({ memberId, name }) => ({ memberId, name }))} />
+          <InviteForm meetupId={meetup.id} members={invitees} />
           <p><Link href={`/meetups/${meetup.id}/edit`}>Edit Meetup</Link></p>
           {otherParticipants.length > 0 && (
             <>

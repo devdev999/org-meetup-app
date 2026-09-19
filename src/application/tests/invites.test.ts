@@ -158,6 +158,37 @@ test("Invites cannot cross Organisations, be sent by another Member or target th
   expect((await bo.viewMeetup(meetup.id))?.invite?.state).toBe("pending");
 });
 
+test("only the Host can list Invite choices, including Provisioned and waitlisted Members", async () => {
+  const host = await setup();
+  await h.app.bootstrap(ministryB);
+  await member("Outside", "ministry-b");
+  const bo = await member("Bo");
+  const cy = await member("Cy");
+  const di = await member("Di");
+  const meetup = await createMeetup(host, false);
+  await bo.joinMeetup(meetup.id);
+  await cy.joinMeetup(meetup.id);
+  await host.inviteMember(meetup.id, (await di.profile()).memberId);
+  expect(await host.inviteChoices(meetup.id)).toEqual([
+    { memberId: (await cy.profile()).memberId, name: "Cy Member" },
+    { memberId: (await host.searchMembers()).find((candidate) => candidate.name === "Pat Platform")!.memberId, name: "Pat Platform" },
+  ]);
+  await expect(bo.inviteChoices(meetup.id)).rejects.toMatchObject({ name: "AccessDeniedError" });
+  await host.inviteMember(meetup.id, (await cy.profile()).memberId);
+  expect((await host.inviteChoices(meetup.id)).map((candidate) => candidate.name)).toEqual(["Pat Platform"]);
+});
+
+test("an Organisation Admin's Invite choices record access in the audit log", async () => {
+  const person = { sub: "olivia", name: "Olivia Admin", email: "olivia@example.test" };
+  await h.app.bootstrap({ ...ministryA, organisationAdmin: person });
+  const host = await signInAndAcknowledgeAs(h, "ministry-a", person);
+  const meetup = await createMeetup(host);
+  await host.inviteChoices(meetup.id);
+  expect(await (await host.organisationAdmin()).auditLog()).toContainEqual(expect.objectContaining({
+    actorMemberId: (await host.profile()).memberId, action: "meetup-invite-choices", filter: { meetupId: meetup.id },
+  }));
+});
+
 test("concurrent Invite answers and ordinary joins cannot exceed capacity or duplicate answers", async () => {
   const host = await setup();
   const bo = await member("Bo");

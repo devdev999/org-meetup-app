@@ -52,8 +52,7 @@ export type {
   UpdateProfileInput,
 };
 export type { ClaimMapping } from "./lib/schema";
-export type { CreateMeetupInput, EditMeetupInput, MeetupAudience, MeetupChoices, MeetupDetail, MeetupPerson, MeetupPlace, MeetupSummary, Notice } from "./lib/meetups";
-export type { Invite, InviteAnswer } from "./lib/meetups";
+export type { CreateMeetupInput, EditMeetupInput, Invite, InviteAnswer, MeetupAudience, MeetupChoices, MeetupDetail, MeetupPerson, MeetupPlace, MeetupSummary, Notice } from "./lib/meetups";
 export type { InterestKind } from "./ports";
 export type { MemberProfile, MemberSearch } from "./lib/member-actor";
 export type { Interest, MemberInterest, InterestResolution, InterestSelection, ConfirmInterestInput, Stance } from "./lib/interests";
