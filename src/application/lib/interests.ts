@@ -107,6 +107,14 @@ export async function resolveInterest(deps: Deps, actor: Actor, input: { phrase:
     const valid = selectionSchema.safeParse(result);
     if (valid.success) proposed = valid.data;
   }
+  if ("name" in proposed) {
+    const nameKey = proposed.name.trim().toLowerCase();
+    const existing = catalog.find((interest) => interest.name.toLowerCase() === nameKey);
+    if (existing) {
+      proposed = { interestId: existing.interestId };
+      if (!shortlist.some((interest) => interest.interestId === existing.interestId)) shortlist.unshift(existing);
+    }
+  }
   return { phrase, proposed, shortlist };
 }
 
@@ -140,10 +148,23 @@ export async function confirmInterest(deps: Deps, actor: Actor, input: ConfirmIn
     } else {
       const [interest] = await tx.insert(interests).values({
         organisationId: actor.organisationId, name: selection.name, nameKey: selection.name.toLowerCase(), kind: selection.kind, createdAt: deps.clock.now(),
-      }).onConflictDoUpdate({ target: [interests.organisationId, interests.nameKey], set: { nameKey: selection.name.toLowerCase() } }).returning({ id: interests.id });
+      }).onConflictDoUpdate({ target: [interests.organisationId, interests.nameKey], set: { nameKey: selection.name.toLowerCase() } })
+        .returning({ id: interests.id, name: interests.name, kind: interests.kind });
+      if (interest!.name !== selection.name || interest!.kind !== selection.kind) {
+        throw new InvalidInputError("interest-name-conflict", "An Interest with this name already exists with a different spelling or kind. Preview again and confirm the existing Interest, or use another name.");
+      }
       interestId = interest!.id;
     }
-    await tx.insert(interestAliases).values({ organisationId: actor.organisationId, interestId, phrase, createdAt: deps.clock.now() }).onConflictDoNothing();
+    const [alias] = await tx.insert(interestAliases).values({
+      organisationId: actor.organisationId, interestId, phrase, phraseKey: phrase.trim().toLowerCase(), createdAt: deps.clock.now(),
+    }).onConflictDoUpdate({
+      target: [interestAliases.organisationId, interestAliases.phraseKey],
+      set: { phrase },
+      setWhere: eq(interestAliases.interestId, interestId),
+    }).returning({ interestId: interestAliases.interestId });
+    if (!alias) {
+      throw new InvalidInputError("alias-conflict", "This phrase already refers to another Interest. Confirm that Interest or use a different phrase.");
+    }
     await tx.insert(memberInterests).values({ organisationId: actor.organisationId, memberId: actor.memberId, interestId, stance })
       .onConflictDoUpdate({ target: [memberInterests.organisationId, memberInterests.memberId, memberInterests.interestId], set: { stance } });
   });

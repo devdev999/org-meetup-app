@@ -202,9 +202,10 @@ export const interestAliases = pgTable("interest_aliases", {
   organisationId: uuid().notNull().references(() => organisations.id),
   interestId: uuid().notNull(),
   phrase: text().notNull(),
+  phraseKey: text().notNull(),
   createdAt: timestamptz().notNull(),
 }, (table) => [
-  primaryKey({ columns: [table.organisationId, table.interestId, table.phrase] }),
+  primaryKey({ columns: [table.organisationId, table.phraseKey] }),
   foreignKey({
     name: "interest_aliases_interest_same_organisation_fk",
     columns: [table.organisationId, table.interestId],

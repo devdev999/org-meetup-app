@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { requireActiveMember, type Actor } from "./actor";
+import { recordAdminView } from "./admin-audit";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { AccessDeniedError } from "./errors";
@@ -62,13 +63,7 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
       await requireAdmin(tx);
       const result = await operation(tx);
       if (auditAction)
-        await tx.insert(adminAuditEntries).values({
-          organisationId: actor.organisationId,
-          actorMemberId: actor.memberId,
-          action: auditAction,
-          filter: {},
-          createdAt: deps.clock.now(),
-        });
+        await recordAdminView(tx, actor, { action: auditAction, filter: {} }, deps.clock.now());
       return result;
     });
   }

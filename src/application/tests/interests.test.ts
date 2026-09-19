@@ -157,6 +157,63 @@ test("confirming the same Interest again replaces the Stance without duplicating
   await h.app.bootstrap(ministryA);
   const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   await member.confirmInterest({ phrase: "sql", selection: { name: "SQL", kind: "skill" }, stance: "shares" });
-  const declared = await member.confirmInterest({ phrase: "sql", selection: { name: " sql ", kind: "skill" }, stance: "seeks" });
+  const sql = (await member.interests()).find((interest) => interest.name === "SQL")!;
+  const declared = await member.confirmInterest({ phrase: "sql", selection: { interestId: sql.interestId }, stance: "seeks" });
   expect(declared).toEqual([expect.objectContaining({ name: "SQL", stance: "seeks" })]);
 });
+
+test("a normalized Alias cannot be confirmed against a different Interest", async () => {
+  await h.app.bootstrap(ministryA);
+  const anaMember = await signInAndAcknowledgeAs(h, "ministry-a", ana);
+  const bo = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", email: "bo@example.test", name: "Bo" });
+  const sql = (await anaMember.interests()).find((interest) => interest.name === "SQL")!;
+  await anaMember.confirmInterest({ phrase: "database wizardry", selection: { interestId: sql.interestId }, stance: "shares" });
+  await expect(bo.confirmInterest({ phrase: "\tDATABASE WIZARDRY ", selection: { name: "Database magic", kind: "skill" }, stance: "seeks" }))
+    .rejects.toMatchObject({ code: "alias-conflict" });
+  expect(await bo.myInterests()).toEqual([]);
+  expect(await bo.interests()).not.toContainEqual(expect.objectContaining({ name: "Database magic" }));
+  h.ai.responses.push(new Error("offline"));
+  expect((await bo.resolveInterest({ phrase: "DATABASE WIZARDRY", kind: "skill" })).proposed).toEqual({ interestId: sql.interestId });
+  expect(await bo.searchMembers({ interest: "database wizardry" })).toEqual([expect.objectContaining({ name: "Ana Silva" })]);
+  await bo.confirmInterest({ phrase: " DATABASE WIZARDRY ", selection: { interestId: sql.interestId }, stance: "seeks" });
+  expect(await bo.myInterests()).toEqual([{ ...sql, stance: "seeks" }]);
+});
+
+test("concurrent confirmations keep one Alias mapping and roll back the conflicting Interest", async () => {
+  await h.app.bootstrap(ministryA);
+  const a = await signInAndAcknowledgeAs(h, "ministry-a", ana);
+  const b = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", email: "bo@example.test", name: "Bo" });
+  const before = await a.interests();
+  const results = await Promise.allSettled([
+    a.confirmInterest({ phrase: "shared phrase", selection: { name: "First choice", kind: "skill" }, stance: "shares" }),
+    b.confirmInterest({ phrase: " SHARED PHRASE ", selection: { name: "Second choice", kind: "hobby" }, stance: "seeks" }),
+  ]);
+  expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+  expect(results.filter((result) => result.status === "rejected")).toEqual([
+    expect.objectContaining({ reason: expect.objectContaining({ code: "alias-conflict" }) }),
+  ]);
+  expect(await a.interests()).toHaveLength(before.length + 1);
+  expect([...(await a.myInterests()), ...(await b.myInterests())]).toHaveLength(1);
+});
+
+test("AI proposals with an existing canonical name preview its actual name and kind", async () => {
+  await h.app.bootstrap(ministryA);
+  const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
+  const sql = (await member.interests()).find((interest) => interest.name === "SQL")!;
+  h.ai.responses.push({ name: "sql", kind: "hobby" });
+  const preview = await member.resolveInterest({ phrase: "zzzzz", kind: "hobby" });
+  expect(preview.proposed).toEqual({ interestId: sql.interestId });
+  expect(preview.shortlist).toContainEqual(sql);
+  expect(await member.confirmInterest({ phrase: preview.phrase, selection: preview.proposed, stance: "seeks" }))
+    .toEqual([{ ...sql, stance: "seeks" }]);
+});
+
+test.each([{ name: "sql", kind: "skill" as const }, { name: "SQL", kind: "hobby" as const }])(
+  "a conflicting new selection $name/$kind requires another confirmation", async (selection) => {
+    await h.app.bootstrap(ministryA);
+    const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
+    await expect(member.confirmInterest({ phrase: "sql", selection, stance: "shares" }))
+      .rejects.toMatchObject({ code: "interest-name-conflict" });
+    expect(await member.myInterests()).toEqual([]);
+  },
+);

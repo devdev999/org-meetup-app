@@ -38,7 +38,13 @@ Open **Your Interests** from your profile. Enter a phrase, choose Skill or Hobby
 
 Each Organisation starts with SQL, Rust, public speaking and spreadsheets as Skills, and board games, bouldering and running as Hobbies. Interests and Aliases belong to one Organisation. If the AI endpoint fails or returns an invalid answer, text similarity still produces a preview for confirmation. Previewing never saves a declaration.
 
+An Alias maps to one Interest per Organisation, ignoring case and surrounding whitespace. Reusing it for that Interest retains the latest typed spelling. A conflicting mapping fails without saving a declaration or a new Interest. A new selection that collides with an existing canonical name must match its spelling and kind, or the Member must preview and confirm again. The preview shows the existing Interest when an AI proposal uses its name.
+
+Migration `0004` backfills normalized Alias keys. If an existing development database contains duplicate keys, the migration stops without removing Aliases. Reconcile those mappings before rerunning it.
+
 Open **Find Members** to search your Organisation by Interest, Department and Site. Interest search includes remembered Aliases. Results and profiles group Skills and Hobbies with their Stances. Provisioned Members appear before first login; Departed and Suspended Members do not appear.
+
+An Organisation Admin's Member searches and profile views also create audit records. Each record includes the actor, time, and effective search filters or target Member. If recording access fails, the query returns no data.
 
 ## Develop
 

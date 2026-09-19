@@ -1,5 +1,6 @@
 import { and, asc, eq, exists, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { requireActiveMember, VISIBLE_MEMBER_STATUSES, type Actor } from "./actor";
+import { recordAdminView, type AdminView } from "./admin-audit";
 import { findDepartment, findSite, listDepartmentsAndSites } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
@@ -92,9 +93,13 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
   if (!row) return undefined;
   const actor: Actor = { memberId, organisationId: row.organisationId };
 
-  async function afterNotice<T>(operation: () => Promise<T>): Promise<T> {
-    await requireActiveMember(deps.db, actor);
-    return operation();
+  async function afterNotice<T>(operation: () => Promise<T>, audit?: AdminView): Promise<T> {
+    const member = await requireActiveMember(deps.db, actor);
+    const result = await operation();
+    if (audit && member.isOrganisationAdmin && result !== undefined) {
+      await recordAdminView(deps.db, actor, audit, deps.clock.now());
+    }
+    return result;
   }
 
   return {
@@ -109,8 +114,14 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     acknowledgeAdminVisibilityNotice: () => acknowledgeAdminVisibilityNotice(deps, actor),
     updateProfile: (input) => afterNotice(() => updateProfile(deps, actor, input)),
     departmentsAndSites: () => afterNotice(() => listDepartmentsAndSites(deps.db, actor.organisationId)),
-    viewMember: (id) => afterNotice(() => viewMember(deps, actor, id)),
-    searchMembers: (input = {}) => afterNotice(() => searchMembers(deps, actor, input)),
+    viewMember: (id) => afterNotice(() => viewMember(deps, actor, id), { action: "member-profile", filter: { memberId: id } }),
+    searchMembers: (input = {}) => {
+      const filter: Record<string, string> = {};
+      if (input.interest?.trim()) filter.interest = input.interest.trim();
+      if (input.department?.trim()) filter.department = input.department.trim().toLowerCase();
+      if (input.site?.trim()) filter.site = input.site.trim().toLowerCase();
+      return afterNotice(() => searchMembers(deps, actor, filter), { action: "member-search", filter });
+    },
   };
 }
 
@@ -217,9 +228,7 @@ async function viewMember(deps: Deps, actor: Actor, memberId: string): Promise<M
 }
 
 async function searchMembers({ db }: Deps, actor: Actor, input: MemberSearch): Promise<MemberProfile[]> {
-  const interest = input.interest?.trim();
-  const department = input.department?.trim().toLowerCase();
-  const site = input.site?.trim().toLowerCase();
+  const { interest, department, site } = input;
   const pattern = interest ? `%${interest.replace(/[\\%_]/g, "\\$&")}%` : undefined;
   const rows = await db.select({ memberId: members.id, name: members.name, department: departments.name, site: sites.name })
     .from(members)
