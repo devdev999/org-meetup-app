@@ -1,0 +1,5 @@
+# Email carries the full notice content
+
+An email notice carries the same content as the in-app inbox, including the meeting URL for a virtual Meetup. Telegram notices stay minimal: first name, Activity, UTC time and the place name only, with a virtual Place shown as "Online" and never a URL.
+
+The minimal-content rule in [ADR 0004](0004-telegram-primary-notification-channel.md) exists because Telegram content leaves the government cloud ([issue #1](https://github.com/devdev999/org-meetup-app/issues/1), story 61). That rule is Telegram-scoped. Email to a Member's work address is a trusted channel, and story 62 requires the same notices in the app and by email. Without the URL an email-only Member can read that a virtual Meetup exists but cannot join it from the email, only from the app, which story 62 does not accept. The URL is the Meetup's Place (story 33), not profile, Interest, Department or description data, so including it in email adds no personal information beyond the Place a Member already chose to attend.

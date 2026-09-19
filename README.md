@@ -52,11 +52,11 @@ Open **Notification settings** from the profile or inbox. Members can enable Tel
 
 The app creates a single-use Telegram link valid for ten minutes. Open it and press Start in a private chat, then refresh the link status in the app. Creating another link invalidates the previous code. A Telegram account can belong to only one Member across the deployment. Unlinking removes the binding and pending link codes. Telegram buttons join a Meetup through the same Member command as the web app, including its access and capacity checks.
 
-Enabled Telegram notices arrive immediately. Email for joins, waitlist promotions and cancellations also arrives immediately. Other email notices batch into the next daily digest at 09:00 UTC. Delivery preferences are checked again before a retry or digest. Departed and Suspended Members receive no external notices.
+Enabled Telegram notices arrive immediately. Email for joins, waitlist promotions, cancellations and time, duration or Place changes also arrives immediately. Other email notices batch into the next daily digest at 09:00 UTC. Delivery preferences are checked again before a retry or digest. Departed and Suspended Members receive no external notices.
 
-Notices and pending deliveries are saved with the Meetup change. Sending starts after that transaction commits. Provider failures leave the inbox intact, and the worker checks for retries and due digests every minute. Completed deliveries are not replayed. Delivery is at least once: a process failure after a provider accepts a message but before delivery is recorded can cause a duplicate.
+Notices and pending deliveries are saved with the Meetup change. Sending runs after that transaction commits and outside any transaction, so a slow provider holds no database connection. A member action sends only its own Meetup's notices; the worker delivers the rest and checks for retries and due digests every minute. A failed delivery retries each minute and is given up after 15 attempts, after which it stays queryable but is no longer retried, while the inbox keeps every notice. Completed deliveries are not replayed. Delivery is at least once: a process failure after a provider accepts a message but before delivery is recorded can cause a duplicate, and Telegram has no server-side key to prevent it.
 
-External messages contain first names, Activity, UTC time and the physical Place name. Virtual Places appear as "Online" so room URLs cannot disclose personal information. Telegram buttons contain only the Meetup identifier. Profiles, Interests, Departments and descriptions are not added to messages.
+Telegram messages contain first names, Activity, UTC time and the physical Place name. Virtual Places appear as "Online" on Telegram so room URLs cannot disclose personal information, while email carries the meeting URL so an email-only Member can join. Telegram buttons contain only the Meetup identifier. Profiles, Interests, Departments and descriptions are not added to messages.
 
 ### Channel configuration
 
@@ -191,5 +191,7 @@ Edit `src/application/lib/schema.ts`, then:
 pnpm db:generate     # writes drizzle/NNNN_name.sql; commit it
 pnpm db:setup        # applies it locally
 ```
+
+Apply migrations before deploying the code that needs them: both the web and worker processes query the columns a migration adds, so new code on the old schema fails every worker tick. The migrations are additive, so rolling back to the previous code leaves the new columns unused rather than broken.
 
 Every table except platform configuration carries `organisation_id`. The application derives the Organisation from the actor, never from input.
