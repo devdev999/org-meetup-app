@@ -143,6 +143,28 @@ test("a failed delivery leaves the inbox intact and concurrent worker retries do
   expect(h.email.outbox).toHaveLength(1);
 });
 
+test("a Telegram join answers the callback before waiting for notice delivery", async () => {
+  await h.app.bootstrap(ministryA);
+  const ana = await member();
+  const bo = await member("Bo");
+  await linkTelegram(ana, "101");
+  await linkTelegram(bo, "102");
+  const meetup = await createMeetup(ana);
+  let resume = () => {};
+  h.telegram.sendDelay = new Promise<void>((resolve) => { resume = resolve; });
+  const callback = h.app.handleTelegram({ kind: "join", chatId: "102", callbackId: "slow-provider", meetupId: meetup.id });
+  try {
+    await expect.poll(() => h.telegram.answers, { timeout: 1_000 }).toEqual([
+      { callbackId: "slow-provider", text: "You joined the Meetup." },
+    ]);
+  } finally {
+    resume();
+    await callback;
+  }
+  expect((await bo.viewMeetup(meetup.id))?.membership).toBe("participant");
+  expect(h.telegram.outbox).toHaveLength(1);
+});
+
 test("disabling a channel before a retry or digest prevents delivery and keeps the notices", async () => {
   await h.app.bootstrap(ministryA);
   const ana = await member();

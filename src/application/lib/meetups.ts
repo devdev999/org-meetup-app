@@ -5,7 +5,7 @@ import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
-import { deliverNotices, recordNotices } from "./notifications";
+import { recordNotices } from "./notifications";
 import { activities, gatheringMembers, gatherings, members, notices, sites } from "./schema";
 
 export type MeetupPlace = { kind: "physical"; siteId: string; spot: string } | { kind: "virtual"; url: string };
@@ -108,14 +108,8 @@ function placeColumns(place: MeetupPlace) {
   };
 }
 
-async function authorised<T>(deps: Deps, actor: Actor, operation: (db: Queryable, current: typeof members.$inferSelect) => Promise<T>) {
-  const result = await withActiveMember(deps, actor, operation);
-  await deliverNotices(deps, actor.organisationId).catch(() => console.error("notices: immediate delivery deferred to the worker"));
-  return result;
-}
-
 export async function createMeetup(deps: Deps, actor: Actor, input: CreateMeetupInput): Promise<MeetupDetail> {
-  return authorised(deps, actor, async (db, current) => {
+  return withActiveMember(deps, actor, async (db, current) => {
     const parsed = meetupSchema.safeParse(input);
     if (!parsed.success) invalid("Choose an Activity, a valid start time and Place, a duration from 1 to 1440 minutes and capacity from 2 to 30.");
     const data = parsed.data;
@@ -247,7 +241,7 @@ export async function inbox(deps: Deps, actor: Actor): Promise<Notice[]> {
 }
 
 export async function joinMeetup(deps: Deps, actor: Actor, id: string): Promise<"participant" | "waitlisted"> {
-  return authorised(deps, actor, async (db, current) => {
+  return withActiveMember(deps, actor, async (db, current) => {
     const meetup = await requireScheduledMeetup(db, actor, id, current.siteId, deps.clock.now());
     if (meetup.membership) return meetup.membership === "host" ? "participant" : meetup.membership;
     if (meetup.audience.kind !== "open") throw new AccessDeniedError();
@@ -269,7 +263,7 @@ async function promoteWaitlist(db: Queryable, organisationId: string, meetup: Me
 }
 
 export async function leaveMeetup(deps: Deps, actor: Actor, id: string): Promise<void> {
-  return authorised(deps, actor, async (db, current) => {
+  return withActiveMember(deps, actor, async (db, current) => {
     const now = deps.clock.now();
     const meetup = await requireScheduledMeetup(db, actor, id, current.siteId, now);
     if (meetup.membership === "host") invalid("Hand over or cancel your Meetup before leaving.");
@@ -291,7 +285,7 @@ function meetupWhere(organisationId: string, id: string) {
 }
 
 export async function editMeetup(deps: Deps, actor: Actor, id: string, input: EditMeetupInput): Promise<void> {
-  return authorised(deps, actor, async (db, current) => {
+  return withActiveMember(deps, actor, async (db, current) => {
     const now = deps.clock.now();
     const meetup = await requireScheduledMeetup(db, actor, id, current.siteId, now);
     requireHost(meetup, actor);
@@ -317,7 +311,7 @@ export async function editMeetup(deps: Deps, actor: Actor, id: string, input: Ed
 }
 
 export async function handOverMeetup(deps: Deps, actor: Actor, id: string, participantMemberId: string): Promise<void> {
-  return authorised(deps, actor, async (db, current) => {
+  return withActiveMember(deps, actor, async (db, current) => {
     const now = deps.clock.now();
     const meetup = await requireScheduledMeetup(db, actor, id, current.siteId, now);
     requireHost(meetup, actor);
@@ -333,7 +327,7 @@ export async function handOverMeetup(deps: Deps, actor: Actor, id: string, parti
 }
 
 export async function cancelMeetup(deps: Deps, actor: Actor, id: string): Promise<void> {
-  return authorised(deps, actor, async (db, current) => {
+  return withActiveMember(deps, actor, async (db, current) => {
     const now = deps.clock.now();
     const meetup = await requireScheduledMeetup(db, actor, id, current.siteId, now);
     requireHost(meetup, actor);

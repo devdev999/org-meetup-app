@@ -11,7 +11,7 @@ import { departments, interestAliases, interests, memberInterests, members, orga
 import type { InterestKind } from "../ports";
 import { confirmInterest, listInterests, memberInterestList, resolveInterest, setInterestStance, type ConfirmInterestInput, type Interest, type InterestResolution, type MemberInterest, type Stance } from "./interests";
 import { beginTelegramLink, unlinkTelegram, type TelegramLink } from "./telegram";
-import { notificationSettings, setNoticePreference, type NotificationSettings, type NoticePreference } from "./notifications";
+import { deliverNotices, notificationSettings, setNoticePreference, type NotificationSettings, type NoticePreference } from "./notifications";
 
 export type MemberStatus = (typeof members.status.enumValues)[number];
 
@@ -119,6 +119,12 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     return result;
   }
 
+  async function withNotices<T>(operation: () => Promise<T>): Promise<T> {
+    const result = await operation();
+    await deliverNotices(deps, actor.organisationId).catch(() => console.error("notices: immediate delivery deferred to the worker"));
+    return result;
+  }
+
   return {
     beginTelegramLink: () => beginTelegramLink(deps, actor),
     unlinkTelegram: () => unlinkTelegram(deps, actor),
@@ -128,12 +134,12 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     createMeetup: (input) => createMeetup(deps, actor, input),
     listMeetups: () => listMeetups(deps, actor),
     viewMeetup: (id) => viewMeetup(deps, actor, id),
-    joinMeetup: (id) => joinMeetup(deps, actor, id),
-    leaveMeetup: (id) => leaveMeetup(deps, actor, id),
+    joinMeetup: (id) => withNotices(() => joinMeetup(deps, actor, id)),
+    leaveMeetup: (id) => withNotices(() => leaveMeetup(deps, actor, id)),
     inbox: () => inbox(deps, actor),
-    editMeetup: (id, input) => editMeetup(deps, actor, id, input),
-    cancelMeetup: (id) => cancelMeetup(deps, actor, id),
-    handOverMeetup: (id, participantMemberId) => handOverMeetup(deps, actor, id, participantMemberId),
+    editMeetup: (id, input) => withNotices(() => editMeetup(deps, actor, id, input)),
+    cancelMeetup: (id) => withNotices(() => cancelMeetup(deps, actor, id)),
+    handOverMeetup: (id, participantMemberId) => withNotices(() => handOverMeetup(deps, actor, id, participantMemberId)),
     interests: () => afterNotice(() => listInterests(deps, actor)),
     myInterests: () => afterNotice(() => memberInterestList(deps, actor)),
     resolveInterest: (input) => afterNotice(() => resolveInterest(deps, actor, input)),
