@@ -10,6 +10,8 @@ import { cancelMeetup, createMeetup, editMeetup, handOverMeetup, inbox, joinMeet
 import { departments, interestAliases, interests, memberInterests, members, organisations, sites } from "./schema";
 import type { InterestKind } from "../ports";
 import { confirmInterest, listInterests, memberInterestList, resolveInterest, setInterestStance, type ConfirmInterestInput, type Interest, type InterestResolution, type MemberInterest, type Stance } from "./interests";
+import { beginTelegramLink, unlinkTelegram, type TelegramLink } from "./telegram";
+import { notificationSettings, setNoticePreference, type NotificationSettings, type NoticePreference } from "./notifications";
 
 export type MemberStatus = (typeof members.status.enumValues)[number];
 
@@ -64,6 +66,10 @@ export interface MemberSearch {
  * to it, so nothing a page passes in can reach another Organisation.
  */
 export interface MemberActions {
+  beginTelegramLink(): Promise<TelegramLink>;
+  unlinkTelegram(): Promise<void>;
+  notificationSettings(): Promise<NotificationSettings>;
+  setNoticePreference(input: NoticePreference): Promise<void>;
   meetupChoices(): Promise<MeetupChoices>;
   createMeetup(input: CreateMeetupInput): Promise<MeetupDetail>;
   listMeetups(): Promise<MeetupSummary[]>;
@@ -114,6 +120,10 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
   }
 
   return {
+    beginTelegramLink: () => beginTelegramLink(deps, actor),
+    unlinkTelegram: () => unlinkTelegram(deps, actor),
+    notificationSettings: () => notificationSettings(deps, actor),
+    setNoticePreference: (input) => setNoticePreference(deps, actor, input),
     meetupChoices: () => meetupChoices(deps, actor),
     createMeetup: (input) => createMeetup(deps, actor, input),
     listMeetups: () => listMeetups(deps, actor),

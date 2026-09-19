@@ -279,11 +279,56 @@ export const notices = pgTable("notices", {
   organisationId: uuid().notNull().references(() => organisations.id),
   memberId: uuid().notNull(),
   gatheringId: uuid().notNull(),
-  kind: text().$type<"meetup-joined" | "meetup-left" | "meetup-promoted" | "meetup-edited" | "meetup-cancelled" | "meetup-handed-over">().notNull(),
+  kind: text().$type<import("./notice-kinds").NoticeKind>().notNull(),
   message: text().notNull(),
+  externalMessage: text().notNull().default(""),
   createdAt: timestamptz().notNull(),
   position: serial().notNull(),
 }, (table) => [
+  unique("notices_organisation_id_id_unique").on(table.organisationId, table.id),
   foreignKey({ columns: [table.organisationId, table.memberId], foreignColumns: [members.organisationId, members.id] }),
   foreignKey({ columns: [table.organisationId, table.gatheringId], foreignColumns: [gatherings.organisationId, gatherings.id] }),
+]);
+
+export const noticeDeliveries = pgTable("notice_deliveries", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  noticeId: uuid().notNull(),
+  channel: text().$type<"telegram" | "email">().notNull(),
+  mode: text().$type<"immediate" | "digest">().notNull(),
+  scheduledFor: timestamptz().notNull(),
+  availableAt: timestamptz().notNull(),
+  finishedAt: timestamptz(),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.noticeId, table.channel] }),
+  foreignKey({ columns: [table.organisationId, table.noticeId], foreignColumns: [notices.organisationId, notices.id] }),
+]);
+
+export const telegramLinks = pgTable("telegram_links", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  memberId: uuid().notNull(),
+  chatId: text().notNull().unique(),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.memberId] }),
+  foreignKey({ columns: [table.organisationId, table.memberId], foreignColumns: [members.organisationId, members.id] }),
+]);
+
+export const noticePreferences = pgTable("notice_preferences", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  memberId: uuid().notNull(),
+  kind: text().$type<import("./notice-kinds").NoticeKind>().notNull(),
+  telegram: boolean().notNull(),
+  email: boolean().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.memberId, table.kind] }),
+  foreignKey({ columns: [table.organisationId, table.memberId], foreignColumns: [members.organisationId, members.id] }),
+]);
+
+export const telegramLinkCodes = pgTable("telegram_link_codes", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  memberId: uuid().notNull(),
+  codeHash: text().notNull().unique(),
+  expiresAt: timestamptz().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.memberId] }),
+  foreignKey({ columns: [table.organisationId, table.memberId], foreignColumns: [members.organisationId, members.id] }),
 ]);

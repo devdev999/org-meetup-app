@@ -42,9 +42,37 @@ Capacity includes the Host and must be between two and thirty. Joining a full Me
 
 The Host can edit the time, Place, duration, description and capacity, cancel, or hand over to a Participant. Handover keeps the previous Host as a Participant, who can then leave. Cancellation notifies Participants and the waitlist, clears the waitlist, and keeps the cancelled Meetup visible. Cancellation notices retain access for former waitlisted Members even after their Site changes. Started or cancelled Meetups cannot change. Participants see each other; only the Host sees the waitlist.
 
-The inbox receives channel-neutral notices for joins, departures, promotions, time or Place changes, cancellations and handovers. Message content uses first names, Activity, time and Place. Telegram and email delivery belong to issue #6; Member lifecycle effects on Meetups belong to issue #13.
+The inbox receives channel-neutral notices for joins, departures, promotions, time or Place changes, cancellations and handovers. Message content uses first names, Activity, time and Place. Member lifecycle effects on Meetups belong to issue #13.
 
 The application stores Meetups and future Events together with a kind. All commands and queries derive the Organisation from the Member actor. Mutations use the same Organisation transaction lock as roster and admin changes, so seating and notices commit together.
+
+## Notifications
+
+Open **Notification settings** from the profile or inbox. Members can enable Telegram and email independently for each notice kind, including urgent kinds. Both preferences start enabled. Every notice remains in the inbox, and Telegram delivery also requires a linked account.
+
+The app creates a single-use Telegram link valid for ten minutes. Open it and press Start in a private chat, then refresh the link status in the app. Creating another link invalidates the previous code. A Telegram account can belong to only one Member across the deployment. Unlinking removes the binding and pending link codes. Telegram buttons join a Meetup through the same Member command as the web app, including its access and capacity checks.
+
+Enabled Telegram notices arrive immediately. Email for joins, waitlist promotions and cancellations also arrives immediately. Other email notices batch into the next daily digest at 09:00 UTC. Delivery preferences are checked again before a retry or digest. Departed and Suspended Members receive no external notices.
+
+Notices and pending deliveries are saved with the Meetup change. Sending starts after that transaction commits. Provider failures leave the inbox intact, and the worker checks for retries and due digests every minute. Completed deliveries are not replayed. Delivery is at least once: a process failure after a provider accepts a message but before delivery is recorded can cause a duplicate.
+
+External messages contain first names, Activity, UTC time and the physical Place name. Virtual Places appear as "Online" so room URLs cannot disclose personal information. Telegram buttons contain only the Meetup identifier. Profiles, Interests, Departments and descriptions are not added to messages.
+
+### Channel configuration
+
+`TELEGRAM_PROVIDER=memory` and `EMAIL_PROVIDER=memory` are the defaults. The memory adapters make no outbound requests. Supply production settings to both the web process and the worker.
+
+| Variable | Value |
+| --- | --- |
+| `TELEGRAM_PROVIDER` | `memory` or `telegram`. |
+| `TELEGRAM_BOT_USERNAME` | Bot username without `@`. Required for Telegram; optional for local link testing with memory. |
+| `TELEGRAM_BOT_TOKEN` | Bot token, required for Telegram. |
+| `TELEGRAM_WEBHOOK_SECRET` | A secret of 16 to 256 letters, digits, underscores or hyphens. Required for Telegram. |
+| `EMAIL_PROVIDER` | `memory` or `smtp`. |
+| `SMTP_URL` | SMTP connection URL with any credentials, such as `smtps://sender:password@smtp.example:465`. Required for SMTP. |
+| `EMAIL_FROM` | Sender email address, required for SMTP. |
+
+Register the public HTTPS URL `<APP_URL>/api/telegram` with Telegram's [setWebhook method](https://core.telegram.org/bots/api#setwebhook). Set `secret_token` to `TELEGRAM_WEBHOOK_SECRET` and `allowed_updates` to `["message", "callback_query"]`. The endpoint checks the secret header before processing an update. Group chats and messages whose sender differs from the private chat are ignored.
 
 ## Interests and finding Members
 
@@ -125,7 +153,7 @@ External dependencies are ports with two adapters each. Identity claims come fro
 
 Tests cross the application's interface as a specific actor and assert on what that actor can observe. They never read tables. Each test file gets its own freshly migrated database (`src/testing/test-database.ts`, wired by `src/application/tests/harness.ts`); tables are truncated between tests. Set `TEST_DATABASE_URL` to point tests at a different Postgres (default `postgres://postgres:postgres@localhost:5439/postgres`).
 
-Two wiring smoke tests sit beside the code they wire: the production OIDC adapter against a stub issuer (`src/adapters/identity/tests`) and one heartbeat through the real queue (`src/worker/tests`).
+Wiring smoke tests cover the production OIDC adapter against a stub issuer, a Telegram webhook through the application and reply, and heartbeat and digest jobs through the real queue. Telegram and SMTP adapter tests use local protocol servers and send no real messages.
 
 ## Configuration
 

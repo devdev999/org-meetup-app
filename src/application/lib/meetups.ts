@@ -5,6 +5,7 @@ import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
+import { deliverNotices, recordNotices } from "./notifications";
 import { activities, gatheringMembers, gatherings, members, notices, organisations, sites } from "./schema";
 
 export type MeetupPlace = { kind: "physical"; siteId: string; spot: string } | { kind: "virtual"; url: string };
@@ -108,11 +109,13 @@ function placeColumns(place: MeetupPlace) {
 }
 
 async function authorised<T>(deps: Deps, actor: Actor, operation: (db: Queryable, current: typeof members.$inferSelect) => Promise<T>) {
-  return deps.db.transaction(async (db) => {
+  const result = await deps.db.transaction(async (db) => {
     await db.select({ id: organisations.id }).from(organisations).where(eq(organisations.id, actor.organisationId)).for("update");
     const current = await requireActiveMember(db, actor);
     return operation(db, current);
   });
+  await deliverNotices(deps, actor.organisationId).catch(() => console.error("notices: immediate delivery deferred to the worker"));
+  return result;
 }
 
 export async function createMeetup(deps: Deps, actor: Actor, input: CreateMeetupInput): Promise<MeetupDetail> {
@@ -234,10 +237,10 @@ async function notify(db: Queryable, organisationId: string, meetup: MeetupSumma
   const place = meetup.place.kind === "physical" ? `${meetup.place.spot}, ${meetup.place.siteName}` : meetup.place.url;
   const time = `${meetup.startsAt.toISOString().slice(0, 16).replace("T", " ")} UTC`;
   const content = `${message} ${meetup.activity.name}, ${time}, ${place}.`;
-  if (recipients.length === 0) return;
-  await db.insert(notices).values([...new Set(recipients)].map((memberId) => ({
-    organisationId, memberId, gatheringId: meetup.id, kind, message: content, createdAt: now,
-  })));
+  const externalPlace = meetup.place.kind === "physical" ? place : "Online";
+  await recordNotices(db, organisationId, recipients, {
+    gatheringId: meetup.id, kind, message: content, externalMessage: `${message} ${meetup.activity.name}, ${time}, ${externalPlace}.`,
+  }, now);
 }
 
 export async function inbox(deps: Deps, actor: Actor): Promise<Notice[]> {

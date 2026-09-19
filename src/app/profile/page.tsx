@@ -14,6 +14,7 @@ export default async function ProfilePage() {
         <Link href="/members">Find Members</Link>
         <Link href="/meetups">Meetups</Link>
         <Link href="/inbox">Inbox</Link>
+        <Link href="/notifications">Notification settings</Link>
       </nav>
       <h1>{profile.name}</h1>
       {profile.isOrganisationAdmin && <p><Link href="/admin">Open Organisation Admin area</Link></p>}

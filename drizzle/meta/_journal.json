@@ -43,6 +43,27 @@
       "when": 1789829160417,
       "tag": "0005_meetups",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789834138931,
+      "tag": "0006_telegram_and_email",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789834336836,
+      "tag": "0007_notice_delivery",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789834469568,
+      "tag": "0008_notice_preferences",
+      "breakpoints": true
     }
   ]
 }

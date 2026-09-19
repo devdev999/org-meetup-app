@@ -1,5 +1,6 @@
 import type { PgBoss } from "pg-boss";
 import { SystemClock } from "../adapters/clock/system";
+import type { Application } from "../application/index";
 import type { Clock } from "../application/ports";
 
 /**
@@ -9,11 +10,14 @@ import type { Clock } from "../application/ports";
  */
 
 export const HEARTBEAT_QUEUE = "heartbeat";
+export const NOTICE_QUEUE = "notice-delivery";
+export const DIGEST_QUEUE = "notice-digests";
 
 /** Once a minute, so a running worker is visible in the logs. */
 export const HEARTBEAT_CRON = "* * * * *";
 
 export interface JobOptions {
+  application?: Application;
   log?: (line: string) => void;
   clock?: Clock;
 }
@@ -29,4 +33,16 @@ export async function registerJobs(boss: PgBoss, options: JobOptions = {}): Prom
       log(`worker: heartbeat ${job.id} at ${clock.now().toISOString()}`);
     }
   });
+
+  const application = options.application;
+  if (application) {
+    for (const [queue, run] of [
+      [NOTICE_QUEUE, () => application.deliverNotices()],
+      [DIGEST_QUEUE, () => application.sendDailyDigests()],
+    ] as const) {
+      await boss.createQueue(queue);
+      await boss.schedule(queue, "* * * * *");
+      await boss.work(queue, async () => { await run(); });
+    }
+  }
 }

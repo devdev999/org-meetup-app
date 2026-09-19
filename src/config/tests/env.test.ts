@@ -1,5 +1,21 @@
 import { expect, test } from "vitest";
-import { aiConfig, bootstrapConfig } from "../env";
+import { aiConfig, bootstrapConfig, emailConfig, telegramConfig } from "../env";
+
+test("notice channels default to memory and real providers require complete configuration", () => {
+  const env: NodeJS.ProcessEnv = { NODE_ENV: "test" };
+  expect(telegramConfig(env)).toEqual({ provider: "memory", botUsername: null, webhookSecret: null });
+  expect(emailConfig(env)).toEqual({ provider: "memory" });
+  expect(() => telegramConfig({ ...env, TELEGRAM_PROVIDER: "telegram" })).toThrow();
+  expect(() => emailConfig({ ...env, EMAIL_PROVIDER: "smtp" })).toThrow();
+  expect(telegramConfig({
+    ...env,
+    TELEGRAM_PROVIDER: "telegram", TELEGRAM_BOT_USERNAME: "meetups_bot", TELEGRAM_BOT_TOKEN: "123:test",
+    TELEGRAM_WEBHOOK_SECRET: "test-webhook-secret",
+  })).toEqual({ provider: "telegram", botUsername: "meetups_bot", token: "123:test", webhookSecret: "test-webhook-secret" });
+  expect(emailConfig({ ...env, EMAIL_PROVIDER: "smtp", SMTP_URL: "smtps://smtp.example.test:465", EMAIL_FROM: "meetups@example.test" }))
+    .toEqual({ provider: "smtp", url: "smtps://smtp.example.test:465", from: "meetups@example.test" });
+  expect(() => emailConfig({ ...env, EMAIL_PROVIDER: "smtp", SMTP_URL: "https://example.test", EMAIL_FROM: "meetups@example.test" })).toThrow();
+});
 
 const bootstrapEnvironment: NodeJS.ProcessEnv = {
   NODE_ENV: "test",

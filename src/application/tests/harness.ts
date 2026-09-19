@@ -3,6 +3,8 @@ import { afterAll, beforeAll, beforeEach } from "vitest";
 import { ControllableClock } from "../../adapters/clock/controllable";
 import { FakeIdentity } from "../../adapters/identity/fake";
 import { MemoryAi } from "../../adapters/ai/memory";
+import { MemoryTelegram } from "../../adapters/telegram/memory";
+import { MemoryEmail } from "../../adapters/email/memory";
 import { runMigrations } from "../../db/migrate";
 import { createTestDatabase } from "../../testing/test-database";
 import { createApplication, type Application } from "../index";
@@ -12,10 +14,13 @@ import { createApplication, type Application } from "../index";
  * with the in-memory adapters wired in. Every test starts from empty tables.
  */
 export interface Harness {
+  connectionString: string;
   app: Application;
   identity: FakeIdentity;
   clock: ControllableClock;
   ai: MemoryAi;
+  telegram: MemoryTelegram;
+  email: MemoryEmail;
 }
 
 export const START_OF_TEST = new Date("2026-09-18T09:00:00.000Z");
@@ -29,18 +34,23 @@ export function harness(): Harness {
   beforeAll(async () => {
     const database = await createTestDatabase();
     pool = database.pool;
+    h.connectionString = database.connectionString;
     dispose = database.dispose;
     await runMigrations(pool);
     h.identity = new FakeIdentity();
     h.clock = new ControllableClock(START_OF_TEST);
     h.ai = new MemoryAi();
-    h.app = createApplication({ pool, identity: h.identity, clock: h.clock, ai: h.ai });
+    h.telegram = new MemoryTelegram("meetups_test_bot");
+    h.email = new MemoryEmail();
+    h.app = createApplication({ pool, identity: h.identity, clock: h.clock, ai: h.ai, telegram: h.telegram, email: h.email });
   });
 
   beforeEach(async () => {
     await truncateAll(pool);
     h.clock.set(START_OF_TEST);
     h.ai.reset();
+    h.telegram.reset();
+    h.email.reset();
   });
 
   afterAll(async () => {
