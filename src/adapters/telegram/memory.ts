@@ -4,6 +4,7 @@ export class MemoryTelegram implements TelegramPort {
   readonly outbox: TelegramMessage[] = [];
   readonly answers: Array<{ callbackId: string; text: string }> = [];
   failure: Error | undefined;
+  answerFailure: Error | undefined;
   sendDelay: Promise<void> | undefined;
 
   constructor(readonly botUsername: string | null = null) {}
@@ -15,6 +16,7 @@ export class MemoryTelegram implements TelegramPort {
   }
 
   async answerCallback(input: { callbackId: string; text: string }): Promise<void> {
+    if (this.answerFailure) throw this.answerFailure;
     if (this.failure) throw this.failure;
     this.answers.push({ ...input });
   }
@@ -23,6 +25,7 @@ export class MemoryTelegram implements TelegramPort {
     this.outbox.length = 0;
     this.answers.length = 0;
     this.failure = undefined;
+    this.answerFailure = undefined;
     this.sendDelay = undefined;
   }
 }

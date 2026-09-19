@@ -119,9 +119,9 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     return result;
   }
 
-  async function withNotices<T>(operation: () => Promise<T>): Promise<T> {
+  async function withNotices<T>(gatheringId: string, operation: () => Promise<T>): Promise<T> {
     const result = await operation();
-    await deliverSoon(deps, actor.organisationId);
+    await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId });
     return result;
   }
 
@@ -134,12 +134,12 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     createMeetup: (input) => createMeetup(deps, actor, input),
     listMeetups: () => listMeetups(deps, actor),
     viewMeetup: (id) => viewMeetup(deps, actor, id),
-    joinMeetup: (id) => withNotices(() => joinMeetup(deps, actor, id)),
-    leaveMeetup: (id) => withNotices(() => leaveMeetup(deps, actor, id)),
+    joinMeetup: (id) => withNotices(id, () => joinMeetup(deps, actor, id)),
+    leaveMeetup: (id) => withNotices(id, () => leaveMeetup(deps, actor, id)),
     inbox: () => inbox(deps, actor),
-    editMeetup: (id, input) => withNotices(() => editMeetup(deps, actor, id, input)),
-    cancelMeetup: (id) => withNotices(() => cancelMeetup(deps, actor, id)),
-    handOverMeetup: (id, participantMemberId) => withNotices(() => handOverMeetup(deps, actor, id, participantMemberId)),
+    editMeetup: (id, input) => withNotices(id, () => editMeetup(deps, actor, id, input)),
+    cancelMeetup: (id) => withNotices(id, () => cancelMeetup(deps, actor, id)),
+    handOverMeetup: (id, participantMemberId) => withNotices(id, () => handOverMeetup(deps, actor, id, participantMemberId)),
     interests: () => afterNotice(() => listInterests(deps, actor)),
     myInterests: () => afterNotice(() => memberInterestList(deps, actor)),
     resolveInterest: (input) => afterNotice(() => resolveInterest(deps, actor, input)),

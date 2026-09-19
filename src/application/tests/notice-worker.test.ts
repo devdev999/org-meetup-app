@@ -16,7 +16,7 @@ test("the worker sends a daily email digest through the real queue", async () =>
   });
   await bo.joinMeetup(meetup.id);
   h.email.reset();
-  await ana.editMeetup(meetup.id, { ...meetup, startsAt: new Date("2026-09-18T11:00:00Z") });
+  await bo.leaveMeetup(meetup.id);
   h.clock.set(new Date("2026-09-19T09:00:00Z"));
 
   const boss = new PgBoss({ connectionString: h.connectionString });
@@ -25,7 +25,7 @@ test("the worker sends a daily email digest through the real queue", async () =>
     await registerJobs(boss, { application: h.app, clock: h.clock, log: () => {} });
     await boss.send(DIGEST_QUEUE, {});
     await expect.poll(() => h.email.outbox, { timeout: 15_000 }).toEqual([
-      expect.objectContaining({ to: "bo@example.test", subject: "Daily Meetup digest" }),
+      expect.objectContaining({ to: "ana@example.test", subject: "Daily Meetup digest" }),
     ]);
   } finally {
     await boss.stop({ graceful: true });

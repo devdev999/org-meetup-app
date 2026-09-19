@@ -300,6 +300,8 @@ export const noticeDeliveries = pgTable("notice_deliveries", {
   scheduledFor: timestamptz().notNull(),
   availableAt: timestamptz().notNull(),
   finishedAt: timestamptz(),
+  attempts: integer().notNull().default(0),
+  deadLetteredAt: timestamptz(),
 }, (table) => [
   primaryKey({ columns: [table.organisationId, table.noticeId, table.channel] }),
   index("notice_deliveries_pending_idx").on(table.mode, table.availableAt).where(sql`${table.finishedAt} is null`),

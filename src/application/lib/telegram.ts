@@ -65,8 +65,12 @@ export async function handleTelegram(deps: Deps, command: TelegramCommand): Prom
         text = "This Meetup is unavailable. Open the app to check your access.";
       }
     }
-    await deps.telegram.answerCallback({ callbackId: command.callbackId, text });
-    if (actor) await deliverSoon(deps, actor.organisationId);
+    try {
+      await deps.telegram.answerCallback({ callbackId: command.callbackId, text });
+    } catch {
+      console.error("telegram: answering the join callback failed");
+    }
+    if (actor) await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: command.meetupId });
     return;
   }
   let linked = false;
@@ -75,9 +79,13 @@ export async function handleTelegram(deps: Deps, command: TelegramCommand): Prom
   } catch (error) {
     if (!(error instanceof AccessDeniedError || error instanceof AdminVisibilityNoticeRequiredError)) throw error;
   }
-  await deps.telegram.sendMessage({
-    chatId: command.chatId,
-    text: linked ? "Telegram is linked. You can change your notice preferences in the app."
-      : "This link cannot be used. Open notification settings in the app to get a new link, or unlink an existing account first.",
-  });
+  try {
+    await deps.telegram.sendMessage({
+      chatId: command.chatId,
+      text: linked ? "Telegram is linked. You can change your notice preferences in the app."
+        : "This link cannot be used. Open notification settings in the app to get a new link, or unlink an existing account first.",
+    });
+  } catch {
+    console.error("telegram: sending the link confirmation failed");
+  }
 }

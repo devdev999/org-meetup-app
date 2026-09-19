@@ -47,7 +47,7 @@ test("a Member links Telegram with a ten-minute code that can only be used once"
   expect(await ana.notificationSettings()).toMatchObject({ telegramLinked: false });
 });
 
-test("a join delivers an immediate notice through each enabled channel with minimal external content", async () => {
+test("a join keeps the place name on Telegram and carries the meeting URL by email", async () => {
   await h.app.bootstrap(ministryA);
   const ana = await member();
   const bo = await member("Bo");
@@ -60,7 +60,7 @@ test("a join delivers an immediate notice through each enabled channel with mini
     chatId: "101", text: "Bo joined your Meetup. coffee, 2026-09-18 09:30 UTC, Online.", joinMeetupId: meetup.id,
   }]);
   expect(h.email.outbox).toEqual([expect.objectContaining({
-    to: "ana@example.test", subject: "Meetup notice", text: "Bo joined your Meetup. coffee, 2026-09-18 09:30 UTC, Online.",
+    to: "ana@example.test", subject: "Meetup notice", text: "Bo joined your Meetup. coffee, 2026-09-18 09:30 UTC, https://meet.example/Finance/ana@example.test.",
   })]);
 });
 
@@ -86,28 +86,78 @@ test("Members control each channel per notice kind, including urgent notices, wi
   expect((await bo.inbox()).map((notice) => notice.kind)).toEqual(["meetup-cancelled"]);
 });
 
-test("non-urgent Telegram notices arrive immediately while email batches once in the next daily digest", async () => {
+test("non-urgent notices arrive on Telegram immediately while email batches into the next daily digest", async () => {
   await h.app.bootstrap(ministryA);
   const ana = await member();
   const bo = await member("Bo");
-  await linkTelegram(bo, "102");
+  const cy = await member("Cy");
+  await linkTelegram(ana, "101");
   const meetup = await createMeetup(ana);
   await bo.joinMeetup(meetup.id);
+  await cy.joinMeetup(meetup.id);
+  h.telegram.reset();
   h.email.reset();
-  await ana.editMeetup(meetup.id, { ...meetup, startsAt: new Date("2026-09-18T10:00:00Z") });
-  await ana.editMeetup(meetup.id, { ...meetup, startsAt: new Date("2026-09-18T11:00:00Z") });
+  await bo.leaveMeetup(meetup.id);
+  await cy.leaveMeetup(meetup.id);
   expect(h.telegram.outbox).toHaveLength(2);
   expect(h.email.outbox).toEqual([]);
-  expect(await bo.inbox()).toHaveLength(2);
+  expect((await ana.inbox()).filter((notice) => notice.kind === "meetup-left")).toHaveLength(2);
   h.clock.set(new Date("2026-09-19T08:59:59Z"));
   await h.app.sendDailyDigests();
   expect(h.email.outbox).toEqual([]);
   h.clock.set(new Date("2026-09-19T09:00:00Z"));
   await Promise.all([h.app.sendDailyDigests(), h.app.sendDailyDigests()]);
   expect(h.email.outbox).toEqual([expect.objectContaining({
-    to: "bo@example.test", subject: "Daily Meetup digest",
-    text: "The Host changed the time or Place of this Meetup. coffee, 2026-09-18 10:00 UTC, Online.\n\nThe Host changed the time or Place of this Meetup. coffee, 2026-09-18 11:00 UTC, Online.",
+    to: "ana@example.test", subject: "Daily Meetup digest",
+    text: "Bo left your Meetup. coffee, 2026-09-18 09:30 UTC, https://meet.example/Finance/ana@example.test.\n\nCy left your Meetup. coffee, 2026-09-18 09:30 UTC, https://meet.example/Finance/ana@example.test.",
   })]);
+});
+
+test("an edit to the time or Place emails participants immediately", async () => {
+  await h.app.bootstrap(ministryA);
+  const ana = await member();
+  const bo = await member("Bo");
+  const meetup = await createMeetup(ana);
+  await bo.joinMeetup(meetup.id);
+  h.email.reset();
+  await ana.editMeetup(meetup.id, { ...meetup, startsAt: new Date("2026-09-18T10:00:00Z") });
+  expect(h.email.outbox).toEqual([expect.objectContaining({
+    to: "bo@example.test", subject: "Meetup notice",
+    text: "The Host changed the time or Place of this Meetup. coffee, 2026-09-18 10:00 UTC, https://meet.example/Finance/ana@example.test.",
+  })]);
+});
+
+test("a permanently failing channel backs off and dead-letters instead of retrying forever", async () => {
+  await h.app.bootstrap(ministryA);
+  const ana = await member();
+  const bo = await member("Bo");
+  await linkTelegram(ana, "101");
+  h.telegram.failure = new Error("Telegram is unavailable");
+  const meetup = await createMeetup(ana);
+  await bo.joinMeetup(meetup.id);
+  expect(h.email.outbox).toHaveLength(1);
+  let now = new Date("2026-09-18T09:00:00Z").getTime();
+  for (let attempt = 0; attempt < 20; attempt++) {
+    now += 60_000;
+    h.clock.set(new Date(now));
+    await h.app.deliverNotices();
+  }
+  h.telegram.failure = undefined;
+  now += 60_000;
+  h.clock.set(new Date(now));
+  await h.app.deliverNotices();
+  expect(h.telegram.outbox).toEqual([]);
+});
+
+test("a Telegram join commits and does not throw when answering the callback fails", async () => {
+  await h.app.bootstrap(ministryA);
+  const ana = await member();
+  const bo = await member("Bo");
+  await linkTelegram(bo, "102");
+  const meetup = await createMeetup(ana);
+  h.telegram.answerFailure = new Error("answering failed");
+  await expect(h.app.handleTelegram({ kind: "join", chatId: "102", callbackId: "x", meetupId: meetup.id })).resolves.toBeUndefined();
+  expect((await bo.viewMeetup(meetup.id))?.membership).toBe("participant");
 });
 
 test("a Telegram button joins as the linked Member and answers with the result", async () => {
