@@ -1,16 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, lte, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
-import { requireActiveMember, withActiveMember, type Actor } from "./actor";
+import { requireActiveMember, VISIBLE_MEMBER_STATUSES, withActiveMember, type Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
 import { NOTICE_KINDS, type NoticeKind } from "./notice-kinds";
-import { gatherings, members, noticeDeliveries, noticePreferences, notices, telegramLinks } from "./schema";
+import { gatherings, invites, members, noticeDeliveries, noticePreferences, notices, telegramLinks } from "./schema";
 
 export interface NoticePreference { kind: NoticeKind; telegram: boolean; email: boolean }
 
-const URGENT_KINDS: NoticeKind[] = ["meetup-joined", "meetup-promoted", "meetup-cancelled", "meetup-edited"];
+const URGENT_KINDS: NoticeKind[] = ["meetup-joined", "meetup-promoted", "meetup-cancelled", "meetup-edited", "invite-received", "invite-accepted"];
 
 const DIGEST_HOUR_UTC = 9;
 const BATCH = 100;
@@ -156,15 +156,20 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
     if (row && delivery.channel === "telegram") {
       [link] = await db.select().from(telegramLinks).where(and(eq(telegramLinks.organisationId, delivery.organisationId), eq(telegramLinks.memberId, row.member.id)));
     }
+    const [invite] = row?.notice.kind === "invite-received" && delivery.channel === "telegram" ? await db.select({ id: invites.id }).from(invites)
+      .where(and(eq(invites.organisationId, row.notice.organisationId), eq(invites.gatheringId, row.meetup.id),
+        eq(invites.memberId, row.member.id), eq(invites.state, "pending"))) : [];
+    const canAnswer = row?.meetup.status === "scheduled" && row.meetup.startsAt > now;
     const owned = await claimLease(db, where, now);
     const send = async () => {
-      if (!row || row.member.status !== "active" || !channelEnabled(preference, delivery.channel)) return;
+      if (!row || !VISIBLE_MEMBER_STATUSES.includes(row.member.status) || !channelEnabled(preference, delivery.channel)) return;
       if (delivery.channel === "email") {
         await deps.email.sendMessage({ id: row.notice.id, to: row.member.email, subject: "Meetup notice", text: row.notice.message });
       } else if (link) {
         await deps.telegram.sendMessage({
           chatId: link.chatId, text: row.notice.externalMessage,
-          ...(row.meetup.audienceKind === "open" && row.meetup.status === "scheduled" && row.meetup.startsAt > now ? { joinMeetupId: row.meetup.id } : {}),
+          ...(canAnswer && invite ? { inviteId: invite.id }
+            : canAnswer && row.meetup.audienceKind === "open" && !row.notice.kind.startsWith("invite-") ? { joinMeetupId: row.meetup.id } : {}),
         });
       }
     };
@@ -209,7 +214,7 @@ async function claimDigest(deps: Deps, group: { organisationId: string; memberId
     const where = and(eq(noticeDeliveries.organisationId, group.organisationId), eq(noticeDeliveries.channel, "email"), inArray(noticeDeliveries.noticeId, rows.map(({ notice }) => notice.id)));
     const owned = await claimLease(db, where, now);
     const send = async () => {
-      if (member?.status !== "active" || !enabled.length) return;
+      if (!member || !VISIBLE_MEMBER_STATUSES.includes(member.status) || !enabled.length) return;
       await deps.email.sendMessage({
         id: `digest:${group.organisationId}:${group.memberId}:${group.scheduledFor.toISOString()}`,
         to: member.email, subject: "Daily Meetup digest", text: enabled.map(({ notice }) => notice.message).join("\n\n"),

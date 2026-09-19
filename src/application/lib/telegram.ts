@@ -3,13 +3,14 @@ import { and, eq, gt } from "drizzle-orm";
 import { requireActiveMember, withActiveMember, type Actor } from "./actor";
 import type { Deps } from "./deps";
 import { AccessDeniedError, AdminVisibilityNoticeRequiredError, InvalidInputError } from "./errors";
-import { joinMeetup } from "./meetups";
+import { answerInvite, joinMeetup } from "./meetups";
 import { deliverSoon } from "./notifications";
 import { organisations, telegramLinkCodes, telegramLinks } from "./schema";
 
 export interface TelegramLink { url: string; expiresAt: Date }
 export type TelegramCommand = { kind: "link"; chatId: string; code: string }
-  | { kind: "join"; chatId: string; callbackId: string; meetupId: string };
+  | { kind: "join"; chatId: string; callbackId: string; meetupId: string }
+  | { kind: "answer-invite"; chatId: string; callbackId: string; inviteId: string; answer: "accept" | "decline" };
 
 function hash(code: string): string {
   return createHash("sha256").update(code).digest("hex");
@@ -53,24 +54,33 @@ async function linkTelegram(deps: Deps, code: string, chatId: string): Promise<b
 }
 
 export async function handleTelegram(deps: Deps, command: TelegramCommand): Promise<void> {
-  if (command.kind === "join") {
+  if (command.kind !== "link") {
     const [actor] = await deps.db.select().from(telegramLinks).where(eq(telegramLinks.chatId, command.chatId));
     let text = "Link Telegram from notification settings in the app first.";
+    let gatheringId: string | undefined;
     if (actor) {
       try {
-        const result = await joinMeetup(deps, actor, command.meetupId);
-        text = result === "participant" ? "You joined the Meetup." : "You are on the waitlist.";
+        if (command.kind === "join") {
+          const result = await joinMeetup(deps, actor, command.meetupId);
+          gatheringId = command.meetupId;
+          text = result === "participant" ? "You joined the Meetup." : "You are on the waitlist.";
+        } else {
+          const result = await answerInvite(deps, actor, command.inviteId, command.answer);
+          gatheringId = result.meetupId;
+          text = result.state === "declined" ? "Invite declined."
+            : result.membership === "waitlisted" ? "Invite accepted. You are on the waitlist." : "Invite accepted.";
+        }
       } catch (error) {
         if (!(error instanceof AccessDeniedError || error instanceof AdminVisibilityNoticeRequiredError || error instanceof InvalidInputError)) throw error;
-        text = "This Meetup is unavailable. Open the app to check your access.";
+        text = "This Meetup or Invite is unavailable. Open the app to check your access.";
       }
     }
     try {
       await deps.telegram.answerCallback({ callbackId: command.callbackId, text });
     } catch {
-      console.error("telegram: answering the join callback failed");
+      console.error("telegram: answering the callback failed");
     }
-    if (actor) await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: command.meetupId });
+    if (actor && gatheringId) await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId });
     return;
   }
   let linked = false;

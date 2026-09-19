@@ -34,7 +34,7 @@ Organisation Admin access is checked for each command and query. Roster views, p
 
 ## Meetups
 
-Open Meetups from your profile to create one, join one or manage one you Host. Physical Meetups default to the Host's Site as their audience, even when the Place is at another Site. Virtual Meetups default to the whole Organisation. The Host can instead choose a Site, the Organisation or invite-only. Invite-only Meetups are visible only to their Host until Invites arrive in issue #7.
+Open Meetups from your profile to create one, join one or manage one you Host. Physical Meetups default to the Host's Site as their audience, even when the Place is at another Site. Virtual Meetups default to the whole Organisation. The Host can instead choose a Site, the Organisation or invite-only. Invite-only Meetups are visible to their Host and invitees.
 
 Meetup input, display and notices use UTC for this deployment. Configurable deployment time zones belong to issue #15. Existing Participants and waitlisted Members keep access if their profile Site changes, so they can still leave their Meetup.
 
@@ -48,11 +48,21 @@ The application stores Meetups and future Events together with a kind. All comma
 
 ## Notifications
 
+### Invites
+
+The Host can invite a Member of the same Organisation from any upcoming Meetup, including a Member who has not logged in yet. Invitees can see that Meetup regardless of their Site. The Host sees every Invite's state; each invitee sees only their own. Repeating an Invite keeps the existing state and sends no duplicate notice.
+
+Invitees accept or decline in the app or through Telegram buttons. Accepting takes a free spot or moves the Member to the front of the waitlist, including an existing waitlisted Member. Each new acceptance goes ahead of earlier waitlisted acceptances. Repeating the same answer leaves places and notices unchanged; a different answer after responding is refused. Declining does not change an existing place obtained by joining an open Meetup.
+
+Pending invitees receive time, Place and cancellation notices. Cancellation expires pending Invites immediately. The worker expires unanswered Invites at the current start time, checking every minute, and answers are refused from that time even before the worker runs. An Invite does not expire at an old start time after the Host reschedules. Accepted and declined Invites retain their states.
+
+### Delivery
+
 Open **Notification settings** from the profile or inbox. Members can enable Telegram and email independently for each notice kind, including urgent kinds. Both preferences start enabled. Every notice remains in the inbox, and Telegram delivery also requires a linked account.
 
 The app creates a single-use Telegram link valid for ten minutes. Open it and press Start in a private chat, then refresh the link status in the app. Creating another link invalidates the previous code. A Telegram account can belong to only one Member across the deployment. Unlinking removes the binding and pending link codes. Telegram buttons join a Meetup through the same Member command as the web app, including its access and capacity checks.
 
-Enabled Telegram notices arrive immediately. Email for joins, waitlist promotions, cancellations and time, duration or Place changes also arrives immediately. Other email notices batch into the next daily digest at 09:00 UTC. Delivery preferences are checked again before a retry or digest. Departed and Suspended Members receive no external notices.
+Enabled Telegram notices arrive immediately. Email for new and accepted Invites, joins, waitlist promotions, cancellations and time, duration or Place changes also arrives immediately. Other email notices, including declined Invites, batch into the next daily digest at 09:00 UTC. Delivery preferences are checked again before a retry or digest. Provisioned Members can receive email before first login. Departed and Suspended Members receive no external notices.
 
 Notices and pending deliveries are saved with the Meetup change. Sending runs after that transaction commits and outside any transaction, so a slow provider holds no database connection. While sending, the process renews its one-minute lease every twenty seconds. Only the owning claim can renew or settle a delivery. A member action sends only its own Meetup's notices; the worker delivers the rest and checks for retries and due digests every minute. A failed delivery retries each minute and is given up after 15 attempts, after which it stays queryable but is no longer retried, while the inbox keeps every notice. Completed deliveries are not replayed. A process failure after provider acceptance, or an interruption that prevents lease renewal for a full minute, can still cause a duplicate. Telegram has no server-side key to prevent it.
 

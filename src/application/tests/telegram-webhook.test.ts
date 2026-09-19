@@ -46,3 +46,43 @@ test("Telegram commands from group chats or another sender cannot bind an accoun
   expect((await ana.notificationSettings()).telegramLinked).toBe(false);
   expect(h.telegram.outbox).toEqual([]);
 });
+
+test("Telegram Invite buttons accept or decline only for the linked invitee and notify the Host", async () => {
+  await h.app.bootstrap(ministryA);
+  const host = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana Member", email: "ana@example.test" });
+  const bo = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", name: "Bo Member", email: "bo@example.test" });
+  const cy = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "cy", name: "Cy Member", email: "cy@example.test" });
+  for (const [actor, chatId] of [[host, "101"], [bo, "102"], [cy, "103"]] as const) {
+    const link = await actor.beginTelegramLink();
+    await h.app.handleTelegram({ kind: "link", chatId, code: new URL(link.url).searchParams.get("start")! });
+  }
+  h.telegram.reset();
+  const meetup = await host.createMeetup({
+    activityId: (await host.meetupChoices()).activities.find((activity) => activity.name === "coffee")!.id,
+    startsAt: new Date("2026-09-18T10:00:00Z"), durationMinutes: 30,
+    place: { kind: "virtual", url: "https://meet.example/private-room" }, capacity: 2, audience: { kind: "invite-only" },
+    description: "Private description",
+  });
+  const invite = await host.inviteMember(meetup.id, (await bo.profile()).memberId);
+  expect(h.telegram.outbox).toEqual([{
+    chatId: "102", text: "Ana invited you to a Meetup. coffee, 2026-09-18 10:00 UTC, Online.", inviteId: invite.id,
+  }]);
+  const webhook = createTelegramWebhook(h.app, secret);
+  const callback = (chatId: number, answer: string, inviteId: string) => request({
+    update_id: 4, callback_query: { id: `${chatId}-${answer}`, from: { id: chatId, is_bot: false },
+      message: { chat: { id: chatId, type: "private" } }, data: `${answer}:${inviteId}` },
+  });
+  await webhook(callback(103, "accept", invite.id));
+  expect((await bo.viewMeetup(meetup.id))?.invite?.state).toBe("pending");
+  expect((await webhook(callback(102, "accept", invite.id))).status).toBe(200);
+  expect(await bo.viewMeetup(meetup.id)).toMatchObject({ membership: "participant", invite: { state: "accepted" } });
+  expect(h.telegram.answers.at(-1)).toEqual({ callbackId: "102-accept", text: "Invite accepted." });
+  const cyInvite = await host.inviteMember(meetup.id, (await cy.profile()).memberId);
+  await webhook(callback(103, "decline", cyInvite.id));
+  expect((await cy.viewMeetup(meetup.id))?.invite?.state).toBe("declined");
+  expect(h.telegram.answers.at(-1)).toEqual({ callbackId: "103-decline", text: "Invite declined." });
+  expect(h.telegram.outbox.filter((message) => message.chatId === "101").map((message) => message.text)).toEqual([
+    "Bo accepted your Invite. coffee, 2026-09-18 10:00 UTC, Online.",
+    "Cy declined your Invite. coffee, 2026-09-18 10:00 UTC, Online.",
+  ]);
+});

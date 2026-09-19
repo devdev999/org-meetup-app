@@ -11,9 +11,13 @@ export class GrammyTelegram implements TelegramPort {
   }
 
   async sendMessage(message: TelegramMessage): Promise<void> {
+    const buttons = message.inviteId ? [
+      { text: "Accept", callback_data: `accept:${message.inviteId}` },
+      { text: "Decline", callback_data: `decline:${message.inviteId}` },
+    ] : message.joinMeetupId ? [{ text: "Join Meetup", callback_data: `join:${message.joinMeetupId}` }] : [];
     await this.api.sendMessage(message.chatId, message.text, {
       link_preview_options: { is_disabled: true },
-      ...(message.joinMeetupId ? { reply_markup: { inline_keyboard: [[{ text: "Join Meetup", callback_data: `join:${message.joinMeetupId}` }]] } } : {}),
+      ...(buttons.length ? { reply_markup: { inline_keyboard: [buttons] } } : {}),
     });
   }
 

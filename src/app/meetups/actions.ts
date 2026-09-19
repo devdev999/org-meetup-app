@@ -106,3 +106,28 @@ export async function changeMeetup(
   refreshMeetups(meetupId);
   return { message };
 }
+
+export async function sendInvite(meetupId: string, form: FormData): Promise<MeetupActionState> {
+  const { member } = await requireMemberPastWelcome();
+  try {
+    await member.inviteMember(meetupId, formText(form.get("memberId")) ?? "");
+  } catch (error) {
+    return actionError(error);
+  }
+  refreshMeetups(meetupId);
+  return { message: "Invite sent." };
+}
+
+export async function respondToInvite(inviteId: string, form: FormData): Promise<MeetupActionState> {
+  const { member } = await requireMemberPastWelcome();
+  const answer = form.get("answer");
+  if (answer !== "accept" && answer !== "decline") return { error: "Choose Accept or Decline." };
+  try {
+    const result = await member.answerInvite(inviteId, answer);
+    refreshMeetups(result.meetupId);
+    return { message: result.state === "declined" ? "Invite declined."
+      : result.membership === "waitlisted" ? "Invite accepted. You are on the waitlist." : "Invite accepted." };
+  } catch (error) {
+    return actionError(error);
+  }
+}

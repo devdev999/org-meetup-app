@@ -276,6 +276,19 @@ export const gatheringMembers = pgTable("gathering_members", {
   foreignKey({ columns: [table.organisationId, table.memberId], foreignColumns: [members.organisationId, members.id] }),
 ]);
 
+export const invites = pgTable("invites", {
+  id: uuid().primaryKey().defaultRandom(),
+  organisationId: uuid().notNull().references(() => organisations.id),
+  gatheringId: uuid().notNull(),
+  memberId: uuid().notNull(),
+  state: text().$type<"pending" | "accepted" | "declined" | "expired">().notNull().default("pending"),
+  createdAt: timestamptz().notNull(),
+}, (table) => [
+  unique("invites_gathering_member_unique").on(table.organisationId, table.gatheringId, table.memberId),
+  foreignKey({ columns: [table.organisationId, table.gatheringId], foreignColumns: [gatherings.organisationId, gatherings.id] }),
+  foreignKey({ columns: [table.organisationId, table.memberId], foreignColumns: [members.organisationId, members.id] }),
+]);
+
 export const notices = pgTable("notices", {
   id: uuid().primaryKey().defaultRandom(),
   organisationId: uuid().notNull().references(() => organisations.id),
