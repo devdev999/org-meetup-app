@@ -8,6 +8,8 @@ export interface Actor {
   organisationId: string;
 }
 
+export const VISIBLE_MEMBER_STATUSES: (typeof members.status.enumValues)[number][] = ["provisioned", "active"];
+
 export async function requireActiveMember(db: Queryable, actor: Actor, requireNotice = true) {
   const [member] = await db
     .select()

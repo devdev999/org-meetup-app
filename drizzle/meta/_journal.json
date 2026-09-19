@@ -26,15 +26,22 @@
     {
       "idx": 3,
       "version": "7",
-      "when": 1789753608708,
-      "tag": "0003_meetups",
+      "when": 1789753541085,
+      "tag": "0003_early_logan",
       "breakpoints": true
     },
     {
       "idx": 4,
       "version": "7",
-      "when": 1789753731218,
-      "tag": "0004_meetup_notices",
+      "when": 1789827848209,
+      "tag": "0004_unique_interest_aliases",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789829160417,
+      "tag": "0005_meetups",
       "breakpoints": true
     }
   ]

@@ -15,7 +15,7 @@ test("a Member sees another Member of their own Organisation and nothing of anot
   const cleoId = await signInForId(h, "ministry-b", cleo);
   const boActor = await signInAndAcknowledgeAs(h, "ministry-a", bo);
 
-  expect(await boActor.viewMember(anaId)).toEqual({ memberId: anaId, name: "Ana Silva", department: null, site: null });
+  expect(await boActor.viewMember(anaId)).toEqual({ memberId: anaId, name: "Ana Silva", department: null, site: null, interests: [] });
   expect(await boActor.viewMember(cleoId)).toBeUndefined();
 });
 

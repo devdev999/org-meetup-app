@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach } from "vitest";
 import { ControllableClock } from "../../adapters/clock/controllable";
 import { FakeIdentity } from "../../adapters/identity/fake";
+import { MemoryAi } from "../../adapters/ai/memory";
 import { runMigrations } from "../../db/migrate";
 import { createTestDatabase } from "../../testing/test-database";
 import { createApplication, type Application } from "../index";
@@ -14,6 +15,7 @@ export interface Harness {
   app: Application;
   identity: FakeIdentity;
   clock: ControllableClock;
+  ai: MemoryAi;
 }
 
 export const START_OF_TEST = new Date("2026-09-18T09:00:00.000Z");
@@ -31,12 +33,14 @@ export function harness(): Harness {
     await runMigrations(pool);
     h.identity = new FakeIdentity();
     h.clock = new ControllableClock(START_OF_TEST);
-    h.app = createApplication({ pool, identity: h.identity, clock: h.clock });
+    h.ai = new MemoryAi();
+    h.app = createApplication({ pool, identity: h.identity, clock: h.clock, ai: h.ai });
   });
 
   beforeEach(async () => {
     await truncateAll(pool);
     h.clock.set(START_OF_TEST);
+    h.ai.reset();
   });
 
   afterAll(async () => {

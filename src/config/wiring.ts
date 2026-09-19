@@ -1,10 +1,12 @@
 import { Pool } from "pg";
+import { ChatCompletionAi } from "../adapters/ai/chat-completion";
+import { MemoryAi } from "../adapters/ai/memory";
 import { SystemClock } from "../adapters/clock/system";
 import { FakeIdentity } from "../adapters/identity/fake";
 import { OidcIdentity } from "../adapters/identity/oidc";
 import { createApplication, type Application } from "../application/index";
-import type { IdentityPort } from "../application/ports";
-import { assertFakeIssuerAllowed, databaseUrl, fakeIssuerEnabled } from "./env";
+import type { AiPort, IdentityPort } from "../application/ports";
+import { aiConfig, assertFakeIssuerAllowed, databaseUrl, fakeIssuerEnabled } from "./env";
 
 /**
  * Production wiring, shared by the web process, the worker and the setup
@@ -26,5 +28,10 @@ export function identityFromEnv(): IdentityPort {
 }
 
 export function applicationFromEnv(pool: Pool): Application {
-  return createApplication({ pool, identity: identityFromEnv(), clock: new SystemClock() });
+  return createApplication({ pool, identity: identityFromEnv(), clock: new SystemClock(), ai: aiFromEnv() });
+}
+
+export function aiFromEnv(): AiPort {
+  const config = aiConfig();
+  return config.provider === "memory" ? new MemoryAi() : new ChatCompletionAi(config);
 }

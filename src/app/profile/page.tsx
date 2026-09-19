@@ -10,6 +10,8 @@ export default async function ProfilePage() {
   return (
     <main>
       <nav className="member-nav" aria-label="Member navigation">
+        <Link href="/interests">Your Interests</Link>
+        <Link href="/members">Find Members</Link>
         <Link href="/meetups">Meetups</Link>
         <Link href="/inbox">Inbox</Link>
       </nav>

@@ -205,14 +205,18 @@ th {
   padding-top: 0.75rem;
 }
 
-.member-nav {
+.member-nav, .form-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
+  align-items: center;
+  gap: 0.75rem 1.5rem;
+}
+
+.member-nav {
   margin-bottom: 1.5rem;
 }
 
-.meetup-list {
+.interest-list, .member-list, .meetup-list {
   list-style: none;
   padding: 0;
 }
@@ -222,16 +226,43 @@ th {
   border-bottom: 1px solid var(--line);
 }
 
-.meetup-list h2 {
-  margin-top: 0;
-}
-
 .meetup-description {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
+.interest-list li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.interest-preview {
+  overflow-wrap: anywhere;
+}
+
+.interest-preview select {
+  min-width: 0;
+}
+
+.stance-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+  margin: 0.75rem 0 0;
+}
+
+.interest-groups h3 {
+  font-size: 1rem;
+  margin: 1rem 0 0.5rem;
+}
+
+.member-list h2, .meetup-list h2 {
+  margin-top: 0;
+}
+
 button:disabled {
-  opacity: 0.6;
   cursor: wait;
+  opacity: 0.65;
 }
