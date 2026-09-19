@@ -100,6 +100,7 @@ test("preview leaves Members unchanged and committing provisions visible Members
     name: "Ana Silva",
     department: "Legal",
     site: "Harbour House",
+    interests: [],
   });
 
   const signedIn = await signInAndAcknowledgeAs(h, "ministry-a", { ...ana, name: "Name from login" });

@@ -57,3 +57,16 @@ export class IdentityError extends Error {
 export interface Clock {
   now(): Date;
 }
+
+export type InterestKind = "skill" | "hobby";
+
+export interface AiInterestRequest {
+  phrase: string;
+  shortlist: Array<{ name: string; kind: InterestKind; count: number }>;
+}
+
+export type AiInterestResolution = { existingName: string } | { name: string; kind: InterestKind };
+
+export interface AiPort {
+  resolveInterest(input: AiInterestRequest): Promise<AiInterestResolution>;
+}

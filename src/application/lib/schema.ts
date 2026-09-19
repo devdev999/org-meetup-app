@@ -182,3 +182,52 @@ export const organisationAdminNotices = pgTable(
     }),
   ],
 );
+
+export const interestKind = pgEnum("interest_kind", ["skill", "hobby"]);
+export const stance = pgEnum("stance", ["shares", "seeks"]);
+
+export const interests = pgTable("interests", {
+  id: uuid().primaryKey().defaultRandom(),
+  organisationId: uuid().notNull().references(() => organisations.id),
+  name: text().notNull(),
+  nameKey: text().notNull(),
+  kind: interestKind().notNull(),
+  createdAt: timestamptz().notNull(),
+}, (table) => [
+  unique("interests_organisation_id_id_unique").on(table.organisationId, table.id),
+  uniqueIndex("interests_organisation_name_key_unique").on(table.organisationId, table.nameKey),
+]);
+
+export const interestAliases = pgTable("interest_aliases", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  interestId: uuid().notNull(),
+  phrase: text().notNull(),
+  phraseKey: text().notNull(),
+  createdAt: timestamptz().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.phraseKey] }),
+  foreignKey({
+    name: "interest_aliases_interest_same_organisation_fk",
+    columns: [table.organisationId, table.interestId],
+    foreignColumns: [interests.organisationId, interests.id],
+  }),
+]);
+
+export const memberInterests = pgTable("member_interests", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  memberId: uuid().notNull(),
+  interestId: uuid().notNull(),
+  stance: stance().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.memberId, table.interestId] }),
+  foreignKey({
+    name: "member_interests_member_same_organisation_fk",
+    columns: [table.organisationId, table.memberId],
+    foreignColumns: [members.organisationId, members.id],
+  }),
+  foreignKey({
+    name: "member_interests_interest_same_organisation_fk",
+    columns: [table.organisationId, table.interestId],
+    foreignColumns: [interests.organisationId, interests.id],
+  }),
+]);

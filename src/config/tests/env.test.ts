@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { bootstrapConfig } from "../env";
+import { aiConfig, bootstrapConfig } from "../env";
 
 const bootstrapEnvironment: NodeJS.ProcessEnv = {
   NODE_ENV: "test",
@@ -10,6 +10,42 @@ const bootstrapEnvironment: NodeJS.ProcessEnv = {
   BOOTSTRAP_PLATFORM_ADMIN_EMAIL: "pat@ministry-a.example",
   BOOTSTRAP_PLATFORM_ADMIN_NAME: "Pat Platform",
 };
+
+test("AI defaults to an in-memory provider without endpoint credentials", () => {
+  expect(aiConfig({ NODE_ENV: "test" })).toEqual({ provider: "memory" });
+});
+
+test("AI accepts a configured chat-completion endpoint", () => {
+  expect(aiConfig({
+    NODE_ENV: "test",
+    AI_PROVIDER: "chat-completion",
+    AI_BASE_URL: "https://chat.example/v1",
+    AI_API_KEY: "example-key",
+    AI_MODEL: "interest-model",
+  })).toEqual({
+    provider: "chat-completion",
+    baseUrl: "https://chat.example/v1",
+    apiKey: "example-key",
+    model: "interest-model",
+  });
+});
+
+test.each([
+  { AI_PROVIDER: "unsupported" },
+  { AI_BASE_URL: "not-a-url" },
+  { AI_BASE_URL: "ftp://chat.example/v1" },
+  { AI_API_KEY: " " },
+  { AI_MODEL: "" },
+])("AI refuses incomplete or invalid chat-completion configuration: %j", (invalid) => {
+  expect(() => aiConfig({
+    NODE_ENV: "test",
+    AI_PROVIDER: "chat-completion",
+    AI_BASE_URL: "https://chat.example/v1",
+    AI_API_KEY: "example-key",
+    AI_MODEL: "interest-model",
+    ...invalid,
+  })).toThrow();
+});
 
 test("bootstrap parses Department and Site lists from JSON, preserving commas inside names", () => {
   const config = bootstrapConfig({

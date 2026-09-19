@@ -2,6 +2,7 @@ import { normaliseEmail } from "./db";
 import { ensureDepartment, ensureSite } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { seedActivities } from "./organisation-lists";
+import { seedInterests } from "./interests";
 import { members, organisationOidcSettings, organisations, type ClaimMapping } from "./schema";
 
 /**
@@ -36,6 +37,7 @@ export async function bootstrap({ db, clock }: Deps, config: BootstrapConfig): P
       .returning({ id: organisations.id });
     if (!organisation) throw new Error("bootstrap: Organisation upsert returned no row");
     await seedActivities(tx, organisation.id, now);
+    await seedInterests(tx, organisation.id, now);
 
     for (const name of config.organisation.departments ?? []) {
       await ensureDepartment(tx, organisation.id, name, now);

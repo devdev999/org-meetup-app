@@ -20,6 +20,27 @@ export function databaseUrl(env: NodeJS.ProcessEnv = process.env): string {
   return present(env).DATABASE_URL ?? DEFAULT_DATABASE_URL;
 }
 
+type AiConfig = { provider: "memory" } | {
+  provider: "chat-completion";
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+};
+
+const chatCompletionSchema = z.object({
+  AI_BASE_URL: z.url({ protocol: /^https?$/ }),
+  AI_API_KEY: z.string().trim().min(1),
+  AI_MODEL: z.string().trim().min(1),
+});
+
+export function aiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig {
+  const values = present(env);
+  const provider = z.enum(["memory", "chat-completion"]).default("memory").parse(values.AI_PROVIDER);
+  if (provider === "memory") return { provider };
+  const config = chatCompletionSchema.parse(values);
+  return { provider, baseUrl: config.AI_BASE_URL, apiKey: config.AI_API_KEY, model: config.AI_MODEL };
+}
+
 const identityProviderSchema = z.enum(["oidc", "fake"]).default("oidc");
 
 /** Which identity adapter to wire: the real OIDC one, or the in-memory issuer for local runs. */

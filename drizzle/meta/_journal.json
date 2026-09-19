@@ -22,6 +22,20 @@
       "when": 1789744610191,
       "tag": "0002_roster_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789753541085,
+      "tag": "0003_early_logan",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789827848209,
+      "tag": "0004_unique_interest_aliases",
+      "breakpoints": true
     }
   ]
 }
