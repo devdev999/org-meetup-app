@@ -4,13 +4,13 @@ import { useActionState } from "react";
 import type { Attendance } from "../../application";
 import { saveAttendance, type AttendanceActionState } from "./actions";
 
-export function AttendanceForm({ id, participants, confirmed }: { id: string; participants: NonNullable<Attendance["participants"]>; confirmed: boolean }) {
+export function AttendanceForm({ id, checklist, confirmed }: { id: string; checklist: NonNullable<Attendance["checklist"]>; confirmed: boolean }) {
   const [state, action, pending] = useActionState<AttendanceActionState, FormData>((_previous, form) => saveAttendance(id, "confirm", form), {});
   return <form action={action}>
     <fieldset disabled={pending}>
       <legend>Who came?</legend>
       <p>Tick everyone who came, including yourself if you came.</p>
-      {participants.map((person) => <label className="channel-choice" key={person.memberId}>
+      {checklist.map((person) => <label className="channel-choice" key={person.memberId}>
         <input type="checkbox" name="memberId" value={person.memberId} defaultChecked={person.attended} />{person.name}
       </label>)}
     </fieldset>

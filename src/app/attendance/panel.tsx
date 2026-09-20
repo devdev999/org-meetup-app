@@ -12,7 +12,7 @@ export function AttendancePanel({ id, attendance }: { id: string; attendance?: A
     {attendance.outcome === "no-show" && <p>Only you and Organisation Admins can see your no-show record. It carries no penalty.</p>}
     {attendance.outcome === "unknown" && <p>The Host has not confirmed Attendance.</p>}
     <p>Confirmation and amendments close at <MeetupTime value={attendance.closesAt.toISOString()} />.</p>
-    {attendance.canConfirm && attendance.participants && <AttendanceForm key={attendance.confirmedAt?.toISOString() ?? "unconfirmed"} id={id} participants={attendance.participants} confirmed={attendance.confirmedAt !== null} />}
+    {attendance.canConfirm && attendance.checklist && <AttendanceForm key={attendance.confirmedAt?.toISOString() ?? "unconfirmed"} id={id} checklist={attendance.checklist} confirmed={attendance.confirmedAt !== null} />}
     {attendance.hasRated ? <p role="status">Your rating was recorded.</p> : attendance.canRate && <RatingForm id={id} />}
     <p><Link href="/connections">Your Connections</Link> · <Link href="/attendance">Your Attendance history</Link></p>
   </section>;

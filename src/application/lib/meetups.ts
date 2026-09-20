@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, gt, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireActiveMember, VISIBLE_MEMBER_STATUSES, withActiveMember, type Actor } from "./actor";
+import { retainHostForAttendance } from "./attendance-records";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { AccessDeniedError, InvalidInputError } from "./errors";
@@ -614,6 +615,7 @@ export async function handOverMeetup(deps: Deps, actor: Actor, id: string, parti
     const [active] = await db.select({ id: members.id }).from(members)
       .where(and(eq(members.organisationId, actor.organisationId), eq(members.id, nextHost.memberId), eq(members.status, "active")));
     if (!active) invalid("Choose an Active Participant as Host.");
+    await retainHostForAttendance(db, actor.organisationId, id, actor.memberId);
     await db.update(gatherings).set({ hostMemberId: nextHost.memberId }).where(gatheringWhere(actor.organisationId, id));
     await notify(db, actor.organisationId, gathering, await noticeRecipients(db, actor.organisationId, gathering.id),
       "meetup-handed-over", `${firstName(nextHost.name)} is now Host of this ${meetupOrEvent(gathering)}.`, now);

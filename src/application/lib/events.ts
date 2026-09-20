@@ -1,6 +1,6 @@
 import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { requireActiveMember, withActiveMember, type Actor } from "./actor";
-import { retainHostForAttendance } from "./attendance";
+import { retainHostForAttendance } from "./attendance-records";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { AccessDeniedError, InvalidInputError } from "./errors";

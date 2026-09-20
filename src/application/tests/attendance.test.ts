@@ -57,7 +57,7 @@ test.each(["meetup", "event"] as const)("amending %s Attendance corrects no-show
   h.clock.set(new Date("2026-09-19T11:00:00Z"));
   await ana.confirmAttendance(first.id, [anaId, boId]);
   await ana.confirmAttendance(second.id, [anaId, boId]);
-  expect(await bo.attendance(first.id)).toMatchObject({ outcome: "attended", participants: null, canConfirm: false });
+  expect(await bo.attendance(first.id)).toMatchObject({ outcome: "attended", checklist: null, canConfirm: false });
   expect((await bo.connections())[0]!.occurrences.map((occurrence) => occurrence.id)).toEqual([second.id, first.id]);
 
   await ana.confirmAttendance(first.id, [anaId]);
@@ -87,11 +87,11 @@ test.each(["meetup", "event"] as const)("only seated Going Participants can be n
   await ana.confirmAttendance(occurrence.id, [(await cy.profile()).memberId]);
 
   expect(await ana.attendance(occurrence.id)).toMatchObject({ outcome: "not-recorded" });
-  expect(await bo.attendance(occurrence.id)).toMatchObject({ outcome: "no-show", participants: null });
-  expect(await cy.attendance(occurrence.id)).toMatchObject({ outcome: "attended", participants: null });
-  expect(await di.attendance(occurrence.id)).toMatchObject({ outcome: "not-recorded", participants: null });
-  expect(await ev.attendance(occurrence.id)).toMatchObject({ outcome: "not-recorded", participants: null });
-  expect((await ana.attendance(occurrence.id))!.participants!.map((person) => person.name)).toEqual(["Ana", "Bo", "Cy"]);
+  expect(await bo.attendance(occurrence.id)).toMatchObject({ outcome: "no-show", checklist: null });
+  expect(await cy.attendance(occurrence.id)).toMatchObject({ outcome: "attended", checklist: null });
+  expect(await di.attendance(occurrence.id)).toMatchObject({ outcome: "not-recorded", checklist: null });
+  expect(await ev.attendance(occurrence.id)).toMatchObject({ outcome: "not-recorded", checklist: null });
+  expect((await ana.attendance(occurrence.id))!.checklist!.map((person) => person.name)).toEqual(["Ana", "Bo", "Cy"]);
   expect(await (await member("Outside")).attendance(occurrence.id)).toBeUndefined();
 });
 
@@ -104,7 +104,7 @@ test.each(["meetup", "event"] as const)("%s Attendance opens at the end, closes 
   await participationFor(bo, kind).join(unconfirmed.id);
   const ids = [(await ana.profile()).memberId, (await bo.profile()).memberId];
   h.clock.set(new Date("2026-09-18T10:59:59.999Z"));
-  expect(await ana.attendance(first.id)).toMatchObject({ canConfirm: false, endsAt: new Date("2026-09-18T11:00:00Z"), closesAt: new Date("2026-09-25T11:00:00Z") });
+  expect(await ana.attendance(first.id)).toMatchObject({ hasEnded: false, checklist: null, canConfirm: false, endsAt: new Date("2026-09-18T11:00:00Z"), closesAt: new Date("2026-09-25T11:00:00Z") });
   await expect(ana.confirmAttendance(first.id, ids)).rejects.toBeInstanceOf(InvalidInputError);
   h.clock.set(new Date("2026-09-18T11:00:00Z"));
   expect(await ana.attendance(first.id)).toMatchObject({ canConfirm: true });
@@ -223,12 +223,12 @@ test("an unseated Event Host must be ticked and retains private occurrence histo
   await admin.reassignEventHost(occurrence.id, (await ana.profile()).memberId);
   expect(await cy.viewEvent(occurrence.id)).toMatchObject({ id: occurrence.id, participantCount: 2 });
   expect((await cy.connections())[0]!.occurrences[0]!.id).toBe(occurrence.id);
-  expect((await ana.attendance(occurrence.id))!.participants).toContainEqual({ memberId: cyId, name: "Cy", attended: true });
+  expect((await ana.attendance(occurrence.id))!.checklist).toContainEqual({ memberId: cyId, name: "Cy", attended: true });
   await expect(cy.confirmAttendance(occurrence.id, [])).rejects.toBeInstanceOf(AccessDeniedError);
   await ana.confirmAttendance(occurrence.id, [boId]);
   expect(await cy.connections()).toEqual([]);
   expect(await cy.viewEvent(occurrence.id)).toBeUndefined();
-  expect((await ana.attendance(occurrence.id))!.participants).toContainEqual({ memberId: cyId, name: "Cy", attended: false });
+  expect((await ana.attendance(occurrence.id))!.checklist).toContainEqual({ memberId: cyId, name: "Cy", attended: false });
   await ana.confirmAttendance(occurrence.id, [boId, cyId]);
   expect((await cy.connections())[0]!.occurrences[0]!.id).toBe(occurrence.id);
 });
@@ -249,7 +249,7 @@ test.each(["web", "telegram"] as const)("a former unseated Event Host remains on
   h.clock.set(new Date("2026-09-18T11:00:00Z"));
   await h.app.processAttendance();
   await admin.reassignEventHost(occurrence.id, anaId);
-  expect((await ana.attendance(occurrence.id))!.participants).toContainEqual({ memberId: cyId, name: "Cy", attended: false });
+  expect((await ana.attendance(occurrence.id))!.checklist).toContainEqual({ memberId: cyId, name: "Cy", attended: false });
   expect(await cy.viewEvent(occurrence.id)).toBeUndefined();
   expect(await cy.connections()).toEqual([]);
   if (channel === "web") await ana.confirmAttendance(occurrence.id, [anaId, boId, cyId]);
@@ -262,5 +262,27 @@ test.each(["web", "telegram"] as const)("a former unseated Event Host remains on
   }
   expect(await cy.attendance(occurrence.id)).toMatchObject({ outcome: "attended", canConfirm: false, canRate: false });
   expect((await cy.connections()).map((connection) => connection.member.name)).toEqual(["Ana", "Bo"]);
+  expect(await cy.viewEvent(occurrence.id)).toMatchObject({ id: occurrence.id, participantCount: 2 });
+});
+
+test("an unseated Event Host stays eligible for Attendance after handing over", async () => {
+  const { ana, input } = await setup();
+  const bo = await member("Bo");
+  const cy = await member("Cy");
+  const adminClaims = { sub: "admin", email: "admin@example.test", name: "Admin" };
+  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminClaims });
+  const admin = await (await signInAndAcknowledgeAs(h, "ministry-a", adminClaims)).organisationAdmin();
+  const occurrence = await createMeetupOrEvent(h, ana, { ...input, capacity: 2, audience: { kind: "invite-only" } }, "event");
+  const boId = (await bo.profile()).memberId;
+  const cyId = (await cy.profile()).memberId;
+  await bo.answerInvite((await ana.inviteToEvent(occurrence.id, boId)).id, "accept");
+  await admin.reassignEventHost(occurrence.id, cyId);
+  await cy.handOverEvent(occurrence.id, boId);
+  expect(await cy.viewEvent(occurrence.id)).toBeUndefined();
+  h.clock.set(new Date("2026-09-18T11:00:00Z"));
+  expect((await bo.attendance(occurrence.id))!.checklist).toContainEqual({ memberId: cyId, name: "Cy", attended: false });
+  await bo.confirmAttendance(occurrence.id, [boId, cyId]);
+  expect(await cy.attendance(occurrence.id)).toMatchObject({ outcome: "attended", canConfirm: false, canRate: false });
+  expect((await cy.connections()).map((connection) => connection.member.name)).toEqual(["Bo"]);
   expect(await cy.viewEvent(occurrence.id)).toMatchObject({ id: occurrence.id, participantCount: 2 });
 });

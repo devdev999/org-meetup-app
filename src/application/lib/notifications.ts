@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, isNull, lte, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { requireActiveMember, VISIBLE_MEMBER_STATUSES, withActiveMember, type Actor } from "./actor";
+import { attendancePromptState, attendanceWindow } from "./attendance-records";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
 import { NOTICE_KINDS, type NoticeKind } from "./notice-kinds";
-import { activities, attendanceRecords, gatheringRsvps, gatherings, invites, members, noticeDeliveries, noticePreferences, notices, recurrenceMembers, sites, telegramLinks } from "./schema";
+import { activities, gatheringRsvps, gatherings, invites, members, noticeDeliveries, noticePreferences, notices, recurrenceMembers, sites, telegramLinks } from "./schema";
 
 export interface NoticePreference { kind: NoticeKind; telegram: boolean; email: boolean }
 
@@ -184,15 +185,11 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
     const owned = await claimLease(db, where, now);
     let canConfirmAttendance = false;
     if (row?.notice.kind === "attendance-prompt" && row.gathering) {
-      const [record] = await db.select({ confirmedAt: attendanceRecords.confirmedAt }).from(attendanceRecords)
-        .where(and(eq(attendanceRecords.organisationId, row.notice.organisationId), eq(attendanceRecords.gatheringId, row.gathering.id)));
-      const [latest] = await db.select({ id: notices.id }).from(notices)
-        .where(and(eq(notices.organisationId, row.notice.organisationId), eq(notices.gatheringId, row.gathering.id), eq(notices.kind, "attendance-prompt")))
-        .orderBy(desc(notices.position)).limit(1);
-      const endsAt = row.gathering.startsAt.getTime() + row.gathering.durationMinutes * 60_000;
+      const prompt = await attendancePromptState(db, row.notice.organisationId, row.gathering.id);
+      const { endsAt, closesAt } = attendanceWindow(row.gathering);
       canConfirmAttendance = row.member.status === "active" && row.gathering.hostMemberId === row.member.id
         && (row.gathering.status === "scheduled" || row.gathering.status === "completed")
-        && latest?.id === row.notice.id && !record?.confirmedAt && now.getTime() >= endsAt && now.getTime() < endsAt + 7 * 86_400_000;
+        && prompt.latestNoticeId === row.notice.id && !prompt.confirmedAt && now >= endsAt && now < closesAt;
     }
     const content = row?.notice.kind === "invite-received" && row.gathering && row.activityName && row.notice.messagePrefix
       ? gatheringNoticeText({

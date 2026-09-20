@@ -2,11 +2,12 @@ import { and, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { requireActiveMember, VISIBLE_MEMBER_STATUSES, withActiveMember, type Actor } from "./actor";
+import { ATTENDANCE_WINDOW_DAYS, attendancePromptState, attendanceWindow } from "./attendance-records";
 import type { Deps } from "./deps";
 import type { Queryable } from "./departments-and-sites";
 import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
-import type { GatheringSummary, MeetupPerson } from "./meetups";
+import { meetupOrEvent, type GatheringSummary, type MeetupPerson } from "./meetups";
 import { activities, attendanceMembers, attendanceRecords, gatheringMembers, gatheringRsvps, gatherings, members, notices, occurrenceRatings, organisations, sites } from "./schema";
 import { gatheringNoticeText, recordNotices } from "./notifications";
 
@@ -25,7 +26,7 @@ export interface Attendance {
   canRate: boolean;
   hasRated: boolean;
   outcome: "unknown" | "attended" | "no-show" | "not-recorded";
-  participants: (MeetupPerson & { attended: boolean })[] | null;
+  checklist: (MeetupPerson & { attended: boolean })[] | null;
 }
 
 export type AttendanceHistoryEntry = ConnectionOccurrence & { outcome: Attendance["outcome"] };
@@ -71,35 +72,37 @@ export async function attendance(deps: Deps, actor: Actor, id: string): Promise<
     if (!row || row.gathering.status !== "scheduled" && row.gathering.status !== "completed") return undefined;
     const gathering = row.gathering;
     const isHost = gathering.hostMemberId === actor.memberId;
+    const now = deps.clock.now();
+    const { endsAt, closesAt } = attendanceWindow(gathering);
+    const hasEnded = now >= endsAt;
     const people = await db.select({ memberId: members.id, name: members.name, status: gatheringMembers.status, answer: gatheringRsvps.answer }).from(gatheringMembers)
       .innerJoin(members, and(eq(members.organisationId, gatheringMembers.organisationId), eq(members.id, gatheringMembers.memberId)))
       .leftJoin(gatheringRsvps, and(eq(gatheringRsvps.organisationId, gatheringMembers.organisationId), eq(gatheringRsvps.gatheringId, gatheringMembers.gatheringId), eq(gatheringRsvps.memberId, gatheringMembers.memberId)))
-      .where(and(eq(gatheringMembers.organisationId, actor.organisationId), eq(gatheringMembers.gatheringId, id), isHost ? undefined : eq(gatheringMembers.memberId, actor.memberId)));
-    const recorded = await db.select({ memberId: members.id, name: members.name, attended: attendanceMembers.attended }).from(attendanceMembers)
+      .where(and(eq(gatheringMembers.organisationId, actor.organisationId), eq(gatheringMembers.gatheringId, id), isHost && hasEnded ? undefined : eq(gatheringMembers.memberId, actor.memberId)));
+    const recorded = hasEnded ? await db.select({ memberId: members.id, name: members.name, attended: attendanceMembers.attended }).from(attendanceMembers)
       .innerJoin(members, and(eq(members.organisationId, attendanceMembers.organisationId), eq(members.id, attendanceMembers.memberId)))
-      .where(and(eq(attendanceMembers.organisationId, actor.organisationId), eq(attendanceMembers.gatheringId, id), isHost ? undefined : eq(attendanceMembers.memberId, actor.memberId)));
+      .where(and(eq(attendanceMembers.organisationId, actor.organisationId), eq(attendanceMembers.gatheringId, id), isHost ? undefined : eq(attendanceMembers.memberId, actor.memberId))) : [];
     const present = recorded.filter((person) => person.attended);
     const own = people.find((person) => person.memberId === actor.memberId);
     const came = present.some((person) => person.memberId === actor.memberId);
     const [rsvp] = own || came || isHost ? [] : await db.select({ memberId: gatheringRsvps.memberId }).from(gatheringRsvps)
       .where(and(eq(gatheringRsvps.organisationId, actor.organisationId), eq(gatheringRsvps.gatheringId, id), eq(gatheringRsvps.memberId, actor.memberId)));
     if (!own && !came && !isHost && !rsvp) return undefined;
+    if (!hasEnded) return { hasEnded, endsAt, closesAt, confirmedAt: null, canRate: false, hasRated: false, canConfirm: false, outcome: "unknown", checklist: null };
     const [record] = await db.select().from(attendanceRecords)
       .where(and(eq(attendanceRecords.organisationId, actor.organisationId), eq(attendanceRecords.gatheringId, id)));
-    const endsAt = new Date(gathering.startsAt.getTime() + gathering.durationMinutes * 60_000);
-    const closesAt = new Date(endsAt.getTime() + 7 * 86_400_000);
     const going = own?.status === "participant" && (!gathering.recurrenceId || own.answer === "going");
     const checklist = isHost ? new Map([...people.filter((person) => person.status === "participant"), ...recorded,
       { memberId: gathering.hostMemberId, name: row.hostName }].map((person) => [person.memberId, person])) : null;
     const [rating] = await db.select({ memberId: occurrenceRatings.memberId }).from(occurrenceRatings)
       .where(and(eq(occurrenceRatings.organisationId, actor.organisationId), eq(occurrenceRatings.gatheringId, id), eq(occurrenceRatings.memberId, actor.memberId)));
     return {
-      hasEnded: deps.clock.now() >= endsAt,
+      hasEnded,
       endsAt, closesAt, confirmedAt: record?.confirmedAt ?? null,
-      canRate: own?.status === "participant" && deps.clock.now() >= endsAt && !rating, hasRated: !!rating,
-      canConfirm: isHost && deps.clock.now() >= endsAt && deps.clock.now() < closesAt,
+      canRate: own?.status === "participant" && !rating, hasRated: !!rating,
+      canConfirm: isHost && now < closesAt,
       outcome: attendanceOutcome(record?.confirmedAt, came, going),
-      participants: checklist ? [...checklist.values()].map(({ memberId, name }) => ({ memberId, name, attended: present.some((person) => person.memberId === memberId) }))
+      checklist: checklist ? [...checklist.values()].map(({ memberId, name }) => ({ memberId, name, attended: present.some((person) => person.memberId === memberId) }))
         .sort((a, b) => a.name.localeCompare(b.name) || a.memberId.localeCompare(b.memberId)) : null,
     };
   });
@@ -107,11 +110,6 @@ export async function attendance(deps: Deps, actor: Actor, id: string): Promise<
 
 export async function confirmAttendance(deps: Deps, actor: Actor, id: string, memberIds: string[]): Promise<void> {
   await withActiveMember(deps, actor, (db) => saveAttendance(db, actor, id, memberIds, deps.clock.now()));
-}
-
-export async function retainHostForAttendance(db: Queryable, organisationId: string, gatheringId: string, memberId: string): Promise<void> {
-  await db.insert(attendanceRecords).values({ organisationId, gatheringId }).onConflictDoNothing();
-  await db.insert(attendanceMembers).values({ organisationId, gatheringId, memberId, attended: false }).onConflictDoNothing();
 }
 
 async function saveAttendance(db: Queryable, actor: Actor, id: string, memberIds: string[], now: Date): Promise<void> {
@@ -122,19 +120,19 @@ async function saveAttendance(db: Queryable, actor: Actor, id: string, memberIds
     .where(and(eq(gatherings.organisationId, actor.organisationId), eq(gatherings.id, id)));
   if (!entry || entry.gathering.hostMemberId !== actor.memberId) throw new AccessDeniedError();
   const gathering = entry.gathering;
-  const endsAt = new Date(gathering.startsAt.getTime() + gathering.durationMinutes * 60_000);
-  if (gathering.status !== "scheduled" && gathering.status !== "completed" || now < endsAt || now.getTime() >= endsAt.getTime() + 7 * 86_400_000) {
+  const { endsAt, closesAt } = attendanceWindow(gathering);
+  if (gathering.status !== "scheduled" && gathering.status !== "completed" || now < endsAt || now >= closesAt) {
     throw new InvalidInputError("invalid-attendance", "Confirm Attendance after the end and within seven days.");
   }
   const parsed = z.array(z.uuid()).safeParse(memberIds);
-  if (!parsed.success) throw new InvalidInputError("invalid-attendance", "Choose the Participants who came.");
+  if (!parsed.success) throw new InvalidInputError("invalid-attendance", "Choose who came from the Attendance checklist.");
   const selected = [...new Set(parsed.data)];
   const participants = await db.select({ memberId: gatheringMembers.memberId }).from(gatheringMembers)
     .where(and(eq(gatheringMembers.organisationId, actor.organisationId), eq(gatheringMembers.gatheringId, id), eq(gatheringMembers.status, "participant")));
   const previous = await db.select({ memberId: attendanceMembers.memberId, attended: attendanceMembers.attended }).from(attendanceMembers)
     .where(and(eq(attendanceMembers.organisationId, actor.organisationId), eq(attendanceMembers.gatheringId, id)));
   const eligible = new Set([gathering.hostMemberId, ...participants.map((person) => person.memberId), ...previous.map((person) => person.memberId)]);
-  if (selected.some((memberId) => !eligible.has(memberId))) throw new InvalidInputError("invalid-attendance", "Choose the Participants who came.");
+  if (selected.some((memberId) => !eligible.has(memberId))) throw new InvalidInputError("invalid-attendance", "Choose who came from the Attendance checklist.");
   const [record] = await db.select({ confirmedAt: attendanceRecords.confirmedAt }).from(attendanceRecords)
     .where(and(eq(attendanceRecords.organisationId, actor.organisationId), eq(attendanceRecords.gatheringId, id)));
   const previousPresent = new Set(previous.filter((person) => person.attended).map((person) => person.memberId));
@@ -146,7 +144,7 @@ async function saveAttendance(db: Queryable, actor: Actor, id: string, memberIds
   const place = gathering.placeKind === "physical" ? `${gathering.placeSpot}, ${entry.siteName}` : gathering.placeUrl!;
   await recordNotices(db, actor.organisationId, [gathering.hostMemberId, ...participants.map((person) => person.memberId), ...selected], {
     gatheringId: id, kind: "attendance-confirmed",
-    ...gatheringNoticeText({ message: `The Host ${record?.confirmedAt ? "amended" : "recorded"} Attendance for this ${gathering.kind === "event" ? "Event" : "Meetup"}.`,
+    ...gatheringNoticeText({ message: `The Host ${record?.confirmedAt ? "amended" : "recorded"} Attendance for this ${meetupOrEvent(gathering)}.`,
       activity: entry.activityName, startsAt: gathering.startsAt, place, externalPlace: gathering.placeKind === "physical" ? place : "Online" }),
   }, now);
 }
@@ -158,12 +156,9 @@ export async function confirmAttendancePrompt(deps: Deps, actor: Actor, noticeId
       .where(and(eq(notices.organisationId, actor.organisationId), eq(notices.id, noticeId), eq(notices.memberId, actor.memberId), eq(notices.kind, "attendance-prompt")));
     if (!notice?.gatheringId) throw new AccessDeniedError();
     const id = notice.gatheringId;
-    const [latest] = await db.select({ id: notices.id }).from(notices)
-      .where(and(eq(notices.organisationId, actor.organisationId), eq(notices.gatheringId, id), eq(notices.kind, "attendance-prompt")))
-      .orderBy(desc(notices.position)).limit(1);
-    if (latest?.id !== noticeId) throw new AccessDeniedError();
-    const [record] = await db.select().from(attendanceRecords).where(and(eq(attendanceRecords.organisationId, actor.organisationId), eq(attendanceRecords.gatheringId, id)));
-    if (record?.confirmedAt) throw new InvalidInputError("invalid-attendance", "Attendance is already recorded. Amend it in the app.");
+    const prompt = await attendancePromptState(db, actor.organisationId, id);
+    if (prompt.latestNoticeId !== noticeId) throw new AccessDeniedError();
+    if (prompt.confirmedAt) throw new InvalidInputError("invalid-attendance", "Attendance is already recorded. Amend it in the app.");
     const participants = await db.select({ memberId: gatheringMembers.memberId }).from(gatheringMembers)
       .where(and(eq(gatheringMembers.organisationId, actor.organisationId), eq(gatheringMembers.gatheringId, id), eq(gatheringMembers.status, "participant")));
     const retained = await db.select({ memberId: attendanceMembers.memberId }).from(attendanceMembers)
@@ -176,7 +171,7 @@ export async function confirmAttendancePrompt(deps: Deps, actor: Actor, noticeId
 function attendancePromptDue(now: Date) {
   const end = sql`${gatherings.startsAt} + ${gatherings.durationMinutes} * interval '1 minute'`;
   return and(eq(members.status, "active"), inArray(gatherings.status, ["scheduled", "completed"]),
-    sql`${end} <= ${now.toISOString()}::timestamptz`, sql`${end} + interval '7 days' > ${now.toISOString()}::timestamptz`,
+    sql`${end} <= ${now.toISOString()}::timestamptz`, sql`${end} + ${ATTENDANCE_WINDOW_DAYS} * interval '1 day' > ${now.toISOString()}::timestamptz`,
     isNull(attendanceRecords.confirmedAt), or(isNull(attendanceRecords.promptedHostMemberId), ne(attendanceRecords.promptedHostMemberId, gatherings.hostMemberId)));
 }
 
@@ -199,7 +194,7 @@ export async function processAttendance(deps: Deps): Promise<void> {
         const place = gathering.placeKind === "physical" ? `${gathering.placeSpot}, ${siteName}` : gathering.placeUrl!;
         await recordNotices(db, organisationId, [gathering.hostMemberId], {
           gatheringId: gathering.id, kind: "attendance-prompt",
-          ...gatheringNoticeText({ message: `Confirm who came to this ${gathering.kind === "event" ? "Event" : "Meetup"}.`, activity: activityName,
+          ...gatheringNoticeText({ message: `Confirm who came to this ${meetupOrEvent(gathering)}.`, activity: activityName,
             startsAt: gathering.startsAt, place, externalPlace: gathering.placeKind === "physical" ? place : "Online" }),
         }, now);
         await db.insert(attendanceRecords).values({ organisationId, gatheringId: gathering.id, promptedHostMemberId: gathering.hostMemberId })
@@ -219,7 +214,7 @@ export async function rateOccurrence(deps: Deps, actor: Actor, id: string, value
     if (!row) throw new AccessDeniedError();
     const gathering = row.gathering;
     const now = deps.clock.now();
-    if (gathering.status !== "scheduled" && gathering.status !== "completed" || now.getTime() < gathering.startsAt.getTime() + gathering.durationMinutes * 60_000) {
+    if (gathering.status !== "scheduled" && gathering.status !== "completed" || now < attendanceWindow(gathering).endsAt) {
       throw new InvalidInputError("invalid-rating", "Rate this occurrence after it ends.");
     }
     if (!Number.isInteger(value) || value < 1 || value > 5) throw new InvalidInputError("invalid-rating", "Choose a rating from one to five.");
