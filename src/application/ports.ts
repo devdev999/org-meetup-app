@@ -76,6 +76,7 @@ export interface TelegramMessage {
   chatId: string;
   text: string;
   joinMeetupId?: string;
+  inviteId?: string;
 }
 
 export interface TelegramPort {

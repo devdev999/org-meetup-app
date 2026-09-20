@@ -12,6 +12,9 @@ const labels: Record<NoticeKind, string> = {
   "meetup-edited": "Time or Place changes",
   "meetup-cancelled": "Meetup cancellations",
   "meetup-handed-over": "Host handovers",
+  "invite-received": "Invites",
+  "invite-accepted": "Accepted Invites",
+  "invite-declined": "Declined Invites",
 };
 
 export function NoticePreferenceForm({ preference }: { preference: NoticePreference }) {

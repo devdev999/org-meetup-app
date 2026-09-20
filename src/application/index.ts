@@ -26,6 +26,7 @@ import {
 import type { AiPort, Clock, EmailPort, IdentityPort, TelegramPort } from "./ports";
 import { handleTelegram, type TelegramCommand } from "./lib/telegram";
 import { deliverNotices, sendDailyDigests } from "./lib/notifications";
+import { expireInvites } from "./lib/meetups";
 
 export type { TelegramCommand, TelegramLink } from "./lib/telegram";
 export type { NotificationSettings, NoticePreference } from "./lib/notifications";
@@ -51,7 +52,7 @@ export type {
   UpdateProfileInput,
 };
 export type { ClaimMapping } from "./lib/schema";
-export type { CreateMeetupInput, EditMeetupInput, MeetupAudience, MeetupChoices, MeetupDetail, MeetupPerson, MeetupPlace, MeetupSummary, Notice } from "./lib/meetups";
+export type { CreateMeetupInput, EditMeetupInput, Invite, InviteAnswer, InviteChoices, InviteSearch, MeetupAudience, MeetupChoices, MeetupDetail, MeetupPerson, MeetupPlace, MeetupSummary, Notice } from "./lib/meetups";
 export type { InterestKind } from "./ports";
 export type { MemberProfile, MemberSearch } from "./lib/member-actor";
 export type { Interest, MemberInterest, InterestResolution, InterestSelection, ConfirmInterestInput, Stance } from "./lib/interests";
@@ -93,6 +94,7 @@ export interface ApplicationDependencies {
  * Organisation the application derives itself, never from input.
  */
 export interface Application {
+  expireInvites(): Promise<void>;
   deliverNotices(): Promise<void>;
   sendDailyDigests(): Promise<void>;
   handleTelegram(command: TelegramCommand): Promise<void>;
@@ -118,6 +120,7 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     email: dependencies.email,
   };
   return {
+    expireInvites: () => expireInvites(deps),
     deliverNotices: () => deliverNotices(deps),
     sendDailyDigests: () => sendDailyDigests(deps),
     handleTelegram: (command) => handleTelegram(deps, command),

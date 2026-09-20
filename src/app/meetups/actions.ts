@@ -46,6 +46,7 @@ function actionError(error: unknown): MeetupActionState {
 function refreshMeetups(meetupId: string) {
   revalidatePath("/meetups");
   revalidatePath(`/meetups/${meetupId}`);
+  revalidatePath(`/meetups/${meetupId}/invite`);
   revalidatePath("/inbox");
 }
 
@@ -105,4 +106,30 @@ export async function changeMeetup(
   }
   refreshMeetups(meetupId);
   return { message };
+}
+
+export async function sendInvite(meetupId: string, form: FormData): Promise<MeetupActionState> {
+  const { member } = await requireMemberPastWelcome();
+  try {
+    const invite = await member.inviteMember(meetupId, formText(form.get("memberId")) ?? "");
+    refreshMeetups(meetupId);
+    return { message: invite.state === "pending" ? "Invite sent." : `This Invite is already ${invite.state}.` };
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
+export async function answerInvite(inviteId: string, form: FormData): Promise<MeetupActionState> {
+  const { member } = await requireMemberPastWelcome();
+  const answer = form.get("answer");
+  if (answer !== "accept" && answer !== "decline") return { error: "Choose Accept or Decline." };
+  try {
+    const result = await member.answerInvite(inviteId, answer);
+    refreshMeetups(result.meetupId);
+    return { message: result.state === "declined" ? "Invite declined."
+      : result.membership === null ? "Your Invite was accepted, but you no longer have a place in this Meetup."
+      : result.membership === "waitlisted" ? "Invite accepted. You are on the waitlist." : "Invite accepted." };
+  } catch (error) {
+    return actionError(error);
+  }
 }

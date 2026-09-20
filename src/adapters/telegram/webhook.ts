@@ -30,6 +30,11 @@ export function createTelegramWebhook(application: Application, secret: string |
     if (callback?.message && !callback.from.is_bot && callback.message.chat.type === "private" && callback.message.chat.id === callback.from.id) {
       const meetupId = callback.data?.startsWith("join:") ? callback.data.slice(5) : undefined;
       if (meetupId) await application.handleTelegram({ kind: "join", chatId: String(callback.from.id), callbackId: callback.id, meetupId });
+      const inviteAnswer = callback.data?.match(/^(accept|decline):(.+)$/);
+      if (inviteAnswer) await application.handleTelegram({
+        kind: "answer-invite", chatId: String(callback.from.id), callbackId: callback.id,
+        inviteId: inviteAnswer[2]!, answer: inviteAnswer[1] === "accept" ? "accept" : "decline",
+      });
     }
     return Response.json({ ok: true });
   };

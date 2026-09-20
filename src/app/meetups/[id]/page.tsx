@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireMemberPastWelcome } from "../../../web/session";
 import { MeetupTime } from "../meetup-time";
 import { MeetupAction } from "../meetup-action";
+import { InviteAnswerForm } from "../invite-form";
 
 export default async function MeetupPage({ params }: { params: Promise<{ id: string }> }) {
   const { member } = await requireMemberPastWelcome();
@@ -36,7 +37,15 @@ export default async function MeetupPage({ params }: { params: Promise<{ id: str
         <p className="notice">You are on the waitlist. We will notify you in your inbox when a place opens.</p>
       )}
       {meetup.membership === "participant" && meetup.status === "scheduled" && <p className="notice">You joined this Meetup.</p>}
-      {meetup.canChange && !meetup.membership && (
+      {meetup.invite && (
+        <section>
+          <h2>Your Invite</h2>
+          <p>Your Invite is {meetup.invite.state}.</p>
+          {meetup.invite.state === "accepted" && !meetup.membership && <p>You no longer have a place in this Meetup.</p>}
+          {meetup.canChange && meetup.invite.state === "pending" && <InviteAnswerForm inviteId={meetup.invite.id} />}
+        </section>
+      )}
+      {meetup.canChange && !meetup.membership && meetup.audience.kind === "open" && meetup.invite?.state !== "pending" && (
         <MeetupAction meetupId={meetup.id} operation="join" label={meetup.participantCount >= meetup.capacity ? "Join waitlist" : "Join Meetup"} />
       )}
       {meetup.canChange && (meetup.membership === "participant" || meetup.membership === "waitlisted") && (
@@ -59,6 +68,7 @@ export default async function MeetupPage({ params }: { params: Promise<{ id: str
       {isHost && meetup.canChange && (
         <section>
           <h2>Manage Meetup</h2>
+          <p><Link href={`/meetups/${meetup.id}/invite`}>Invite a Member</Link></p>
           <p><Link href={`/meetups/${meetup.id}/edit`}>Edit Meetup</Link></p>
           {otherParticipants.length > 0 && (
             <>
@@ -68,8 +78,15 @@ export default async function MeetupPage({ params }: { params: Promise<{ id: str
             </>
           )}
           <h2>Cancel Meetup</h2>
-          <p>Participants and waitlisted Members will be notified. The waitlist will be cleared.</p>
+          <p>Participants, waitlisted Members and Members with pending Invites will be notified. The waitlist will be cleared.</p>
           <MeetupAction meetupId={meetup.id} operation="cancel" label="Cancel Meetup" />
+        </section>
+      )}
+      {isHost && meetup.invites && (
+        <section>
+          <h2>Invites</h2>
+          {meetup.invites.length === 0 ? <p className="muted">No Invites sent yet.</p>
+            : <ul>{meetup.invites.map((invite) => <li key={invite.id}>{invite.member.name}: {invite.state}</li>)}</ul>}
         </section>
       )}
     </main>

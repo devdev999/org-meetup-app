@@ -108,7 +108,7 @@ export function MeetupForm({
               </select>
             </label>
           )}
-          {audience === "invite-only" && <p className="muted">Only you can see this Meetup. Sending Invites is not available yet.</p>}
+          {audience === "invite-only" && <p className="muted">Only you and your invitees can see this Meetup. Send Invites after creating it.</p>}
         </>
       )}
       <label>

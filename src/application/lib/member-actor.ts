@@ -6,7 +6,7 @@ import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
 import { blankToNull, isUuid } from "./input";
 import { organisationAdmin, type OrganisationAdminActions } from "./organisation-admin";
-import { cancelMeetup, createMeetup, editMeetup, handOverMeetup, inbox, joinMeetup, leaveMeetup, listMeetups, meetupChoices, viewMeetup, type CreateMeetupInput, type EditMeetupInput, type MeetupChoices, type MeetupDetail, type MeetupSummary, type Notice } from "./meetups";
+import { answerInvite, cancelMeetup, createMeetup, editMeetup, handOverMeetup, inbox, inviteChoices, inviteMember, joinMeetup, leaveMeetup, listMeetups, meetupChoices, viewMeetup, type CreateMeetupInput, type EditMeetupInput, type Invite, type InviteAnswer, type InviteChoices, type InviteSearch, type MeetupChoices, type MeetupDetail, type MeetupSummary, type Notice } from "./meetups";
 import { departments, interestAliases, interests, memberInterests, members, organisations, sites } from "./schema";
 import type { InterestKind } from "../ports";
 import { confirmInterest, listInterests, memberInterestList, resolveInterest, setInterestStance, type ConfirmInterestInput, type Interest, type InterestResolution, type MemberInterest, type Stance } from "./interests";
@@ -80,6 +80,9 @@ export interface MemberActions {
   editMeetup(id: string, input: EditMeetupInput): Promise<void>;
   cancelMeetup(id: string): Promise<void>;
   handOverMeetup(id: string, participantMemberId: string): Promise<void>;
+  inviteMember(meetupId: string, memberId: string): Promise<Invite>;
+  inviteChoices(meetupId: string, input?: InviteSearch): Promise<InviteChoices>;
+  answerInvite(inviteId: string, answer: "accept" | "decline"): Promise<InviteAnswer>;
   interests(): Promise<Interest[]>;
   myInterests(): Promise<MemberInterest[]>;
   resolveInterest(input: { phrase: string; kind: InterestKind }): Promise<InterestResolution>;
@@ -140,6 +143,13 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     editMeetup: (id, input) => withNotices(id, () => editMeetup(deps, actor, id, input)),
     cancelMeetup: (id) => withNotices(id, () => cancelMeetup(deps, actor, id)),
     handOverMeetup: (id, participantMemberId) => withNotices(id, () => handOverMeetup(deps, actor, id, participantMemberId)),
+    inviteMember: (id, memberId) => withNotices(id, () => inviteMember(deps, actor, id, memberId)),
+    inviteChoices: (id, input = {}) => afterNotice(() => inviteChoices(deps, actor, id, input), { action: "meetup-invite-choices", filter: { meetupId: id, name: input.name ?? "", page: String(input.page ?? 0) } }),
+    answerInvite: async (id, answer) => {
+      const result = await answerInvite(deps, actor, id, answer);
+      await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: result.meetupId });
+      return result;
+    },
     interests: () => afterNotice(() => listInterests(deps, actor)),
     myInterests: () => afterNotice(() => memberInterestList(deps, actor)),
     resolveInterest: (input) => afterNotice(() => resolveInterest(deps, actor, input)),
