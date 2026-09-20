@@ -17,7 +17,9 @@ export interface FlagInput {
 
 export interface Flag {
   id: string;
-  target: FlagInput["target"] & { label: string };
+  target: { id: string; label: string } & (
+    { kind: "member"; email: string } | { kind: "meetup" | "event"; startsAt: Date; host: MeetupPerson }
+  );
   reporter: MeetupPerson;
   reason: string;
   state: "open" | "resolved";
@@ -61,15 +63,20 @@ export async function readFlags(db: Queryable, organisationId: string, state: Fl
   if (state !== "open" && state !== "resolved") throw new InvalidInputError("invalid-flag", "Choose open or resolved Flags.");
   const reporter = alias(members, "reporter");
   const target = alias(members, "target");
-  const rows = await db.select({ flag: flags, reporterName: reporter.name, targetName: target.name, activityName: activities.name }).from(flags)
+  const host = alias(members, "occurrence_host");
+  const rows = await db.select({ flag: flags, reporterName: reporter.name, targetName: target.name, targetEmail: target.email,
+    activityName: activities.name, startsAt: gatherings.startsAt, hostId: gatherings.hostMemberId, hostName: host.name }).from(flags)
     .innerJoin(reporter, and(eq(reporter.organisationId, flags.organisationId), eq(reporter.id, flags.reporterMemberId)))
     .leftJoin(target, and(eq(target.organisationId, flags.organisationId), eq(target.id, flags.targetMemberId)))
     .leftJoin(gatherings, and(eq(gatherings.organisationId, flags.organisationId), eq(gatherings.id, flags.gatheringId)))
     .leftJoin(activities, and(eq(activities.organisationId, gatherings.organisationId), eq(activities.id, gatherings.activityId)))
+    .leftJoin(host, and(eq(host.organisationId, gatherings.organisationId), eq(host.id, gatherings.hostMemberId)))
     .where(and(eq(flags.organisationId, organisationId), eq(flags.state, state)))
     .orderBy(flags.createdAt, flags.id);
-  return rows.map(({ flag, reporterName, targetName, activityName }) => ({
-    id: flag.id, target: { kind: flag.targetKind, id: flag.targetMemberId ?? flag.gatheringId!, label: targetName ?? activityName! },
+  return rows.map(({ flag, reporterName, targetName, targetEmail, activityName, startsAt, hostId, hostName }) => ({
+    id: flag.id, target: flag.targetKind === "member"
+      ? { kind: "member", id: flag.targetMemberId!, label: targetName!, email: targetEmail! }
+      : { kind: flag.targetKind, id: flag.gatheringId!, label: activityName!, startsAt: startsAt!, host: { memberId: hostId!, name: hostName! } },
     reporter: { memberId: flag.reporterMemberId, name: reporterName }, reason: flag.reason, state: flag.state, createdAt: flag.createdAt,
     resolution: flag.resolvedAt ? { note: flag.resolutionNote!, resolvedAt: flag.resolvedAt, resolvedByMemberId: flag.resolvedByMemberId! } : null,
   }));

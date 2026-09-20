@@ -25,6 +25,7 @@ test("Members Flag privately and an Organisation Admin resolves, cancels, suspen
   await page.setViewportSize({ width: 390, height: 844 });
   await signIn(page, "Morgan Host", "morgan@ministry-a.example");
   const meetupUrl = await createMeetup(page);
+  const meetupId = new URL(meetupUrl).pathname.split("/").at(-1)!;
   const reporterContext = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 } });
   const adminContext = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 } });
   try {
@@ -32,6 +33,8 @@ test("Members Flag privately and an Organisation Admin resolves, cancels, suspen
     await signIn(reporter, "Riley Reporter", "riley@ministry-a.example");
     await reporter.goto("/members");
     await reporter.getByRole("link", { name: "Morgan Host", exact: true }).click();
+    await reporter.waitForURL(/\/members\/[^/]+$/);
+    const targetMemberId = new URL(reporter.url()).pathname.split("/").at(-1)!;
     await reporter.getByText("Flag this Member", { exact: true }).click();
     await reporter.getByLabel("Reason for this Flag").fill("Repeated unwanted contact.");
     await reporter.getByRole("button", { name: "Send Flag", exact: true }).click();
@@ -51,13 +54,21 @@ test("Members Flag privately and an Organisation Admin resolves, cancels, suspen
     await admin.goto("/admin/moderation");
     const flag = admin.getByRole("article").filter({ hasText: "Repeated unwanted contact." });
     await expect(flag).toContainText("Riley Reporter");
+    await expect(flag).toContainText("morgan@ministry-a.example");
+    await flag.getByRole("link", { name: "Review Member access", exact: true }).click();
+    await expect(admin).toHaveURL(new RegExp(`#member-${targetMemberId}$`));
+    await expect(admin.locator(`#member-${targetMemberId}`)).toContainText("Morgan Host");
+    const meetupFlag = admin.getByRole("article").filter({ hasText: "Unsafe Meetup arrangements." });
+    await expect(meetupFlag).toContainText("Host: Morgan Host");
+    await meetupFlag.getByRole("link", { name: "Review this Meetup", exact: true }).click();
+    await expect(admin).toHaveURL(new RegExp(`#occurrence-${meetupId}$`));
     await flag.getByLabel("Resolution note").fill("Discussed expectations with the Member.");
     await flag.getByRole("button", { name: "Resolve Flag", exact: true }).click();
     await expect(flag).toHaveCount(0);
     await admin.getByRole("link", { name: "Resolved Flags", exact: true }).click();
     await expect(admin.getByText("Discussed expectations with the Member.", { exact: true })).toBeVisible();
     await admin.getByRole("link", { name: "Open Flags", exact: true }).click();
-    const occurrence = admin.getByRole("article").filter({ has: admin.getByRole("heading", { name: "coffee · Meetup", exact: true }) }).filter({ hasText: "Morgan Host" });
+    const occurrence = admin.locator(`#occurrence-${meetupId}`);
     await occurrence.getByRole("button", { name: "Cancel Meetup", exact: true }).click();
     await expect(occurrence).toHaveCount(0);
     await reporter.goto(meetupUrl);

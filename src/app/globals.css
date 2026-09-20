@@ -63,6 +63,13 @@ p {
   border-radius: 0.5rem;
   padding: 1rem;
   margin-bottom: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.notice:target {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  scroll-margin-top: 1rem;
 }
 
 .error {

@@ -24,7 +24,7 @@ test("a Member Flag reaches only the Organisation Admin queue and is resolved wi
   const queue = await admin.flags();
   expect(queue).toHaveLength(1);
   expect(queue[0]).toMatchObject({
-    state: "open", target: { kind: "member", id: boId, label: "Bo" },
+    state: "open", target: { kind: "member", id: boId, label: "Bo", email: "bo@example.test" },
     reporter: { memberId: (await ana.profile()).memberId, name: "Ana" },
     reason: "Repeated unwanted messages.", resolution: null,
   });
@@ -57,7 +57,9 @@ test.each(["meetup", "event"] as const)("a Member can Flag a visible private %s 
   await bo.answerInvite(invite.id, "accept");
   const inboxBefore = await ana.inbox();
   await bo.flag({ target, reason: "Unsafe arrangements." });
-  expect(await admin.flags()).toContainEqual(expect.objectContaining({ target: { ...target, label: "coffee" }, reason: "Unsafe arrangements." }));
+  expect(await admin.flags()).toContainEqual(expect.objectContaining({ target: {
+    ...target, label: "coffee", startsAt: occurrence.startsAt, host: occurrence.host,
+  }, reason: "Unsafe arrangements." }));
   expect(await ana.inbox()).toEqual(inboxBefore);
 });
 
