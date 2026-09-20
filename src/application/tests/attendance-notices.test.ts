@@ -158,3 +158,43 @@ test("Attendance confirmations and amendments notify Participants without exposi
     chatId: "102", text: "The Host amended Attendance for this Event. coffee, 2026-09-18 10:00 UTC, Online.",
   });
 });
+
+test("an unticked former Host receives no new private Event details in Attendance notices", async () => {
+  const anaClaims = { sub: "ana", name: "Ana", email: "ana@example.test" };
+  await h.app.bootstrap({ ...ministryA, organisationAdmin: anaClaims });
+  const ana = await signInAndAcknowledgeAs(h, "ministry-a", anaClaims);
+  const bo = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", name: "Bo", email: "bo@example.test" });
+  const cy = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "cy", name: "Cy", email: "cy@example.test" });
+  const admin = await ana.organisationAdmin();
+  const input = {
+    activityId: (await ana.meetupChoices()).activities[0]!.id, startsAt: new Date("2026-09-18T10:00:00Z"), durationMinutes: 60, capacity: 2,
+    audience: { kind: "invite-only" as const }, place: { kind: "virtual" as const, url: "https://meet.example/old-room" }, description: "",
+  };
+  const occurrence = await admin.createEvent(input);
+  const anaId = (await ana.profile()).memberId;
+  const boId = (await bo.profile()).memberId;
+  const cyId = (await cy.profile()).memberId;
+  await bo.answerInvite((await ana.inviteToEvent(occurrence.id, boId)).id, "accept");
+  const link = await cy.beginTelegramLink();
+  await h.app.handleTelegram({ kind: "link", chatId: "103", code: new URL(link.url).searchParams.get("start")! });
+  await admin.reassignEventHost(occurrence.id, cyId);
+  await admin.reassignEventHost(occurrence.id, anaId);
+  const newPlace = "https://meet.example/new-private-room";
+  await ana.editEvent(occurrence.id, { ...input, place: { kind: "virtual", url: newPlace } });
+  expect(await cy.viewEvent(occurrence.id)).toBeUndefined();
+  h.telegram.reset();
+  h.email.reset();
+  h.clock.set(new Date("2026-09-18T11:00:00Z"));
+  await ana.confirmAttendance(occurrence.id, [anaId]);
+  expect((await cy.inbox()).filter((notice) => notice.kind === "attendance-confirmed")).toEqual([]);
+  expect(h.telegram.outbox.filter((message) => message.chatId === "103")).toEqual([]);
+  expect((await bo.inbox()).filter((notice) => notice.kind === "attendance-confirmed")).toHaveLength(1);
+  expect(await bo.attendance(occurrence.id)).toMatchObject({ outcome: "no-show" });
+  h.clock.set(new Date("2026-09-19T09:00:00Z"));
+  await h.app.sendDailyDigests();
+  expect(h.email.outbox.filter((message) => message.to === "cy@example.test").some((message) => message.text.includes(newPlace))).toBe(false);
+  expect(h.email.outbox.find((message) => message.to === "bo@example.test")?.text).toContain(newPlace);
+  await ana.confirmAttendance(occurrence.id, [anaId, cyId]);
+  expect((await cy.inbox()).filter((notice) => notice.kind === "attendance-confirmed")).toHaveLength(1);
+  expect(await cy.viewEvent(occurrence.id)).toMatchObject({ place: { kind: "virtual", url: newPlace } });
+});

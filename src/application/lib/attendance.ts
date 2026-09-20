@@ -144,7 +144,7 @@ async function saveAttendance(db: Queryable, actor: Actor, id: string, memberIds
   await db.delete(attendanceMembers).where(and(eq(attendanceMembers.organisationId, actor.organisationId), eq(attendanceMembers.gatheringId, id)));
   await db.insert(attendanceMembers).values([...eligible].map((memberId) => ({ organisationId: actor.organisationId, gatheringId: id, memberId, attended: selected.includes(memberId) })));
   const place = gathering.placeKind === "physical" ? `${gathering.placeSpot}, ${entry.siteName}` : gathering.placeUrl!;
-  await recordNotices(db, actor.organisationId, [...eligible], {
+  await recordNotices(db, actor.organisationId, [gathering.hostMemberId, ...participants.map((person) => person.memberId), ...selected], {
     gatheringId: id, kind: "attendance-confirmed",
     ...gatheringNoticeText({ message: `The Host ${record?.confirmedAt ? "amended" : "recorded"} Attendance for this ${gathering.kind === "event" ? "Event" : "Meetup"}.`,
       activity: entry.activityName, startsAt: gathering.startsAt, place, externalPlace: gathering.placeKind === "physical" ? place : "Online" }),
