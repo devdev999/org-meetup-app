@@ -52,7 +52,7 @@ test("onboarding reports missing OIDC credentials without accepting a secret val
     oidc: { ...input.oidc, ...{ clientSecret: "must-not-be-stored" } } })).rejects.toMatchObject({ code: "invalid-organisation" });
 });
 
-test("a Platform Admin completes the owner Organisation's first admin setup without replacing an existing admin", async () => {
+test("a Platform Admin completes the owner Organisation's first Organisation Admin setup without replacing an existing Organisation Admin", async () => {
   const platform = await platformAdmin();
   const owner = (await platform.organisations())[0]!;
   expect(owner.hasOrganisationAdmin).toBe(false);
