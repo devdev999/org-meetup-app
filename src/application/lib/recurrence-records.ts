@@ -40,13 +40,13 @@ export function visibleRecurrences(actor: Actor, siteId: string | null) {
 
 export async function readRecurrences(db: Queryable, actor: Actor, ids: string[], siteId: string | null, now: Date): Promise<Map<string, Recurrence>> {
   if (!ids.length) return new Map();
-  const rows = await db.select({ recurrence: recurrences, hostName: members.name, canJoin: sql<boolean>`${visibleRecurrences(actor, siteId)}` }).from(recurrences)
+  const rows = await db.select({ recurrence: recurrences, hostName: members.name, visible: sql<boolean>`${visibleRecurrences(actor, siteId)}` }).from(recurrences)
     .innerJoin(members, and(eq(members.organisationId, recurrences.organisationId), eq(members.id, recurrences.hostMemberId)))
     .where(and(eq(recurrences.organisationId, actor.organisationId), inArray(recurrences.id, ids)));
   const standing = await db.select({ recurrenceId: recurrenceMembers.recurrenceId, memberId: recurrenceMembers.memberId }).from(recurrenceMembers)
     .where(and(eq(recurrenceMembers.organisationId, actor.organisationId), inArray(recurrenceMembers.recurrenceId, ids)));
   const byRecurrence = Map.groupBy(standing, (member) => member.recurrenceId);
-  return new Map(rows.map(({ recurrence, hostName, canJoin }) => {
+  return new Map(rows.map(({ recurrence, hostName, visible }) => {
     const participants = byRecurrence.get(recurrence.id) ?? [];
     const isStanding = participants.some((member) => member.memberId === actor.memberId);
     const isHost = recurrence.hostMemberId === actor.memberId;
@@ -56,7 +56,7 @@ export async function readRecurrences(db: Queryable, actor: Actor, ids: string[]
       id: recurrence.id, frequency: recurrence.frequency, startsAt: recurrence.startsAt, endsOn: recurrence.endsOn,
       host: { memberId: recurrence.hostMemberId, name: hostName }, capacity: recurrence.capacity,
       standingCount: participants.length, isStanding, ended, stopped,
-      canJoin: canJoin && !stopped && !ended && !isStanding && participants.length < recurrence.capacity,
+      canJoin: visible && !stopped && !ended && !isStanding && participants.length < recurrence.capacity,
       canLeave: isStanding && !isHost, canStop: isHost && !stopped,
     }];
   }));
