@@ -55,7 +55,10 @@ export type { ClaimMapping } from "./lib/schema";
 export type { CreateMeetupInput, EditMeetupInput, Invite, InviteAnswer, InviteChoices, InviteSearch, MeetupAudience, MeetupChoices, MeetupDetail, MeetupPerson, MeetupPlace, MeetupSummary, Notice } from "./lib/meetups";
 export type { InterestKind } from "./ports";
 export type { MemberProfile, MemberSearch } from "./lib/member-actor";
-export type { Interest, MemberInterest, InterestResolution, InterestSelection, ConfirmInterestInput, Stance } from "./lib/interests";
+export type { Interest, MemberInterest, InterestResolution, InterestSelection, InterestChoice, ConfirmInterestInput, Stance } from "./lib/interests";
+export { rankInvitees, rankMeetups, type InviteRankingCandidate, type MeetupRankingCandidate } from "./lib/suggestion-ranking";
+export type { InviteSuggestion, MeetupSuggestion, PreviewInviteSuggestionsInput } from "./lib/suggestions";
+export type { ExtractMeetupInterestsInput } from "./lib/meetup-interests";
 
 /**
  * Recognises a `SignInError` by shape rather than class identity: the web

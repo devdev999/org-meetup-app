@@ -85,3 +85,31 @@ test("times out an unresponsive provider so Interest resolution can fall back", 
   const ai = new ChatCompletionAi({ baseUrl, apiKey: "provider-key", model: "interest-model", timeoutMs: 50 });
   await expect(ai.resolveInterest(input)).rejects.toMatchObject({ name: "TimeoutError" });
 }, 1_000);
+
+test("extracts Interests from Activity and description through the configured extraction model", async () => {
+  reply = { status: 200, body: { choices: [{ finish_reason: "stop", message: {
+    content: JSON.stringify({ interests: [{ phrase: "Chess", kind: "hobby" }] }),
+  } }] } };
+  const ai = new ChatCompletionAi({ baseUrl, apiKey: "provider-key", model: "canonical-model", extractionModel: "small-model" });
+  const input = { activity: "coffee", description: "Chess with Ana in Finance." };
+  expect(await ai.extractInterests(input)).toEqual([{ phrase: "Chess", kind: "hobby" }]);
+  expect(requests[0]?.body).toMatchObject({ model: "small-model", messages: [
+    { role: "system", content: expect.stringContaining("Interests") },
+    { role: "user", content: JSON.stringify(input) },
+  ] });
+});
+
+test.each([
+  { interests: [{ phrase: "Chess", kind: "other" }] },
+  { interests: [{ phrase: "", kind: "hobby" }] },
+  { interests: "Chess" },
+])("rejects unusable extraction output: %j", async (output) => {
+  reply = { status: 200, body: { choices: [{ finish_reason: "stop", message: { content: JSON.stringify(output) } }] } };
+  await expect(adapter().extractInterests({ activity: "coffee", description: "Chess" })).rejects.toThrow();
+});
+
+test("extraction times out an unresponsive provider", async () => {
+  reply = null;
+  const ai = new ChatCompletionAi({ baseUrl, apiKey: "provider-key", model: "interest-model", timeoutMs: 50 });
+  await expect(ai.extractInterests({ activity: "coffee", description: "SQL" })).rejects.toMatchObject({ name: "TimeoutError" });
+}, 1_000);

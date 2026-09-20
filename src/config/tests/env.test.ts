@@ -63,6 +63,11 @@ test.each([
   })).toThrow();
 });
 
+test("AI extraction can use a separately configured model", () => {
+  expect(aiConfig({ NODE_ENV: "test", AI_PROVIDER: "chat-completion", AI_BASE_URL: "https://chat.example/v1", AI_API_KEY: "example-key",
+    AI_MODEL: "canonical-model", AI_EXTRACTION_MODEL: "small-model" })).toMatchObject({ model: "canonical-model", extractionModel: "small-model" });
+});
+
 test("bootstrap parses Department and Site lists from JSON, preserving commas inside names", () => {
   const config = bootstrapConfig({
     ...bootstrapEnvironment,

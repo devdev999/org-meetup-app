@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { InterestKind } from "../ports";
 import { requireActiveMember, VISIBLE_MEMBER_STATUSES, type Actor } from "./actor";
 import type { Database } from "./db";
+import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
 import { interests, interestAliases, memberInterests, members } from "./schema";
@@ -21,9 +22,11 @@ export interface InterestResolution {
   proposed: InterestSelection;
   shortlist: Interest[];
 }
-export interface ConfirmInterestInput {
+export interface InterestChoice {
   phrase: string;
   selection: InterestSelection;
+}
+export interface ConfirmInterestInput extends InterestChoice {
   stance: Stance;
 }
 
@@ -43,9 +46,11 @@ const selectionSchema = z.union([
   z.object({ interestId: z.uuid() }),
   z.object({ name: z.string().trim().min(1).max(120), kind: kindSchema }),
 ]);
-const confirmSchema = z.object({
+export const interestChoiceSchema = z.object({
   phrase: phraseSchema,
   selection: selectionSchema,
+});
+const confirmSchema = interestChoiceSchema.extend({
   stance: z.enum(["shares", "seeks"]),
 });
 
@@ -149,36 +154,39 @@ export async function confirmInterest(deps: Deps, actor: Actor, input: ConfirmIn
     "Enter an Interest of up to 120 characters, choose its listing, and choose Shares or Seeks.");
   await deps.db.transaction(async (tx) => {
     await requireActiveMember(tx, actor);
-    let interestId: string;
-    if ("interestId" in selection) {
-      const [existing] = await tx.select({ id: interests.id }).from(interests)
-        .where(and(eq(interests.organisationId, actor.organisationId), eq(interests.id, selection.interestId)));
-      if (!existing) throw new InvalidInputError("unknown-interest", "Choose an Interest from your Organisation.");
-      interestId = existing.id;
-    } else {
-      const [interest] = await tx.insert(interests).values({
-        organisationId: actor.organisationId, name: selection.name, nameKey: selection.name.toLowerCase(), kind: selection.kind, createdAt: deps.clock.now(),
-      }).onConflictDoUpdate({ target: [interests.organisationId, interests.nameKey], set: { nameKey: selection.name.toLowerCase() } })
-        .returning({ id: interests.id, name: interests.name, kind: interests.kind });
-      if (interest!.name !== selection.name || interest!.kind !== selection.kind) {
-        throw new InvalidInputError("interest-name-conflict", "An Interest with this name already exists with a different spelling or kind. Preview again and confirm the existing Interest, or use another name.");
-      }
-      interestId = interest!.id;
-    }
-    const [alias] = await tx.insert(interestAliases).values({
-      organisationId: actor.organisationId, interestId, phrase, phraseKey: aliasKey(phrase), createdAt: deps.clock.now(),
-    }).onConflictDoUpdate({
-      target: [interestAliases.organisationId, interestAliases.phraseKey],
-      set: { phrase },
-      setWhere: eq(interestAliases.interestId, interestId),
-    }).returning({ interestId: interestAliases.interestId });
-    if (!alias) {
-      throw new InvalidInputError("alias-conflict", "This phrase already refers to another Interest. Confirm that Interest or use a different phrase.");
-    }
+    const interestId = await saveInterestChoice(tx, actor.organisationId, { phrase, selection }, deps.clock.now());
     await tx.insert(memberInterests).values({ organisationId: actor.organisationId, memberId: actor.memberId, interestId, stance })
       .onConflictDoUpdate({ target: [memberInterests.organisationId, memberInterests.memberId, memberInterests.interestId], set: { stance } });
   });
   return memberInterestList(deps, actor);
+}
+
+export async function saveInterestChoice(db: Queryable, organisationId: string, { phrase, selection }: InterestChoice, now: Date): Promise<string> {
+  let interestId: string;
+  if ("interestId" in selection) {
+    const [existing] = await db.select({ id: interests.id }).from(interests)
+      .where(and(eq(interests.organisationId, organisationId), eq(interests.id, selection.interestId)));
+    if (!existing) throw new InvalidInputError("unknown-interest", "Choose an Interest from your Organisation.");
+    interestId = existing.id;
+  } else {
+    const [interest] = await db.insert(interests).values({
+      organisationId, name: selection.name, nameKey: selection.name.toLowerCase(), kind: selection.kind, createdAt: now,
+    }).onConflictDoUpdate({ target: [interests.organisationId, interests.nameKey], set: { nameKey: selection.name.toLowerCase() } })
+      .returning({ id: interests.id, name: interests.name, kind: interests.kind });
+    if (interest!.name !== selection.name || interest!.kind !== selection.kind) {
+      throw new InvalidInputError("interest-name-conflict", "An Interest with this name already exists with a different spelling or kind. Preview again and confirm the existing Interest, or use another name.");
+    }
+    interestId = interest!.id;
+  }
+  const [alias] = await db.insert(interestAliases).values({
+    organisationId, interestId, phrase, phraseKey: aliasKey(phrase), createdAt: now,
+  }).onConflictDoUpdate({
+    target: [interestAliases.organisationId, interestAliases.phraseKey],
+    set: { phrase },
+    setWhere: eq(interestAliases.interestId, interestId),
+  }).returning({ interestId: interestAliases.interestId });
+  if (!alias) throw new InvalidInputError("alias-conflict", "This phrase already refers to another Interest. Confirm that Interest or use a different phrase.");
+  return interestId;
 }
 
 export async function setInterestStance(deps: Deps, actor: Actor, input: { interestId: string; stance: Stance }): Promise<MemberInterest[]> {

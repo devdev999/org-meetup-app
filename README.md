@@ -46,11 +46,21 @@ The inbox receives channel-neutral notices for joins, departures, promotions, ti
 
 The application stores Meetups and future Events together with a kind. All commands and queries derive the Organisation from the Member actor. Mutations use the same Organisation transaction lock as roster and admin changes, so seating and notices commit together.
 
+## Suggestions
+
+The home page suggests up to twenty open, unjoined Meetups in your scope over the next fourteen days. It ranks overlap with saved relevant Interests before start time and shows the reasons. Broad Activity names and descriptions are not ranking inputs.
+
+Hosts can select up to twenty relevant Interests while creating or editing a Meetup. Creation also extracts proposals from the selected Activity and description. Review or remove these before Create, including any proposed new Interests. Manual choices survive extraction reruns, and a failed or empty extraction leaves creation available. Saving relevant Interests never changes personal Shares or Seeks.
+
+Creation and editing show up to twenty suggested invitees. Candidates must be Active in the Host's Organisation and, for physical Meetups, based at the Place's Site. Hosts, current Participants and pending invitees are excluded. Creation lets the Host select Invites to send with the normal Create confirmation. Editing offers immediate one-tap Invites based on the saved Interests and Place.
+
+The pure ranker gives compatible Member Interest overlap two points and Seeks with Seeks one point. Each overlap with a saved relevant Interest adds two points regardless of Stance. Ties prefer a Member without a recorded Connection, then a different known Department, then an order seeded for that Meetup. Home ranking uses one point per relevant Interest, then fewer Connections with Participants, then the soonest start. Connection counts are zero until issue #12 supplies Attendance data. Queries compute Suggestions each time; only the confirmed relevant Interests and Invites are saved.
+
 ## Notifications
 
 ### Invites
 
-The Host can invite a Member of the same Organisation from any upcoming Meetup, including a Member who has not logged in yet. The Invite page searches names and shows twenty Members per page. Invitees can see that Meetup regardless of their Site, including after accepting, declining or expiry. The Host sees every Invite's state; each invitee sees only their own. Repeating an Invite keeps the existing state and sends no duplicate notice.
+The Host can invite a Member of the same Organisation from any upcoming Meetup, including a Member who has not logged in yet. The Invite page searches names and shows twenty Members per page. Invitees can see that Meetup regardless of their Site, including after accepting, declining or expiry. The Host sees each current Invite's state; each invitee sees only their own. Repeating an Invite keeps the existing state and sends no duplicate notice. A Suggestion can explicitly send a fresh Invite after a previous answer. Its new identifier prevents old Telegram buttons from answering it, and retrying that send does not send again.
 
 Invitees accept or decline in the app or through Telegram buttons. Accepting takes a free spot or moves the Member to the front of the waitlist, including an existing waitlisted Member. Each new acceptance goes ahead of earlier waitlisted acceptances. Repeating the same answer leaves places and notices unchanged; a different answer after responding is refused. Declining keeps a place or waitlist entry obtained by joining an open Meetup, and the Host's notice explains that the Member remains. Leave separately to withdraw. After leaving, retrying an old Accept button explains that the Member no longer has a place.
 
@@ -191,7 +201,9 @@ Per-Organisation OIDC settings (issuer, client id, client secret, claim mapping)
 
 To check a configured endpoint, set `AI_CONTRACT_TEST=yes` and the three `AI_*` connection variables in the shell, then run `pnpm test src/adapters/ai/tests/live-contract.test.ts`. This makes three live requests using fixed Interest phrases. The contract tests skip unless explicitly enabled with credentials.
 
-The AI receives only the typed Interest phrase and shortlisted Interest names, kinds and counts. It receives no Member or Organisation identifiers or profile fields. Requests time out after five seconds. If the provider fails, refuses, or returns an invalid result, the application uses similarity matching and still asks the Member to confirm. The production adapter lives in `src/adapters/ai/chat-completion.ts`; `MemoryAi` records requests and accepts scripted results or errors for application tests. An HTTP adapter test verifies the request and failure handling against a local stub endpoint.
+Canonicalisation sends the typed Interest phrase and shortlisted Interest names, kinds and counts. Extraction sends the selected Activity name and description, then canonicalises each extracted phrase within the Member's Organisation. These texts may contain identifying information under ADR 0009. Requests time out after five seconds. Failed canonicalisation falls back to text similarity; failed extraction adds no Interests and leaves manual creation available.
+
+Set `AI_EXTRACTION_MODEL` for a separate extraction model, such as the issue's preferred `gpt-5.6-luna` where the configured endpoint supports it. If unset, extraction uses `AI_MODEL`. Both operations require JSON mode. The production adapter lives in `src/adapters/ai/chat-completion.ts`; `MemoryAi` records requests and accepts scripted results or errors for application tests. HTTP adapter tests cover the request, invalid output and timeout behavior with a local stub endpoint.
 
 ## Migrations
 

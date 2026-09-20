@@ -264,6 +264,16 @@ export const gatherings = pgTable("gatherings", {
   foreignKey({ columns: [table.organisationId, table.audienceSiteId], foreignColumns: [sites.organisationId, sites.id] }),
 ]);
 
+export const gatheringInterests = pgTable("gathering_interests", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  gatheringId: uuid().notNull(),
+  interestId: uuid().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.gatheringId, table.interestId] }),
+  foreignKey({ columns: [table.organisationId, table.gatheringId], foreignColumns: [gatherings.organisationId, gatherings.id] }),
+  foreignKey({ columns: [table.organisationId, table.interestId], foreignColumns: [interests.organisationId, interests.id] }),
+]);
+
 export const gatheringMembers = pgTable("gathering_members", {
   organisationId: uuid().notNull().references(() => organisations.id),
   gatheringId: uuid().notNull(),

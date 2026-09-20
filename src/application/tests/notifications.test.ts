@@ -135,7 +135,10 @@ test("an edit to the time or Place emails participants immediately", async () =>
   const meetup = await createMeetup(ana);
   await bo.joinMeetup(meetup.id);
   h.email.reset();
-  await ana.editMeetup(meetup.id, { ...meetup, startsAt: new Date("2026-09-18T10:00:00Z") });
+  await ana.editMeetup(meetup.id, {
+    startsAt: new Date("2026-09-18T10:00:00Z"), durationMinutes: meetup.durationMinutes,
+    place: meetup.place, capacity: meetup.capacity, description: meetup.description,
+  });
   expect(h.email.outbox).toEqual([expect.objectContaining({
     to: "bo@example.test", subject: "Meetup notice",
     text: "The Host changed the time or Place of this Meetup. coffee, 2026-09-18 10:00 UTC, https://meet.example/Finance/ana@example.test.",

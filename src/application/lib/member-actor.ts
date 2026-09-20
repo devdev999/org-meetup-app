@@ -12,6 +12,8 @@ import type { InterestKind } from "../ports";
 import { confirmInterest, listInterests, memberInterestList, resolveInterest, setInterestStance, type ConfirmInterestInput, type Interest, type InterestResolution, type MemberInterest, type Stance } from "./interests";
 import { beginTelegramLink, unlinkTelegram, type TelegramLink } from "./telegram";
 import { deliverSoon, notificationSettings, setNoticePreference, type NotificationSettings, type NoticePreference } from "./notifications";
+import { inviteSuggestions, meetupSuggestions, previewInviteSuggestions, type InviteSuggestion, type MeetupSuggestion, type PreviewInviteSuggestionsInput } from "./suggestions";
+import { extractMeetupInterests, type ExtractMeetupInterestsInput } from "./meetup-interests";
 
 export type MemberStatus = (typeof members.status.enumValues)[number];
 
@@ -80,8 +82,12 @@ export interface MemberActions {
   editMeetup(id: string, input: EditMeetupInput): Promise<void>;
   cancelMeetup(id: string): Promise<void>;
   handOverMeetup(id: string, participantMemberId: string): Promise<void>;
-  inviteMember(meetupId: string, memberId: string): Promise<Invite>;
+  inviteMember(meetupId: string, memberId: string, previousInviteId?: string): Promise<Invite>;
   inviteChoices(meetupId: string, input?: InviteSearch): Promise<InviteChoices>;
+  inviteSuggestions(meetupId: string): Promise<InviteSuggestion[]>;
+  previewInviteSuggestions(input: PreviewInviteSuggestionsInput): Promise<InviteSuggestion[]>;
+  meetupSuggestions(): Promise<MeetupSuggestion[]>;
+  extractMeetupInterests(input: ExtractMeetupInterestsInput): Promise<InterestResolution[]>;
   answerInvite(inviteId: string, answer: "accept" | "decline"): Promise<InviteAnswer>;
   interests(): Promise<Interest[]>;
   myInterests(): Promise<MemberInterest[]>;
@@ -134,7 +140,11 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     notificationSettings: () => notificationSettings(deps, actor),
     setNoticePreference: (input) => setNoticePreference(deps, actor, input),
     meetupChoices: () => meetupChoices(deps, actor),
-    createMeetup: (input) => createMeetup(deps, actor, input),
+    createMeetup: async (input) => {
+      const meetup = await createMeetup(deps, actor, input);
+      if (meetup.invites?.length) await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: meetup.id });
+      return meetup;
+    },
     listMeetups: () => listMeetups(deps, actor),
     viewMeetup: (id) => viewMeetup(deps, actor, id),
     joinMeetup: (id) => withNotices(id, () => joinMeetup(deps, actor, id)),
@@ -143,8 +153,12 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     editMeetup: (id, input) => withNotices(id, () => editMeetup(deps, actor, id, input)),
     cancelMeetup: (id) => withNotices(id, () => cancelMeetup(deps, actor, id)),
     handOverMeetup: (id, participantMemberId) => withNotices(id, () => handOverMeetup(deps, actor, id, participantMemberId)),
-    inviteMember: (id, memberId) => withNotices(id, () => inviteMember(deps, actor, id, memberId)),
+    inviteMember: (id, memberId, previousInviteId) => withNotices(id, () => inviteMember(deps, actor, id, memberId, previousInviteId)),
     inviteChoices: (id, input = {}) => afterNotice(() => inviteChoices(deps, actor, id, input), { action: "meetup-invite-choices", filter: { meetupId: id, name: input.name ?? "", page: String(input.page ?? 0) } }),
+    inviteSuggestions: (id) => afterNotice(() => inviteSuggestions(deps, actor, id), { action: "invite-suggestions", filter: { meetupId: id } }),
+    previewInviteSuggestions: (input) => afterNotice(() => previewInviteSuggestions(deps, actor, input), { action: "invite-suggestions-preview", filter: { placeKind: input.place.kind } }),
+    meetupSuggestions: () => afterNotice(() => meetupSuggestions(deps, actor), { action: "meetup-suggestions", filter: {} }),
+    extractMeetupInterests: (input) => afterNotice(() => extractMeetupInterests(deps, actor, input)),
     answerInvite: async (id, answer) => {
       const result = await answerInvite(deps, actor, id, answer);
       await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: result.meetupId });

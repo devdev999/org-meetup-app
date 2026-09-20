@@ -7,6 +7,9 @@ import {
   isInvalidInputError,
   type EditMeetupInput,
   type MeetupAudience,
+  type ExtractMeetupInterestsInput,
+  type PreviewInviteSuggestionsInput,
+  type InviteSuggestion,
 } from "../../application/index";
 import { formText } from "../../web/forms";
 import { requireMemberPastWelcome } from "../../web/session";
@@ -25,6 +28,7 @@ function meetupInput(form: FormData): EditMeetupInput {
       : { kind: "physical", siteId: formText(form.get("siteId")) ?? "", spot: formText(form.get("spot")) ?? "" },
     capacity: Number(form.get("capacity")),
     description: formText(form.get("description")) ?? "",
+    relevantInterests: JSON.parse(formText(form.get("relevantInterests")) ?? "[]"),
   };
 }
 
@@ -38,15 +42,18 @@ function audienceInput(form: FormData): MeetupAudience | undefined {
 }
 
 function actionError(error: unknown): MeetupActionState {
+  if (error instanceof SyntaxError) return { error: "Choose valid relevant Interests." };
   if (isInvalidInputError(error)) return { error: error.message };
   if (isAccessDeniedError(error)) return { error: "This Meetup is unavailable, or you cannot make this change." };
   throw error;
 }
 
 function refreshMeetups(meetupId: string) {
+  revalidatePath("/");
   revalidatePath("/meetups");
   revalidatePath(`/meetups/${meetupId}`);
   revalidatePath(`/meetups/${meetupId}/invite`);
+  revalidatePath(`/meetups/${meetupId}/edit`);
   revalidatePath("/inbox");
 }
 
@@ -62,6 +69,7 @@ export async function saveMeetup(meetupId: string | null, form: FormData): Promi
         ...meetupInput(form),
         activityId: formText(form.get("activityId")) ?? "",
         audience: audienceInput(form),
+        invitedMemberIds: form.getAll("invitedMemberId").map((value) => formText(value) ?? ""),
       });
       savedId = meetup.id;
     }
@@ -111,11 +119,29 @@ export async function changeMeetup(
 export async function sendInvite(meetupId: string, form: FormData): Promise<MeetupActionState> {
   const { member } = await requireMemberPastWelcome();
   try {
-    const invite = await member.inviteMember(meetupId, formText(form.get("memberId")) ?? "");
+    const invite = await member.inviteMember(meetupId, formText(form.get("memberId")) ?? "", formText(form.get("previousInviteId")) || undefined);
     refreshMeetups(meetupId);
     return { message: invite.state === "pending" ? "Invite sent." : `This Invite is already ${invite.state}.` };
   } catch (error) {
     return actionError(error);
+  }
+}
+
+export async function extractInterests(input: ExtractMeetupInterestsInput) {
+  const { member } = await requireMemberPastWelcome();
+  try {
+    return { proposals: await member.extractMeetupInterests(input) };
+  } catch (error) {
+    return { proposals: [], ...actionError(error) };
+  }
+}
+
+export async function previewInvites(input: PreviewInviteSuggestionsInput): Promise<MeetupActionState & { suggestions: InviteSuggestion[] }> {
+  const { member } = await requireMemberPastWelcome();
+  try {
+    return { suggestions: await member.previewInviteSuggestions(input) };
+  } catch (error) {
+    return { suggestions: [], ...actionError(error) };
   }
 }
 

@@ -25,12 +25,14 @@ type AiConfig = { provider: "memory" } | {
   baseUrl: string;
   apiKey: string;
   model: string;
+  extractionModel?: string;
 };
 
 const chatCompletionSchema = z.object({
   AI_BASE_URL: z.url({ protocol: /^https?$/ }),
   AI_API_KEY: z.string().trim().min(1),
   AI_MODEL: z.string().trim().min(1),
+  AI_EXTRACTION_MODEL: z.string().trim().min(1).optional(),
 });
 
 export function aiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig {
@@ -38,7 +40,8 @@ export function aiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig {
   const provider = z.enum(["memory", "chat-completion"]).default("memory").parse(values.AI_PROVIDER);
   if (provider === "memory") return { provider };
   const config = chatCompletionSchema.parse(values);
-  return { provider, baseUrl: config.AI_BASE_URL, apiKey: config.AI_API_KEY, model: config.AI_MODEL };
+  return { provider, baseUrl: config.AI_BASE_URL, apiKey: config.AI_API_KEY, model: config.AI_MODEL,
+    ...(config.AI_EXTRACTION_MODEL ? { extractionModel: config.AI_EXTRACTION_MODEL } : {}) };
 }
 
 const identityProviderSchema = z.enum(["oidc", "fake"]).default("oidc");
