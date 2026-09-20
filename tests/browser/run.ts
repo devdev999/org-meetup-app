@@ -26,6 +26,7 @@ try {
       claimMapping: { email: "email", name: "name", department: "department", site: "site" },
     },
     platformAdmin: { email: "pat@ministry-a.example", name: "Pat Platform" },
+    organisationAdmin: { email: "olivia@ministry-a.example", name: "Olivia Admin" },
   });
   const require = createRequire(import.meta.url);
   process.exitCode = await new Promise<number>((resolve, reject) => {

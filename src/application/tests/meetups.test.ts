@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import type { CreateMeetupInput, MemberActions } from "../index";
 import { ministryA, ministryB, signInAndAcknowledgeAs, signInAs } from "./fixtures";
 import { harness } from "./harness";
+import { createMeetupOrEvent, participationFor } from "./meetup-or-event";
 
 const h = harness();
 
@@ -58,56 +59,57 @@ test("a Member creates a Meetup starting in thirty minutes or next week with aud
   expect(await host.viewMeetup(physical.id)).toEqual(physical);
 });
 
-test("Members join first-come, leave and receive FIFO promotions with notices", async () => {
-  const host = await setup();
-  const bo = await member("Bo");
-  const cy = await member("Cy");
-  const di = await member("Di");
-  const meetup = await host.createMeetup(await inputFor(host));
-  expect(await bo.joinMeetup(meetup.id)).toBe("participant");
-  expect(await cy.joinMeetup(meetup.id)).toBe("waitlisted");
-  expect(await cy.joinMeetup(meetup.id)).toBe("waitlisted");
-  expect(await di.joinMeetup(meetup.id)).toBe("waitlisted");
-  expect((await host.viewMeetup(meetup.id))?.waitlist?.map((person) => person.name)).toEqual(["Cy Member", "Di Member"]);
-  expect((await bo.viewMeetup(meetup.id))?.participants.map((person) => person.name)).toEqual(["Ana Member", "Bo Member"]);
-  expect((await bo.viewMeetup(meetup.id))?.waitlist).toBeNull();
-  expect((await cy.viewMeetup(meetup.id))?.participants).toEqual([]);
-  await bo.leaveMeetup(meetup.id);
-  expect((await cy.viewMeetup(meetup.id))?.membership).toBe("participant");
-  expect((await host.viewMeetup(meetup.id))?.waitlist?.map((person) => person.name)).toEqual(["Di Member"]);
-  expect(await cy.inbox()).toEqual([expect.objectContaining({ kind: "meetup-promoted", meetupId: meetup.id })]);
+test.each(["meetup", "event"] as const)("%s Members join first-come, leave and receive FIFO promotions with notices", async (kind) => {
+  const host = participationFor(await setup(), kind);
+  const bo = participationFor(await member("Bo"), kind);
+  const cy = participationFor(await member("Cy"), kind);
+  const di = participationFor(await member("Di"), kind);
+  const meetup = await createMeetupOrEvent(h, host, await inputFor(host), kind);
+  expect(await bo.join(meetup.id)).toBe("participant");
+  expect(await cy.join(meetup.id)).toBe("waitlisted");
+  expect(await cy.join(meetup.id)).toBe("waitlisted");
+  expect(await di.join(meetup.id)).toBe("waitlisted");
+  expect((await host.view(meetup.id))?.waitlist?.map((person) => person.name)).toEqual(["Cy Member", "Di Member"]);
+  expect((await bo.view(meetup.id))?.participants.map((person) => person.name)).toEqual(["Ana Member", "Bo Member"]);
+  expect((await bo.view(meetup.id))?.waitlist).toBeNull();
+  expect((await cy.view(meetup.id))?.participants).toEqual([]);
+  await bo.leave(meetup.id);
+  expect((await cy.view(meetup.id))?.membership).toBe("participant");
+  expect((await host.view(meetup.id))?.waitlist?.map((person) => person.name)).toEqual(["Di Member"]);
+  expect(await cy.inbox()).toEqual([expect.objectContaining({ kind: "meetup-promoted", ...(kind === "event" ? { eventId: meetup.id } : { meetupId: meetup.id }) })]);
+  expect((await cy.inbox())[0]?.message).toContain(kind === "event" ? "Event" : "Meetup");
   expect((await host.inbox()).map((notice) => notice.kind)).toEqual(["meetup-left", "meetup-joined"]);
   expect((await host.inbox()).every((notice) => !notice.message.includes("Member"))).toBe(true);
   expect((await host.inbox())[0]?.message).toContain("2026-09-18 09:30 UTC");
   expect((await host.inbox())[0]?.message).toContain("Harbour House");
   expect((await host.inbox())[0]?.message).toContain("Lobby table");
-  await di.leaveMeetup(meetup.id);
-  expect((await host.viewMeetup(meetup.id))?.waitlist).toEqual([]);
-  await expect(host.leaveMeetup(meetup.id)).rejects.toMatchObject({ code: "invalid-meetup" });
+  await di.leave(meetup.id);
+  expect((await host.view(meetup.id))?.waitlist).toEqual([]);
+  await expect(host.leave(meetup.id)).rejects.toMatchObject({ code: "invalid-meetup" });
 });
 
-test("Host edits notify Participants, increased capacity promotes waitlist and handover keeps the Meetup going", async () => {
-  const host = await setup();
-  const bo = await member("Bo");
-  const cy = await member("Cy");
+test.each(["meetup", "event"] as const)("%s Host edits notify Participants, increased capacity promotes waitlist and handover preserves participation", async (kind) => {
+  const host = participationFor(await setup(), kind);
+  const bo = participationFor(await member("Bo"), kind);
+  const cy = participationFor(await member("Cy"), kind);
   const input = await inputFor(host);
-  const meetup = await host.createMeetup(input);
-  await bo.joinMeetup(meetup.id);
-  await cy.joinMeetup(meetup.id);
+  const meetup = await createMeetupOrEvent(h, host, input, kind);
+  await bo.join(meetup.id);
+  await cy.join(meetup.id);
   const edited = { ...input, startsAt: new Date("2026-09-18T10:00:00Z"), place: { kind: "virtual" as const, url: "https://meet.example/new" }, capacity: 3 };
-  await expect(bo.editMeetup(meetup.id, edited)).rejects.toMatchObject({ name: "AccessDeniedError" });
-  await host.editMeetup(meetup.id, edited);
-  expect(await bo.viewMeetup(meetup.id)).toMatchObject({ startsAt: edited.startsAt, place: edited.place, capacity: 3 });
-  expect((await cy.viewMeetup(meetup.id))?.membership).toBe("participant");
+  await expect(bo.edit(meetup.id, edited)).rejects.toMatchObject({ name: "AccessDeniedError" });
+  await host.edit(meetup.id, edited);
+  expect(await bo.view(meetup.id)).toMatchObject({ startsAt: edited.startsAt, place: edited.place, capacity: 3 });
+  expect((await cy.view(meetup.id))?.membership).toBe("participant");
   expect((await bo.inbox()).map((notice) => notice.kind)).toEqual(["meetup-edited"]);
   expect((await bo.inbox())[0]?.message).toContain("https://meet.example/new");
   const boId = (await bo.profile()).memberId;
-  await host.handOverMeetup(meetup.id, boId);
-  expect(await bo.viewMeetup(meetup.id)).toMatchObject({ host: { memberId: boId }, membership: "host" });
+  await host.handOver(meetup.id, boId);
+  expect(await bo.view(meetup.id)).toMatchObject({ host: { memberId: boId }, membership: "host" });
   expect((await cy.inbox()).map((notice) => notice.kind)).toContain("meetup-handed-over");
-  await expect(host.cancelMeetup(meetup.id)).rejects.toMatchObject({ name: "AccessDeniedError" });
-  await host.leaveMeetup(meetup.id);
-  expect((await bo.viewMeetup(meetup.id))?.participantCount).toBe(2);
+  await expect(host.cancel(meetup.id)).rejects.toMatchObject({ name: "AccessDeniedError" });
+  await host.leave(meetup.id);
+  expect((await bo.view(meetup.id))?.participantCount).toBe(2);
 });
 
 test("Place change notices identify the new Site when the spot has the same name", async () => {

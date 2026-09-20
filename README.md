@@ -44,7 +44,7 @@ The Host can edit the time, Place, duration, description and capacity, cancel, o
 
 The inbox receives channel-neutral notices for joins, departures, promotions, time or Place changes, cancellations and handovers. Message content uses first names, Activity, time and Place. Member lifecycle effects on Meetups belong to issue #13.
 
-The application stores Meetups and future Events together with a kind. All commands and queries derive the Organisation from the Member actor. Mutations use the same Organisation transaction lock as roster and admin changes, so seating and notices commit together.
+The application stores Meetups and Events together with a kind. All commands and queries derive the Organisation from the Member actor. Mutations use the same Organisation transaction lock as roster and admin changes, so seating and notices commit together.
 
 ### Recurring Meetups and RSVP
 
@@ -57,6 +57,20 @@ Standing places include the series Host and are capped by its capacity. Joining 
 Each standing Participant receives an RSVP prompt forty-eight hours before the occurrence, in the inbox and on enabled Telegram and email channels. A Member joining inside that window receives the prompt on the next worker run. Going and Not going buttons appear in the app and on Telegram. Not going frees this occurrence's place and keeps the standing place. Going again takes an available place or joins the ordinary waitlist without displacing anyone. The Host sees each answer and the waitlist separately. Joining a one-off counts as Going, including existing Meetups created before the RSVP migration.
 
 Only the series Host can stop the series. This cancels its future occurrences and sends ordinary cancellation notices, including to Members who answered Not going. Started occurrences keep their history. Each worker run shares the Organisation lock with Member actions; occurrence generation and prompts are deduplicated across retries.
+
+## Events
+
+Open Events from your profile or home to propose one. A proposal stays private to its proposer and Organisation Admins until approval. The Organisation Admin queue records approval or rejection, with a required rejection note and an optional approval note. The proposer sees the decision under Your Event proposals and becomes Host on approval. Approval rechecks the start time, Activity, Sites, proposer and selected invitees before publishing. It creates the first occurrence, standing membership and selected Invites together. If an invitee has become ineligible, the Organisation Admin can reject with a note asking the proposer to submit again with eligible invitees. Rejected proposals create none of these.
+
+The proposer keeps the decision and note if they later lose access to the published Event. Proposal history shows its current details only while the Event remains visible to them.
+
+Organisation Admins can create an Event directly or reassign the Host of any published occurrence, including past and cancelled Events. Reassignment changes that occurrence's Host without changing participation, the original proposer or the series Host. A new Host can explicitly join a future occurrence, subject to its capacity.
+
+Stopping a series also sends a cancellation notice to each occurrence's current Host, including a reassigned Host who has not joined it.
+
+Events default to the whole Organisation and have no capacity limit unless one is supplied. A limit must be a positive whole number and includes the Host. Joining, FIFO waitlists, Invites, occurrence edits, recurrence and RSVP use the same rules as Meetups. Relevant Interests, automatic extraction and Suggestions also work on proposals and direct creation. Selected Invites on a proposal wait for approval. Event labels, inbox links, Telegram actions and email subjects identify Events separately. Delivery preferences apply to both kinds.
+
+The schema includes an Event-to-Organisation sharing relationship for ADR 0002. No command or query uses it to grant cross-Organisation access.
 
 ## Suggestions
 
@@ -77,6 +91,8 @@ The Host can invite a Member of the same Organisation from any upcoming Meetup, 
 Invitees accept or decline in the app or through Telegram buttons. Accepting takes a free spot or moves the Member to the front of the waitlist, including an existing waitlisted Member. Each new acceptance goes ahead of earlier waitlisted acceptances. Repeating the same answer leaves places and notices unchanged; a different answer after responding is refused. Declining keeps a place or waitlist entry obtained by joining an open Meetup, and the Host's notice explains that the Member remains. Leave separately to withdraw. After leaving, retrying an old Accept button explains that the Member no longer has a place.
 
 Pending invitees receive time, Place, handover and cancellation notices. Cancellation expires pending Invites immediately. The worker expires unanswered Invites at the current start time, checking every minute, and answers are refused from that time even before the worker runs. An Invite does not expire at an old start time after the Host reschedules. Accepted and declined Invites retain their states.
+
+Time, duration and Place edits supersede older pending edit deliveries. Invite retries keep their own delivery preferences and original sender while using the current Activity, time and Place. Both Invite and edit notices keep Telegram Accept and Decline buttons for a pending Invite. Earlier inbox notices remain as history.
 
 ### Delivery
 
@@ -249,6 +265,8 @@ Apply migrations before starting the web and worker code that needs them. Check 
 Migrations `0011` and `0012` add Availability and allow notices without a Meetup. Earlier web and worker versions cannot read these notices safely. Stop every old web and worker instance before applying these migrations, then start both at the new version. Do not run mixed versions.
 
 Migrations `0013` and `0014` add recurring Meetups and RSVP. Upgrade the web and worker together with the same stop, migrate and restart sequence. Once series or RSVP prompts exist, rollback to earlier images is unsupported because they cannot manage recurrence or deliver the correct RSVP actions. Deploy a forward fix.
+
+Migration `0015` adds Event proposals and the unused sharing relationship, and makes occurrence and series capacity nullable for uncapped Events. Migration `0016` preserves the original Invite sender when retries refresh the Activity, time and Place, including existing Invites. Stop the web and worker, migrate, then restart both with this release. Existing Meetup capacities, participation, recurrence and notices are preserved. Once Events exist, earlier images cannot safely process them or display their actions, so deploy a forward fix instead of rolling back.
 
 For an existing local Compose stack, leave Postgres running and run these steps in order. Continue only when each command succeeds:
 

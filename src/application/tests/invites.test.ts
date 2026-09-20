@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import type { MemberActions } from "../index";
 import { ministryA, ministryB, signInAndAcknowledgeAs, withDepartmentAndSiteClaims } from "./fixtures";
 import { harness } from "./harness";
+import { createMeetupOrEvent, participationFor } from "./meetup-or-event";
 
 const h = harness();
 
@@ -16,32 +17,109 @@ async function setup() {
   return member("Ana");
 }
 
-async function createMeetup(host: MemberActions, inviteOnly = true) {
-  return host.createMeetup({
+async function createMeetup(host: MemberActions, inviteOnly = true, kind: "meetup" | "event" = "meetup") {
+  return createMeetupOrEvent(h, host, {
     activityId: (await host.meetupChoices()).activities.find((activity) => activity.name === "coffee")!.id,
     startsAt: new Date("2026-09-18T10:00:00Z"), durationMinutes: 60,
     place: { kind: "virtual", url: "https://meet.example/coffee" }, capacity: 2,
     audience: inviteOnly ? { kind: "invite-only" } : { kind: "open", scope: "organisation" },
-  });
+  }, kind);
 }
 
-test("a Host invites a Member to a private Meetup and only the invitee gains access", async () => {
-  const host = await setup();
+test.each(["meetup", "event"] as const)("%s Host invites a Member privately and only the invitee gains access", async (kind) => {
+  const host = participationFor(await setup(), kind);
+  const bo = participationFor(await member("Bo"), kind);
+  const cy = participationFor(await member("Cy"), kind);
+  const meetup = await createMeetup(host, true, kind);
+  expect(await bo.view(meetup.id)).toBeUndefined();
+  const invite = await host.invite(meetup.id, (await bo.profile()).memberId);
+  expect(invite).toMatchObject({ state: "pending", ...(kind === "event" ? { eventId: meetup.id } : { meetupId: meetup.id }), member: { name: "Bo Member" } });
+  expect((await bo.list()).map((entry) => entry.id)).toEqual([meetup.id]);
+  expect(await bo.view(meetup.id)).toMatchObject({ invite, invites: null, membership: null });
+  expect((await host.view(meetup.id))?.invites).toEqual([invite]);
+  expect(await cy.view(meetup.id)).toBeUndefined();
+  expect(await cy.list()).toEqual([]);
+  expect(await bo.inbox()).toContainEqual(expect.objectContaining({ kind: "invite-received", ...(kind === "event" ? { eventId: meetup.id } : { meetupId: meetup.id }) }));
+  expect(h.email.outbox).toContainEqual(expect.objectContaining({ to: "bo@example.test", text: expect.stringContaining("https://meet.example/coffee") }));
+  expect(await host.invite(meetup.id, (await bo.profile()).memberId)).toEqual(invite);
+  expect(await bo.inbox()).toHaveLength(1);
+  expect(h.email.outbox[0]).toMatchObject({ subject: kind === "event" ? "Event notice" : "Meetup notice", text: expect.stringContaining(kind === "event" ? "Event" : "Meetup") });
+});
+
+test.each(["meetup", "event"] as const)("%s Invite retries retain their preference and current Place after edits", async (kind) => {
+  const host = participationFor(await setup(), kind);
+  const bo = participationFor(await member("Bo"), kind);
+  const meetup = await createMeetup(host, true, kind);
+  const link = await bo.beginTelegramLink();
+  await h.app.handleTelegram({ kind: "link", chatId: "102", code: new URL(link.url).searchParams.get("start")! });
+  h.telegram.reset();
+  await bo.setNoticePreference({ kind: "meetup-edited", telegram: false, email: false });
+  h.telegram.failure = new Error("Offline");
+  h.email.failure = new Error("Offline");
+  const invite = await host.invite(meetup.id, (await bo.profile()).memberId);
+  const originalNotice = (await bo.inbox())[0];
+  const edit = { startsAt: meetup.startsAt, durationMinutes: meetup.durationMinutes, capacity: 2 };
+  await host.edit(meetup.id, { ...edit, place: { kind: "virtual", url: "https://meet.example/intermediate-room" } });
+  await host.edit(meetup.id, { ...edit, place: { kind: "virtual", url: "https://meet.example/new-room" } });
+  h.telegram.failure = undefined;
+  h.email.failure = undefined;
+  h.clock.set(new Date("2026-09-18T09:02:00Z"));
+  await h.app.deliverNotices();
+  expect(h.email.outbox).toEqual([expect.objectContaining({ to: "bo@example.test", text: expect.stringContaining("https://meet.example/new-room") })]);
+  expect(h.telegram.outbox).toEqual([expect.objectContaining({ chatId: "102", inviteId: invite.id, text: expect.stringContaining("invited you") })]);
+  expect(await bo.inbox()).toContainEqual(originalNotice);
+  expect(await bo.answerInvite(invite.id, "accept")).toMatchObject({ membership: "participant" });
+});
+
+test.each(["meetup", "event"] as const)("%s Invite retries preserve their sender after the Host changes", async (kind) => {
+  const host = participationFor(await setup(), kind);
+  const bo = await member("Bo");
+  const nextHost = participationFor(await member("Cy"), kind);
+  const meetup = await createMeetup(host, false, kind);
+  await nextHost.join(meetup.id);
+  const link = await bo.beginTelegramLink();
+  await h.app.handleTelegram({ kind: "link", chatId: "102", code: new URL(link.url).searchParams.get("start")! });
+  await bo.setNoticePreference({ kind: "meetup-edited", telegram: false, email: false });
+  await bo.setNoticePreference({ kind: "meetup-handed-over", telegram: false, email: false });
+  h.telegram.reset();
+  h.email.reset();
+  h.telegram.failure = new Error("Offline");
+  h.email.failure = new Error("Offline");
+  const invite = await host.invite(meetup.id, (await bo.profile()).memberId);
+  const original = (await bo.inbox())[0];
+  if (kind === "event") {
+    const adminMember = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "event-admin", email: "event-admin@example.test", name: "Event Admin" });
+    await (await adminMember.organisationAdmin()).reassignEventHost(meetup.id, (await nextHost.profile()).memberId);
+  } else await host.handOver(meetup.id, (await nextHost.profile()).memberId);
+  await nextHost.edit(meetup.id, { startsAt: new Date("2026-09-18T11:00:00Z"), durationMinutes: 60, capacity: 2, place: { kind: "virtual", url: "https://meet.example/new-room" } });
+  h.telegram.failure = undefined;
+  h.email.failure = undefined;
+  h.clock.set(new Date("2026-09-18T09:02:00Z"));
+  await h.app.deliverNotices();
+  const prefix = kind === "event" ? "Ana invited you to an Event." : "Ana invited you to a Meetup.";
+  expect(h.email.outbox.filter((notice) => notice.to === "bo@example.test")).toEqual([
+    expect.objectContaining({ text: `${prefix} coffee, 2026-09-18 11:00 UTC, https://meet.example/new-room.` }),
+  ]);
+  expect(h.telegram.outbox).toEqual([{ chatId: "102", inviteId: invite.id, text: `${prefix} coffee, 2026-09-18 11:00 UTC, Online.` }]);
+  expect(await bo.inbox()).toContainEqual(original);
+});
+
+test("Event Invite answers name the Event in Telegram notices", async () => {
+  const host = participationFor(await setup(), "event");
   const bo = await member("Bo");
   const cy = await member("Cy");
-  const meetup = await createMeetup(host);
-  expect(await bo.viewMeetup(meetup.id)).toBeUndefined();
-  const invite = await host.inviteMember(meetup.id, (await bo.profile()).memberId);
-  expect(invite).toMatchObject({ state: "pending", meetupId: meetup.id, member: { name: "Bo Member" } });
-  expect((await bo.listMeetups()).map((entry) => entry.id)).toEqual([meetup.id]);
-  expect(await bo.viewMeetup(meetup.id)).toMatchObject({ invite, invites: null, membership: null });
-  expect((await host.viewMeetup(meetup.id))?.invites).toEqual([invite]);
-  expect(await cy.viewMeetup(meetup.id)).toBeUndefined();
-  expect(await cy.listMeetups()).toEqual([]);
-  expect(await bo.inbox()).toContainEqual(expect.objectContaining({ kind: "invite-received", meetupId: meetup.id }));
-  expect(h.email.outbox).toContainEqual(expect.objectContaining({ to: "bo@example.test", text: expect.stringContaining("https://meet.example/coffee") }));
-  expect(await host.inviteMember(meetup.id, (await bo.profile()).memberId)).toEqual(invite);
-  expect(await bo.inbox()).toHaveLength(1);
+  const link = await host.beginTelegramLink();
+  await h.app.handleTelegram({ kind: "link", chatId: "101", code: new URL(link.url).searchParams.get("start")! });
+  const event = await createMeetup(host, true, "event");
+  const boInvite = await host.invite(event.id, (await bo.profile()).memberId);
+  const cyInvite = await host.invite(event.id, (await cy.profile()).memberId);
+  h.telegram.reset();
+  await bo.answerInvite(boInvite.id, "accept");
+  await cy.answerInvite(cyInvite.id, "decline");
+  expect(h.telegram.outbox.map((notice) => notice.text)).toEqual([
+    expect.stringContaining("Bo accepted your Invite to this Event."),
+    expect.stringContaining("Cy declined your Invite to this Event."),
+  ]);
 });
 
 test("only the invitee can answer, accepting seats them and declining records the answer once", async () => {
@@ -112,29 +190,29 @@ test("declining an Invite keeps an independent waitlist entry and tells the Host
   expect((await cy.viewMeetup(meetup.id))?.membership).toBe("participant");
 });
 
-test("accepting moves an invitee to the front of a full Meetup's waitlist, including an existing joiner", async () => {
-  const host = await setup();
-  const bo = await member("Bo");
-  const cy = await member("Cy");
-  const di = await member("Di");
-  const ev = await member("Ev");
-  const meetup = await createMeetup(host, false);
-  await bo.joinMeetup(meetup.id);
-  await cy.joinMeetup(meetup.id);
-  await di.joinMeetup(meetup.id);
-  const evInvite = await host.inviteMember(meetup.id, (await ev.profile()).memberId);
+test.each(["meetup", "event"] as const)("%s Invite acceptance takes the front of a full waitlist, including an existing joiner", async (kind) => {
+  const host = participationFor(await setup(), kind);
+  const bo = participationFor(await member("Bo"), kind);
+  const cy = participationFor(await member("Cy"), kind);
+  const di = participationFor(await member("Di"), kind);
+  const ev = participationFor(await member("Ev"), kind);
+  const meetup = await createMeetup(host, false, kind);
+  await bo.join(meetup.id);
+  await cy.join(meetup.id);
+  await di.join(meetup.id);
+  const evInvite = await host.invite(meetup.id, (await ev.profile()).memberId);
   expect(await ev.answerInvite(evInvite.id, "accept")).toMatchObject({ membership: "waitlisted" });
-  expect((await host.viewMeetup(meetup.id))?.waitlist?.map((person) => person.name)).toEqual(["Ev Member", "Cy Member", "Di Member"]);
-  const diInvite = await host.inviteMember(meetup.id, (await di.profile()).memberId);
+  expect((await host.view(meetup.id))?.waitlist?.map((person) => person.name)).toEqual(["Ev Member", "Cy Member", "Di Member"]);
+  const diInvite = await host.invite(meetup.id, (await di.profile()).memberId);
   await di.answerInvite(diInvite.id, "accept");
   await ev.answerInvite(evInvite.id, "accept");
-  expect((await host.viewMeetup(meetup.id))?.waitlist?.map((person) => person.name)).toEqual(["Di Member", "Ev Member", "Cy Member"]);
-  await bo.leaveMeetup(meetup.id);
-  expect((await di.viewMeetup(meetup.id))?.membership).toBe("participant");
-  await di.leaveMeetup(meetup.id);
-  expect((await ev.viewMeetup(meetup.id))?.membership).toBe("participant");
-  await ev.leaveMeetup(meetup.id);
-  expect((await cy.viewMeetup(meetup.id))?.membership).toBe("participant");
+  expect((await host.view(meetup.id))?.waitlist?.map((person) => person.name)).toEqual(["Di Member", "Ev Member", "Cy Member"]);
+  await bo.leave(meetup.id);
+  expect((await di.view(meetup.id))?.membership).toBe("participant");
+  await di.leave(meetup.id);
+  expect((await ev.view(meetup.id))?.membership).toBe("participant");
+  await ev.leave(meetup.id);
+  expect((await cy.view(meetup.id))?.membership).toBe("participant");
 });
 
 test("the worker expires unanswered Invites at the current start time without changing answers", async () => {
@@ -164,7 +242,7 @@ test("pending invitees receive changes and cancellations, and expiry follows an 
   const invite = await host.inviteMember(meetup.id, (await bo.profile()).memberId);
   await host.editMeetup(meetup.id, {
     startsAt: new Date("2026-09-18T11:00:00Z"), durationMinutes: meetup.durationMinutes,
-    place: meetup.place, capacity: meetup.capacity,
+    place: meetup.place, capacity: 2,
   });
   expect((await bo.inbox()).map((notice) => notice.kind)).toEqual(["meetup-edited", "invite-received"]);
   h.clock.set(meetup.startsAt);

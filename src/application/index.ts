@@ -58,12 +58,14 @@ export type { CreateMeetupInput, EditMeetupInput, Invite, InviteAnswer, InviteCh
 export type { InterestKind } from "./ports";
 export type { MemberProfile, MemberSearch } from "./lib/member-actor";
 export type { Interest, MemberInterest, InterestResolution, InterestSelection, InterestChoice, ConfirmInterestInput, Stance } from "./lib/interests";
-export type { InviteSuggestion, MeetupSuggestion, PreviewInviteSuggestionsInput } from "./lib/suggestions";
-export type { ExtractMeetupInterestsInput } from "./lib/meetup-interests";
+export type { EventSuggestion, InviteSuggestion, MeetupSuggestion, PreviewInviteSuggestionsInput } from "./lib/suggestions";
+export type { ExtractEventInterestsInput, ExtractMeetupInterestsInput } from "./lib/meetup-interests";
 export type { Availability, AvailabilityBoard, AvailabilityOverlap, AvailabilitySuggestion, PostAvailabilityInput } from "./lib/availability";
 export type { Recurrence, RecurrenceInput } from "./lib/recurrence-records";
 export type { RsvpAnswer } from "./lib/meetups";
-export type { RecurringMeetup } from "./lib/recurring-meetups";
+export type { RecurringMeetup, RecurringEvent } from "./lib/recurring-meetups";
+export type { CreateEventInput, EditEventInput, EventDetail, EventSummary } from "./lib/meetups";
+export type { EventProposal } from "./lib/events";
 
 /**
  * Recognises a `SignInError` by shape rather than class identity: the web

@@ -12,13 +12,15 @@ export class GrammyTelegram implements TelegramPort {
   }
 
   async sendMessage(message: TelegramMessage): Promise<void> {
+    const rsvpId = message.rsvpEventId ?? message.rsvpMeetupId;
+    const joinId = message.joinEventId ?? message.joinMeetupId;
     const buttons = message.inviteId ? [
       { text: "Accept", callback_data: `accept:${message.inviteId}` },
       { text: "Decline", callback_data: `decline:${message.inviteId}` },
-    ] : message.rsvpMeetupId ? [
-      { text: "Going", callback_data: `going:${message.rsvpMeetupId}` },
-      { text: "Not going", callback_data: `not-going:${message.rsvpMeetupId}` },
-    ] : message.joinMeetupId ? [{ text: "Join Meetup", callback_data: `join:${message.joinMeetupId}` }] : [];
+    ] : rsvpId ? [
+      { text: "Going", callback_data: `going${message.rsvpEventId ? "-event" : ""}:${rsvpId}` },
+      { text: "Not going", callback_data: `not-going${message.rsvpEventId ? "-event" : ""}:${rsvpId}` },
+    ] : joinId ? [{ text: message.joinEventId ? "Join Event" : "Join Meetup", callback_data: `join${message.joinEventId ? "-event" : ""}:${joinId}` }] : [];
     const keyboard = message.buttons?.map((row) => row.map((button) => ({ text: button.text, callback_data: availabilityCallback(button.action) }))) ?? (buttons.length ? [buttons] : []);
     await this.api.sendMessage(message.chatId, message.text, {
       link_preview_options: { is_disabled: true },

@@ -14,8 +14,10 @@ import { answerRsvp } from "./recurring-meetups";
 export interface TelegramLink { url: string; expiresAt: Date }
 export type TelegramCommand = { kind: "link"; chatId: string; code: string }
   | { kind: "join"; chatId: string; callbackId: string; meetupId: string }
+  | { kind: "join-event"; chatId: string; callbackId: string; eventId: string }
   | { kind: "answer-invite"; chatId: string; callbackId: string; inviteId: string; answer: "accept" | "decline" }
   | { kind: "answer-rsvp"; chatId: string; callbackId: string; meetupId: string; answer: "going" | "not-going" }
+  | { kind: "answer-event-rsvp"; chatId: string; callbackId: string; eventId: string; answer: "going" | "not-going" }
   | { kind: "availability-menu"; chatId: string }
   | (TelegramAvailabilityAction & { chatId: string; callbackId: string });
 
@@ -71,25 +73,26 @@ export async function handleTelegram(deps: Deps, command: TelegramCommand): Prom
     let gatheringId: string | undefined;
     if (actor) {
       try {
-        if (command.kind === "join") {
-          const result = await joinMeetup(deps, actor, command.meetupId);
-          gatheringId = command.meetupId;
-          text = result === "participant" ? "You joined the Meetup." : "You are on the waitlist.";
-        } else if (command.kind === "answer-rsvp") {
-          const status = await answerRsvp(deps, actor, command.meetupId, command.answer);
-          gatheringId = command.meetupId;
+        if (command.kind === "join" || command.kind === "join-event") {
+          gatheringId = command.kind === "join-event" ? command.eventId : command.meetupId;
+          const result = await joinMeetup(deps, actor, gatheringId, command.kind === "join-event" ? "event" : "meetup");
+          text = result === "participant" ? `You joined the ${command.kind === "join-event" ? "Event" : "Meetup"}.` : "You are on the waitlist.";
+        } else if (command.kind === "answer-rsvp" || command.kind === "answer-event-rsvp") {
+          gatheringId = command.kind === "answer-event-rsvp" ? command.eventId : command.meetupId;
+          const status = await answerRsvp(deps, actor, gatheringId, command.answer, command.kind === "answer-event-rsvp" ? "event" : "meetup");
           text = status === null ? "Not going recorded for this occurrence."
             : status === "waitlisted" ? "Going recorded. You are on the waitlist." : "Going recorded. You have a place.";
         } else {
           const result = await answerInvite(deps, actor, command.inviteId, command.answer);
-          gatheringId = result.meetupId;
+          gatheringId = result.eventId ?? result.meetupId;
           text = result.state === "declined" ? "Invite declined."
-            : result.membership === null ? "Your Invite was accepted, but you no longer have a place in this Meetup."
+            : result.membership === null ? `Your Invite was accepted, but you no longer have a place in this ${result.eventId ? "Event" : "Meetup"}.`
             : result.membership === "waitlisted" ? "Invite accepted. You are on the waitlist." : "Invite accepted.";
         }
       } catch (error) {
         if (!(error instanceof AccessDeniedError || error instanceof AdminVisibilityNoticeRequiredError || error instanceof InvalidInputError)) throw error;
-        text = "This Meetup or Invite is unavailable. Open the app to check your access.";
+        gatheringId = undefined;
+        text = "This is unavailable. Open the app to check your access.";
       }
     }
     try {

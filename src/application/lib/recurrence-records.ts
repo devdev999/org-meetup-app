@@ -7,9 +7,10 @@ import { gatheringRsvps, gatherings, invites, members, recurrenceMembers, recurr
 
 export type RecurrenceInput = Pick<RecurrenceRule, "frequency" | "endsOn">;
 export interface Recurrence extends RecurrenceRule {
+  kind: typeof recurrences.$inferSelect.kind;
   id: string;
   host: { memberId: string; name: string };
-  capacity: number;
+  capacity: number | null;
   standingCount: number;
   isStanding: boolean;
   canJoin: boolean;
@@ -29,8 +30,8 @@ export async function saveRsvp(db: Queryable, actor: Actor, gatheringId: string,
     .onConflictDoUpdate({ target: [gatheringRsvps.organisationId, gatheringRsvps.gatheringId, gatheringRsvps.memberId], set: { answer } });
 }
 
-export function visibleRecurrences(actor: Actor, siteId: string | null) {
-  return and(eq(recurrences.organisationId, actor.organisationId), eq(recurrences.kind, "meetup"), or(
+export function visibleRecurrences(actor: Actor, siteId: string | null, kind?: Recurrence["kind"]) {
+  return and(eq(recurrences.organisationId, actor.organisationId), kind ? eq(recurrences.kind, kind) : undefined, or(
     eq(recurrences.hostMemberId, actor.memberId),
     sql`exists (select 1 from ${recurrenceMembers} where ${recurrenceMembers.organisationId} = ${recurrences.organisationId} and ${recurrenceMembers.recurrenceId} = ${recurrences.id} and ${recurrenceMembers.memberId} = ${actor.memberId})`,
     and(eq(recurrences.audienceKind, "open"), or(eq(recurrences.audienceScope, "organisation"), siteId ? eq(recurrences.audienceSiteId, siteId) : undefined)),
@@ -53,10 +54,10 @@ export async function readRecurrences(db: Queryable, actor: Actor, ids: string[]
     const stopped = recurrence.stoppedAt !== null;
     const ended = recurrence.endsOn !== null && recurrence.endsOn < now.toISOString().slice(0, 10);
     return [recurrence.id, {
-      id: recurrence.id, frequency: recurrence.frequency, startsAt: recurrence.startsAt, endsOn: recurrence.endsOn,
+      id: recurrence.id, kind: recurrence.kind, frequency: recurrence.frequency, startsAt: recurrence.startsAt, endsOn: recurrence.endsOn,
       host: { memberId: recurrence.hostMemberId, name: hostName }, capacity: recurrence.capacity,
       standingCount: participants.length, isStanding, ended, stopped,
-      canJoin: visible && !stopped && !ended && !isStanding && participants.length < recurrence.capacity,
+      canJoin: visible && !stopped && !ended && !isStanding && (recurrence.capacity === null || participants.length < recurrence.capacity),
       canLeave: isStanding && !isHost, canStop: isHost && !stopped,
     }];
   }));

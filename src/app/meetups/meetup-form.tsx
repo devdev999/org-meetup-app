@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import type { AvailabilitySuggestion, Interest, InterestChoice, MemberActions, MeetupDetail } from "../../application/index";
+import type { AvailabilitySuggestion, EventDetail, Interest, InterestChoice, MemberActions, MeetupDetail } from "../../application/index";
 import { saveMeetup, type MeetupActionState } from "./actions";
 import { MeetupInterests } from "./meetup-interests";
 import { DraftInviteSuggestions } from "./invite-suggestions";
@@ -12,13 +12,17 @@ export function MeetupForm({
   interests,
   suggestionSeed,
   availability,
+  mode = "meetup",
 }: {
   choices: Awaited<ReturnType<MemberActions["meetupChoices"]>>;
-  meetup?: MeetupDetail;
+  meetup?: MeetupDetail | EventDetail;
   interests: Interest[];
   suggestionSeed?: string;
   availability?: AvailabilitySuggestion;
+  mode?: "meetup" | "event" | "event-direct";
 }) {
+  const kind = mode === "meetup" ? "meetup" : "event";
+  const label = kind === "meetup" ? "Meetup" : "Event";
   const [placeKind, setPlaceKind] = useState(meetup?.place.kind ?? availability?.place.kind ?? "physical");
   const [audience, setAudience] = useState("default");
   const [frequency, setFrequency] = useState("once");
@@ -36,7 +40,7 @@ export function MeetupForm({
       const start = new Date(`${String(form.get("startsAt"))}Z`);
       if (Number.isNaN(start.getTime())) return Promise.resolve({ error: "Choose a start time." });
       form.set("startsAt", start.toISOString());
-      return saveMeetup(meetup?.id ?? null, form);
+      return saveMeetup(meetup?.id ?? null, form, mode);
     },
     {},
   );
@@ -66,7 +70,7 @@ export function MeetupForm({
         Start time in UTC
         <input type="datetime-local" name="startsAt" required step={availability ? 1 : 60} value={startsAt} onChange={(change) => setStartsAt(change.target.value)} />
       </label>
-      <p className="muted">All Meetup times use UTC.</p>
+      <p className="muted">All {label} times use UTC.</p>
       {!meetup && <>
         <label>
           Repeats
@@ -119,21 +123,22 @@ export function MeetupForm({
         </label>
       )}
       <label>
-        Capacity, including the Host
-        <input type="number" name="capacity" min="2" max="30" step="1" required defaultValue={meetup?.capacity ?? 6} />
+        Capacity, including the Host{kind === "event" ? ", optional" : ""}
+        <input type="number" name="capacity" min={kind === "event" ? 1 : 2} max={kind === "event" ? 2147483647 : 30} step="1" required={kind === "meetup"} defaultValue={meetup?.capacity ?? (kind === "event" ? "" : 6)} />
       </label>
+      {kind === "event" && <p className="muted">Leave capacity blank for no limit.</p>}
       {!meetup && (
         <>
           <label>
             Audience
             <select name="audience" value={audience} onChange={(change) => setAudience(change.target.value)}>
-              <option value="default">Default: {placeKind === "physical" ? "your Site" : "whole Organisation"}</option>
+              <option value="default">Default: {kind === "meetup" && placeKind === "physical" ? "your Site" : "whole Organisation"}</option>
               <option value="organisation">Open to the whole Organisation</option>
               <option value="site">Open to one Site</option>
               <option value="invite-only">Invite-only</option>
             </select>
           </label>
-          {audience === "default" && placeKind === "physical" && !choices.defaultSiteId && (
+          {kind === "meetup" && audience === "default" && placeKind === "physical" && !choices.defaultSiteId && (
             <p className="muted">Set your Site in your profile or choose an audience.</p>
           )}
           {audience === "site" && (
@@ -145,17 +150,17 @@ export function MeetupForm({
               </select>
             </label>
           )}
-          {audience === "invite-only" && <p className="muted">Only you and your invitees can see this Meetup.</p>}
+          {audience === "invite-only" && <p className="muted">Only you and your invitees can see this {label} after publication.</p>}
         </>
       )}
       <label>
         Description, optional
         <textarea name="description" rows={4} maxLength={5000} value={description} onChange={(change) => setDescription(change.target.value)} />
       </label>
-      <MeetupInterests catalog={interests} activityId={activityId} description={description} initialInterests={meetup?.relevantInterests} onChange={setRelevantInterests} />
-      {!meetup && suggestionSeed && <DraftInviteSuggestions key={`${placeKind}:${siteId}`} seed={suggestionSeed} placeKind={placeKind} siteId={siteId} interests={relevantInterests} />}
+      <MeetupInterests kind={kind} catalog={interests} activityId={activityId} description={description} initialInterests={meetup?.relevantInterests} onChange={setRelevantInterests} />
+      {!meetup && suggestionSeed && <DraftInviteSuggestions mode={mode} key={`${placeKind}:${siteId}`} seed={suggestionSeed} placeKind={placeKind} siteId={siteId} interests={relevantInterests} />}
       {state.error && <p className="error" role="alert">{state.error}</p>}
-      <button type="submit" disabled={pending}>{pending ? "Saving..." : meetup ? "Save changes" : "Create Meetup"}</button>
+      <button type="submit" disabled={pending}>{pending ? "Saving..." : meetup ? "Save changes" : mode === "event" ? "Submit Event proposal" : `Create ${label}`}</button>
     </form>
   );
 }

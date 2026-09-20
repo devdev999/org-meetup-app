@@ -7,13 +7,15 @@ function choiceKey({ selection }: InterestChoice) {
   return "interestId" in selection ? selection.interestId : selection.name.toLowerCase();
 }
 
-export function MeetupInterests({ catalog, activityId, description, initialInterests, onChange }: {
+export function MeetupInterests({ catalog, activityId, description, initialInterests, onChange, kind = "meetup" }: {
   catalog: Interest[];
   activityId: string;
   description: string;
   initialInterests?: Interest[];
   onChange: (value: InterestChoice[]) => void;
+  kind?: "meetup" | "event";
 }) {
+  const label = kind === "meetup" ? "Meetup" : "Event";
   const [manual, setManual] = useState<InterestChoice[]>(() => (initialInterests ?? []).map((interest) => ({ phrase: interest.name, selection: { interestId: interest.interestId } })));
   const [automatic, setAutomatic] = useState<InterestChoice[]>([]);
   const [excluded, setExcluded] = useState<string[]>([]);
@@ -22,11 +24,11 @@ export function MeetupInterests({ catalog, activityId, description, initialInter
     if (initialInterests !== undefined) return;
     const controller = new AbortController();
     setAutomatic([]);
-    setStatus(activityId ? "Finding relevant Interests. You can create the Meetup while this runs." : "Choose an Activity to find relevant Interests.");
+    setStatus(activityId ? "Finding relevant Interests. You can save while this runs." : "Choose an Activity to find relevant Interests.");
     const timer = setTimeout(async () => {
       if (!activityId) return;
       try {
-        const response = await fetch("/api/meetup-interests", {
+        const response = await fetch(`/api/${kind}-interests`, {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ activityId, description }), signal: controller.signal,
         });
@@ -34,13 +36,13 @@ export function MeetupInterests({ catalog, activityId, description, initialInter
         const result: { proposals: InterestResolution[] } = await response.json();
         if (controller.signal.aborted) return;
         setAutomatic(result.proposals.map((proposal) => ({ phrase: proposal.phrase, selection: proposal.proposed })));
-        setStatus(result.proposals.length ? "Review these Interests before creating your Meetup." : "No automatic Interests were added. Choose manually or create without them.");
+        setStatus(result.proposals.length ? `Review these Interests before saving your ${label}.` : "No automatic Interests were added. Choose manually or save without them.");
       } catch {
         if (!controller.signal.aborted) setStatus("Automatic Interests are unavailable. Choose manually or create without them.");
       }
     }, 500);
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [activityId, description, initialInterests]);
+  }, [activityId, description, initialInterests, kind, label]);
   const selected = useMemo(() => {
     const included = automatic.filter((choice) => !excluded.includes(choiceKey(choice))
       && !manual.some((entry) => choiceKey(entry) === choiceKey(choice)));
@@ -51,7 +53,7 @@ export function MeetupInterests({ catalog, activityId, description, initialInter
   return (
     <fieldset>
       <legend>Relevant Interests, optional</legend>
-      <p>These describe this Meetup and leave your own Shares and Seeks unchanged.</p>
+      <p>These describe this {label} and leave your own Shares and Seeks unchanged.</p>
       <label>
         Add a relevant Interest
         <select value="" onChange={(change) => {

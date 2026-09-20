@@ -4,6 +4,9 @@ import { recordAdminView } from "./admin-audit";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { AccessDeniedError } from "./errors";
+import { approveEvent, createEvent, managedEvents, readEventProposals, reassignEventHost, rejectEvent, type EventProposal, type ManagedEvent } from "./events";
+import type { CreateEventInput, EventDetail } from "./meetups";
+import { deliverSoon } from "./notifications";
 import {
   commitRoster,
   previewRoster,
@@ -23,6 +26,12 @@ import {
 } from "./organisation-lists";
 
 export interface OrganisationAdminActions {
+  createEvent(input: CreateEventInput): Promise<EventDetail>;
+  eventProposals(): Promise<EventProposal[]>;
+  events(): Promise<ManagedEvent[]>;
+  approveEvent(id: string, note?: string): Promise<void>;
+  rejectEvent(id: string, note: string): Promise<void>;
+  reassignEventHost(id: string, memberId: string): Promise<void>;
   roster(): Promise<RosterMember[]>;
   previewRoster(rows: RosterRow[]): Promise<RosterPreview>;
   commitRoster(rows: RosterRow[], revision: string): Promise<void>;
@@ -68,6 +77,22 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
     });
   }
   return {
+    createEvent: async (input) => {
+      const event = await authorised((db) => createEvent(db, actor, input, deps.clock.now()));
+      await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: event.id });
+      return event;
+    },
+    eventProposals: () => authorised((db) => readEventProposals(db, actor, { administration: true }), "event-proposals"),
+    events: () => authorised((db) => managedEvents(db, actor), "events"),
+    approveEvent: async (id, note) => {
+      await authorised((db) => approveEvent(db, actor, id, deps.clock.now(), note));
+      await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: id });
+    },
+    rejectEvent: (id, note) => authorised((db) => rejectEvent(db, actor, id, note)),
+    reassignEventHost: async (id, memberId) => {
+      await authorised((db) => reassignEventHost(db, actor, id, memberId, deps.clock.now()));
+      await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: id });
+    },
     roster: () => authorised((db) => readRoster(db, actor.organisationId), "roster"),
     previewRoster: (rows) => authorised((db) => previewRoster(db, actor.organisationId, rows), "roster-preview"),
     commitRoster: (rows, revision) =>

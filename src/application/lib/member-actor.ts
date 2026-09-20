@@ -12,11 +12,13 @@ import type { InterestKind } from "../ports";
 import { confirmInterest, listInterests, memberInterestList, memberInterestsFor, resolveInterest, setInterestStance, type ConfirmInterestInput, type Interest, type InterestResolution, type MemberInterest, type Stance } from "./interests";
 import { beginTelegramLink, unlinkTelegram, type TelegramLink } from "./telegram";
 import { deliverSoon, notificationSettings, setNoticePreference, type NotificationSettings, type NoticePreference } from "./notifications";
-import { inviteSuggestions, meetupSuggestions, previewInviteSuggestions, type InviteSuggestion, type MeetupSuggestion, type PreviewInviteSuggestionsInput } from "./suggestions";
-import { extractMeetupInterests, type ExtractMeetupInterestsInput } from "./meetup-interests";
+import { eventSuggestions, inviteSuggestions, meetupSuggestions, previewInviteSuggestions, type EventSuggestion, type InviteSuggestion, type MeetupSuggestion, type PreviewInviteSuggestionsInput } from "./suggestions";
+import { extractMeetupInterests, type ExtractEventInterestsInput, type ExtractMeetupInterestsInput } from "./meetup-interests";
 import { availability, availabilityMeetup, postAvailability, type Availability, type AvailabilityBoard, type AvailabilitySuggestion, type AvailabilityOverlap, type PostAvailabilityInput } from "./availability";
-import { answerRsvp, joinSeries, leaveSeries, listSeries, stopSeries, type RecurringMeetup } from "./recurring-meetups";
+import { answerRsvp, joinSeries, leaveSeries, listSeries, stopSeries, type RecurringMeetup, type RecurringEvent } from "./recurring-meetups";
 import type { RsvpAnswer } from "./meetups";
+import { listEvents, ownEventProposals, proposeEvent, viewEvent, type EventProposal } from "./events";
+import type { CreateEventInput, EditEventInput, EventDetail, EventSummary } from "./meetups";
 
 export type MemberStatus = (typeof members.status.enumValues)[number];
 
@@ -71,6 +73,22 @@ export interface MemberSearch {
  * to it, so nothing a page passes in can reach another Organisation.
  */
 export interface MemberActions {
+  proposeEvent(input: CreateEventInput): Promise<EventProposal>;
+  eventProposals(): Promise<EventProposal[]>;
+  listEvents(): Promise<EventSummary[]>;
+  listEventSeries(): Promise<RecurringEvent[]>;
+  viewEvent(id: string): Promise<EventDetail | undefined>;
+  joinEvent(id: string): Promise<"participant" | "waitlisted">;
+  leaveEvent(id: string): Promise<void>;
+  inviteToEvent(eventId: string, memberId: string): Promise<Invite>;
+  eventInviteChoices(eventId: string, input?: InviteSearch): Promise<InviteChoices>;
+  editEvent(id: string, input: EditEventInput): Promise<void>;
+  cancelEvent(id: string): Promise<void>;
+  handOverEvent(id: string, participantMemberId: string): Promise<void>;
+  eventSuggestions(): Promise<EventSuggestion[]>;
+  eventInviteSuggestions(id: string): Promise<InviteSuggestion[]>;
+  inviteSuggestedMemberToEvent(id: string, memberId: string, previousInviteId?: string): Promise<Invite>;
+  extractEventInterests(input: ExtractEventInterestsInput, signal?: AbortSignal): Promise<InterestResolution[]>;
   joinSeries(id: string): Promise<void>;
   listSeries(): Promise<RecurringMeetup[]>;
   leaveSeries(id: string): Promise<void>;
@@ -151,8 +169,24 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
   }
 
   return {
+    proposeEvent: (input) => proposeEvent(deps, actor, input),
+    eventProposals: () => ownEventProposals(deps, actor),
+    listEvents: () => listEvents(deps, actor),
+    listEventSeries: async () => (await listSeries(deps, actor, "event")).filter((series) => series.kind === "event"),
+    viewEvent: (id) => viewEvent(deps, actor, id),
+    joinEvent: (id) => withNotices(id, () => joinMeetup(deps, actor, id, "event")),
+    leaveEvent: (id) => withNotices(id, () => leaveMeetup(deps, actor, id, "event")),
+    inviteToEvent: (id, memberId) => withNotices(id, () => inviteMember(deps, actor, id, memberId, {}, "event")),
+    eventInviteChoices: (id, input = {}) => afterNotice(() => inviteChoices(deps, actor, id, input, "event"), { action: "event-invite-choices", filter: { eventId: id, name: input.name ?? "", page: String(input.page ?? 0) } }),
+    editEvent: (id, input) => withNotices(id, () => editMeetup(deps, actor, id, input, "event")),
+    cancelEvent: (id) => withNotices(id, () => cancelMeetup(deps, actor, id, "event")),
+    handOverEvent: (id, memberId) => withNotices(id, () => handOverMeetup(deps, actor, id, memberId, "event")),
+    eventSuggestions: () => afterNotice(() => eventSuggestions(deps, actor), { action: "event-suggestions", filter: {} }),
+    eventInviteSuggestions: (id) => afterNotice(() => inviteSuggestions(deps, actor, id, "event"), { action: "event-invite-suggestions", filter: { eventId: id } }),
+    inviteSuggestedMemberToEvent: (id, memberId, previousInviteId) => withNotices(id, () => inviteMember(deps, actor, id, memberId, { previousInviteId, selectionSource: "suggestion" }, "event")),
+    extractEventInterests: (input, signal) => afterNotice(() => extractMeetupInterests(deps, actor, input, signal)),
     joinSeries: (id) => withSeriesNotices(() => joinSeries(deps, actor, id)),
-    listSeries: () => listSeries(deps, actor),
+    listSeries: async () => (await listSeries(deps, actor)).filter((series) => series.kind === "meetup"),
     answerRsvp: (id, answer) => withNotices(id, () => answerRsvp(deps, actor, id, answer)),
     leaveSeries: (id) => withSeriesNotices(() => leaveSeries(deps, actor, id)),
     stopSeries: (id) => withSeriesNotices(() => stopSeries(deps, actor, id)),
@@ -182,7 +216,7 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     cancelMeetup: (id) => withNotices(id, () => cancelMeetup(deps, actor, id)),
     handOverMeetup: (id, participantMemberId) => withNotices(id, () => handOverMeetup(deps, actor, id, participantMemberId)),
     inviteMember: (id, memberId) => withNotices(id, () => inviteMember(deps, actor, id, memberId)),
-    inviteSuggestedMember: (id, memberId, previousInviteId) => withNotices(id, () => inviteMember(deps, actor, id, memberId, { previousInviteId, fromSuggestion: true })),
+    inviteSuggestedMember: (id, memberId, previousInviteId) => withNotices(id, () => inviteMember(deps, actor, id, memberId, { previousInviteId, selectionSource: "suggestion" })),
     inviteChoices: (id, input = {}) => afterNotice(() => inviteChoices(deps, actor, id, input), { action: "meetup-invite-choices", filter: { meetupId: id, name: input.name ?? "", page: String(input.page ?? 0) } }),
     inviteSuggestions: (id) => afterNotice(() => inviteSuggestions(deps, actor, id), { action: "invite-suggestions", filter: { meetupId: id } }),
     previewInviteSuggestions: (input) => afterNotice(() => previewInviteSuggestions(deps, actor, input), { action: "invite-suggestions-preview", filter: input?.place?.kind === "physical" ? { placeKind: input.place.kind, siteId: input.place.siteId } : { placeKind: input?.place?.kind } }),
@@ -190,7 +224,7 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     extractMeetupInterests: (input, signal) => afterNotice(() => extractMeetupInterests(deps, actor, input, signal)),
     answerInvite: async (id, answer) => {
       const result = await answerInvite(deps, actor, id, answer);
-      await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: result.meetupId });
+      await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: result.eventId ?? result.meetupId });
       return result;
     },
     interests: () => afterNotice(() => listInterests(deps, actor)),

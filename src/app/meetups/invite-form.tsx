@@ -4,9 +4,9 @@ import { useActionState } from "react";
 import type { InviteChoices } from "../../application";
 import { answerInvite, sendInvite, type MeetupActionState } from "./actions";
 
-export function InviteForm({ meetupId, members }: { meetupId: string; members: InviteChoices["members"] }) {
+export function InviteForm({ meetupId, members, kind = "meetup" }: { meetupId: string; members: InviteChoices["members"]; kind?: "meetup" | "event" }) {
   const [state, action, pending] = useActionState<MeetupActionState, FormData>(
-    (_previous, form) => sendInvite(meetupId, form), {},
+    (_previous, form) => sendInvite(meetupId, form, "manual", kind), {},
   );
   return (
     <form action={action}>

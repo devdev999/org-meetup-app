@@ -88,7 +88,7 @@ test("Members sign in, declare Interests, create a Meetup and join from Suggesti
     await signIn(bo, "Bo Member", "bo@ministry-a.example", "Legal");
     await declareSql(bo, "shares");
     await bo.goto("/");
-    await expect(bo.getByText("Relevant Interests: SQL.", { exact: false })).toBeVisible();
+    await expect(bo.getByRole("listitem").filter({ has: bo.getByRole("link", { name: "coffee", exact: true }) }).getByText("Relevant Interests: SQL.", { exact: false })).toBeVisible();
     await bo.getByRole("link", { name: "coffee", exact: true }).click();
     await expect(bo).toHaveURL(meetupUrl);
     await bo.getByRole("button", { name: "Join Meetup", exact: true }).click();

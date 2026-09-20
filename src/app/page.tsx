@@ -4,13 +4,14 @@ import { MeetupTime } from "./meetups/meetup-time";
 
 export default async function HomePage() {
   const { member } = await requireMemberPastWelcome();
-  const suggestions = await member.meetupSuggestions();
+  const [suggestions, events] = await Promise.all([member.meetupSuggestions(), member.eventSuggestions()]);
   return (
     <main>
       <nav className="member-nav" aria-label="Member navigation">
         <Link href="/profile">Your profile</Link>
         <Link href="/interests">Your Interests</Link>
         <Link href="/meetups">All Meetups</Link>
+        <Link href="/events">All Events</Link>
         <Link href="/availability">Availability</Link>
         <Link href="/inbox">Inbox</Link>
       </nav>
@@ -26,6 +27,19 @@ export default async function HomePage() {
           <p>{reasons.join(" ")}</p>
         </li>
       ))}</ul>}
+      <section>
+        <h2>Suggested Events</h2>
+        <p>Open Events in your scope over the next fourteen days.</p>
+        <p><Link href="/events/new">Propose an Event</Link></p>
+        {events.length === 0 ? <p>No Events to suggest yet.</p> : <ul className="meetup-list">{events.map(({ event, reasons }) => <li key={event.id}>
+          <p className="muted">Event</p>
+          <h3><Link href={`/events/${event.id}`}>{event.activity.name}</Link></h3>
+          <p><MeetupTime value={event.startsAt.toISOString()} /></p>
+          <p>{event.place.kind === "physical" ? `${event.place.siteName}, ${event.place.spot}` : "Virtual"}</p>
+          <p>Host: {event.host.name}</p>
+          <p>{reasons.join(" ")}</p>
+        </li>)}</ul>}
+      </section>
     </main>
   );
 }

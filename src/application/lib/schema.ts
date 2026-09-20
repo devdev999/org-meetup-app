@@ -278,7 +278,7 @@ const gatheringFields = () => ({
   placeSiteId: uuid(),
   placeSpot: text(),
   placeUrl: text(),
-  capacity: integer().notNull(),
+  capacity: integer(),
   audienceKind: text().$type<"open" | "invite-only">().notNull(),
   audienceScope: text().$type<"site" | "organisation">(),
   audienceSiteId: uuid(),
@@ -336,6 +336,29 @@ export const gatherings = pgTable("gatherings", {
   foreignKey({ columns: [table.organisationId, table.audienceSiteId], foreignColumns: [sites.organisationId, sites.id] }),
 ]);
 
+export const eventProposals = pgTable("event_proposals", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  eventId: uuid().notNull(),
+  proposerMemberId: uuid().notNull(),
+  state: text().$type<"proposed" | "approved" | "rejected">().notNull().default("proposed"),
+  note: text(),
+  recurrence: jsonb().$type<Pick<RecurrenceRule, "frequency" | "endsOn">>(),
+  invitedMemberIds: uuid().array().notNull().default(sql`'{}'::uuid[]`),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.eventId] }),
+  foreignKey({ columns: [table.organisationId, table.eventId], foreignColumns: [gatherings.organisationId, gatherings.id] }),
+  foreignKey({ columns: [table.organisationId, table.proposerMemberId], foreignColumns: [members.organisationId, members.id] }),
+]);
+
+export const eventOrganisations = pgTable("event_organisations", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  eventId: uuid().notNull(),
+  openedToOrganisationId: uuid().notNull().references(() => organisations.id),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.eventId, table.openedToOrganisationId] }),
+  foreignKey({ columns: [table.organisationId, table.eventId], foreignColumns: [gatherings.organisationId, gatherings.id] }),
+]);
+
 export const gatheringInterests = pgTable("gathering_interests", {
   organisationId: uuid().notNull().references(() => organisations.id),
   gatheringId: uuid().notNull(),
@@ -391,6 +414,7 @@ export const notices = pgTable("notices", {
   kind: text().$type<NoticeKind>().notNull(),
   message: text().notNull(),
   externalMessage: text().notNull().default(""),
+  messagePrefix: text(),
   createdAt: timestamptz().notNull(),
   position: serial().notNull(),
 }, (table) => [

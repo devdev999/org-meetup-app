@@ -16,7 +16,7 @@ export interface MeetupRankingCandidate {
   startsAt: Date;
 }
 
-export function rankMeetups(interests: MemberInterest[], candidates: MeetupRankingCandidate[]): { meetupId: string; reasons: string[] }[] {
+export function rankMeetups(interests: MemberInterest[], candidates: MeetupRankingCandidate[], kind: "meetup" | "event" = "meetup"): { meetupId: string; reasons: string[] }[] {
   return candidates.map((candidate) => {
     const overlap = candidate.interests.filter((interest) => interests.some((entry) => entry.interestId === interest.interestId));
     let score = overlap.length * 2;
@@ -31,7 +31,7 @@ export function rankMeetups(interests: MemberInterest[], candidates: MeetupRanki
         : host.stance === "shares" ? `The Host Shares ${host.name}, which you Seek.`
         : `You Share ${host.name}, which the Host Seeks.`);
     }
-    if (!reasons.length) reasons.push("An open Meetup coming up.");
+    if (!reasons.length) reasons.push(`An open ${kind === "event" ? "Event" : "Meetup"} coming up.`);
     reasons.push(`${candidate.connectionCount} recorded Connections with Participants.`);
     return { ...candidate, score, reasons };
   }).sort((a, b) => b.score - a.score || a.connectionCount - b.connectionCount
@@ -40,6 +40,7 @@ export function rankMeetups(interests: MemberInterest[], candidates: MeetupRanki
 }
 
 export function rankInvitees(input: {
+  kind?: "meetup" | "event";
   seed: string;
   hostDepartmentId: string | null;
   hostInterests: MemberInterest[];
@@ -61,7 +62,7 @@ export function rankInvitees(input: {
       }
       if (input.relevantInterests.some((entry) => entry.interestId === interest.interestId)) {
         score += 2;
-        reasons.push(`They ${interest.stance === "shares" ? "Share" : "Seek"} ${interest.name}, a relevant Interest for this Meetup.`);
+        reasons.push(`They ${interest.stance === "shares" ? "Share" : "Seek"} ${interest.name}, a relevant Interest for this ${input.kind === "event" ? "Event" : "Meetup"}.`);
       }
     }
     const newFace = candidate.connectionCount === 0;
@@ -69,7 +70,7 @@ export function rankInvitees(input: {
       && input.hostDepartmentId !== candidate.departmentId;
     if (newFace) reasons.push("No recorded Connection with you.");
     if (differentDepartment) reasons.push("From a different Department.");
-    if (!reasons.length) reasons.push("Stable order for this Meetup.");
+    if (!reasons.length) reasons.push(`Stable order for this ${input.kind === "event" ? "Event" : "Meetup"}.`);
     const tie = createHash("sha256").update(`${input.seed}:${candidate.memberId}`).digest("hex");
     return { memberId: candidate.memberId, reasons, score, newFace, differentDepartment, tie };
   }).sort((a, b) => b.score - a.score || Number(b.newFace) - Number(a.newFace)
