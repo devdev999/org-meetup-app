@@ -6,7 +6,7 @@ import type { Deps } from "./deps";
 import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
 import { recordNotices } from "./notifications";
-import { activities, gatheringMembers, gatherings, invites, members, notices, organisations, sites } from "./schema";
+import { activities, departments, gatheringMembers, gatherings, invites, members, notices, organisations, sites } from "./schema";
 
 export type MeetupPlace = { kind: "physical"; siteId: string; spot: string } | { kind: "virtual"; url: string };
 export type MeetupAudience =
@@ -62,7 +62,10 @@ export interface InviteAnswer {
 }
 
 export interface InviteSearch { name?: string; page?: number }
-export interface InviteChoices { members: MeetupPerson[]; hasMore: boolean }
+export interface InviteChoices {
+  members: (MeetupPerson & { department: string | null; site: string | null })[];
+  hasMore: boolean;
+}
 
 const INVITE_PAGE_SIZE = 20;
 
@@ -349,7 +352,9 @@ export async function inviteChoices(deps: Deps, actor: Actor, id: string, input:
     .where(and(meetupWhere(actor.organisationId, id), eq(gatherings.hostMemberId, actor.memberId),
       eq(gatherings.status, "scheduled"), gt(gatherings.startsAt, deps.clock.now())));
   if (!meetup) throw new AccessDeniedError();
-  const choices = await deps.db.select({ memberId: members.id, name: members.name }).from(members)
+  const choices = await deps.db.select({ memberId: members.id, name: members.name, department: departments.name, site: sites.name }).from(members)
+    .leftJoin(departments, and(eq(departments.organisationId, members.organisationId), eq(departments.id, members.departmentId)))
+    .leftJoin(sites, and(eq(sites.organisationId, members.organisationId), eq(sites.id, members.siteId)))
     .where(and(eq(members.organisationId, actor.organisationId), inArray(members.status, VISIBLE_MEMBER_STATUSES), ilike(members.name, pattern),
       sql`not exists (select 1 from ${gatheringMembers} where ${gatheringMembers.organisationId} = ${members.organisationId} and ${gatheringMembers.gatheringId} = ${id} and ${gatheringMembers.memberId} = ${members.id} and ${gatheringMembers.status} = 'participant')`,
       sql`not exists (select 1 from ${invites} where ${invites.organisationId} = ${members.organisationId} and ${invites.gatheringId} = ${id} and ${invites.memberId} = ${members.id})`))

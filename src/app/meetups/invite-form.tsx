@@ -1,9 +1,10 @@
 "use client";
 
 import { useActionState } from "react";
+import type { InviteChoices } from "../../application";
 import { answerInvite, sendInvite, type MeetupActionState } from "./actions";
 
-export function InviteForm({ meetupId, members }: { meetupId: string; members: { memberId: string; name: string }[] }) {
+export function InviteForm({ meetupId, members }: { meetupId: string; members: InviteChoices["members"] }) {
   const [state, action, pending] = useActionState<MeetupActionState, FormData>(
     (_previous, form) => sendInvite(meetupId, form), {},
   );
@@ -13,7 +14,11 @@ export function InviteForm({ meetupId, members }: { meetupId: string; members: {
         Member to invite
         <select name="memberId" required defaultValue="">
           <option value="" disabled>Choose a Member</option>
-          {members.map((member) => <option key={member.memberId} value={member.memberId}>{member.name}</option>)}
+          {members.map((member) => (
+            <option key={member.memberId} value={member.memberId}>
+              {member.name}, {member.department ?? "Department not set"}, {member.site ?? "Site not set"}
+            </option>
+          ))}
         </select>
       </label>
       <button type="submit" disabled={pending || members.length === 0}>{pending ? "Sending..." : "Send Invite"}</button>

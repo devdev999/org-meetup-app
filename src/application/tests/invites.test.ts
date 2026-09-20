@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { MemberActions } from "../index";
-import { ministryA, ministryB, signInAndAcknowledgeAs } from "./fixtures";
+import { ministryA, ministryB, signInAndAcknowledgeAs, withDepartmentAndSiteClaims } from "./fixtures";
 import { harness } from "./harness";
 
 const h = harness();
@@ -218,8 +218,8 @@ test("only the Host can list Invite choices, including Provisioned and waitliste
   await cy.joinMeetup(meetup.id);
   await host.inviteMember(meetup.id, (await di.profile()).memberId);
   expect((await host.inviteChoices(meetup.id)).members).toEqual([
-    { memberId: (await cy.profile()).memberId, name: "Cy Member" },
-    { memberId: (await host.searchMembers()).find((candidate) => candidate.name === "Pat Platform")!.memberId, name: "Pat Platform" },
+    { memberId: (await cy.profile()).memberId, name: "Cy Member", department: null, site: null },
+    { memberId: (await host.searchMembers()).find((candidate) => candidate.name === "Pat Platform")!.memberId, name: "Pat Platform", department: null, site: null },
   ]);
   await expect(bo.inviteChoices(meetup.id)).rejects.toMatchObject({ name: "AccessDeniedError" });
   await host.inviteMember(meetup.id, (await cy.profile()).memberId);
@@ -243,9 +243,25 @@ test("a Host can narrow Invite choices by a case-insensitive literal name", asyn
   await member("Cy");
   const meetup = await createMeetup(host);
   expect(await host.inviteChoices(meetup.id, { name: " BO " })).toEqual({
-    members: [{ memberId: (await bo.profile()).memberId, name: "Bo Member" }], hasMore: false,
+    members: [{ memberId: (await bo.profile()).memberId, name: "Bo Member", department: null, site: null }], hasMore: false,
   });
   expect(await host.inviteChoices(meetup.id, { name: "%" })).toEqual({ members: [], hasMore: false });
+});
+
+test("Invite choices distinguish same-name Members by Department and Site", async () => {
+  await h.app.bootstrap(withDepartmentAndSiteClaims(ministryA));
+  const host = await member("Ana");
+  const finance = await signInAndAcknowledgeAs(h, "ministry-a", {
+    sub: "alex-finance", email: "alex.finance@example.test", name: "Alex Tan", ou: "Finance", building: "Harbour House",
+  });
+  const legal = await signInAndAcknowledgeAs(h, "ministry-a", {
+    sub: "alex-legal", email: "alex.legal@example.test", name: "Alex Tan", ou: "Legal", building: "Annex",
+  });
+  const meetup = await createMeetup(host);
+  expect((await host.inviteChoices(meetup.id, { name: "Alex Tan" })).members).toEqual(expect.arrayContaining([
+    { memberId: (await finance.profile()).memberId, name: "Alex Tan", department: "Finance", site: "Harbour House" },
+    { memberId: (await legal.profile()).memberId, name: "Alex Tan", department: "Legal", site: "Annex" },
+  ]));
 });
 
 test("Invite choices use stable pages of twenty Members without losing later matches", async () => {
