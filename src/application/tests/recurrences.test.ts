@@ -95,6 +95,56 @@ test("leaving a series removes future seats and waitlist entries, promotes the n
   await expect(ana.leaveSeries(first.recurrence!.id)).rejects.toBeInstanceOf(InvalidInputError);
 });
 
+test("series joins and departures notify the Host only when occurrence participation changes", async () => {
+  const { ana, input } = await setup();
+  const bo = await member("bo");
+  const cy = await member("cy");
+  const link = await ana.beginTelegramLink();
+  await h.app.handleTelegram({ kind: "link", chatId: "101", code: new URL(link.url).searchParams.get("start")! });
+  const first = await ana.createMeetup(input);
+  await h.app.processRecurrences();
+  const second = (await ana.listMeetups())[1]!;
+  await bo.joinMeetup(first.id);
+  h.email.reset();
+  h.telegram.reset();
+  await cy.joinSeries(first.recurrence!.id);
+  await cy.joinSeries(first.recurrence!.id);
+  const joined = (await ana.inbox()).filter((notice) => notice.message.startsWith("cy joined"));
+  expect(joined).toMatchObject([{ kind: "meetup-joined", meetupId: second.id }]);
+  expect(h.email.outbox).toHaveLength(1);
+  expect(h.email.outbox[0]!.text).toContain("cy joined your Meetup.");
+  expect(h.telegram.outbox).toHaveLength(1);
+  await cy.leaveSeries(first.recurrence!.id);
+  await cy.leaveSeries(first.recurrence!.id);
+  const left = (await ana.inbox()).filter((notice) => notice.message.startsWith("cy left"));
+  expect(left).toMatchObject([{ kind: "meetup-left", meetupId: second.id }]);
+  expect(h.telegram.outbox).toHaveLength(2);
+  expect(h.email.outbox).toHaveLength(1);
+  await bo.joinSeries(first.recurrence!.id);
+  expect((await ana.inbox()).filter((notice) => notice.kind === "meetup-joined" && notice.meetupId === first.id)).toHaveLength(1);
+});
+
+test("series actions leave unrelated notice retries to the worker", async () => {
+  const { ana, input } = await setup();
+  const bo = await member("bo");
+  const cy = await member("cy");
+  const first = await ana.createMeetup(input);
+  const oneOff = await ana.createMeetup({ ...input, recurrence: undefined });
+  h.email.failure = new Error("Email unavailable");
+  await cy.joinMeetup(oneOff.id);
+  h.email.reset();
+  h.clock.set(new Date("2026-01-05T09:01:00Z"));
+  await bo.leaveSeries(first.recurrence!.id);
+  expect(h.email.outbox).toEqual([]);
+  await bo.joinSeries(first.recurrence!.id);
+  await bo.leaveSeries(first.recurrence!.id);
+  await ana.stopSeries(first.recurrence!.id);
+  await ana.stopSeries(first.recurrence!.id);
+  expect(h.email.outbox.every((notice) => !notice.text.startsWith("cy joined"))).toBe(true);
+  await h.app.deliverNotices();
+  expect(h.email.outbox.filter((notice) => notice.text.startsWith("cy joined"))).toHaveLength(1);
+});
+
 test("Not going releases one occurrence and returning to Going waits behind existing waitlisted Members", async () => {
   const { ana, input } = await setup();
   const bo = await member("bo");
@@ -139,7 +189,7 @@ test("the forty-eight-hour prompt uses each standing Member's channels and appea
   h.email.reset();
   h.clock.set(new Date("2026-01-06T09:59:59.999Z"));
   await h.app.processRecurrences();
-  expect(await ana.inbox()).toEqual([]);
+  expect((await ana.inbox()).filter((notice) => notice.kind === "rsvp-prompt")).toEqual([]);
   h.clock.set(new Date("2026-01-06T10:00:00Z"));
   await Promise.all([h.app.processRecurrences(), h.app.processRecurrences()]);
   expect((await ana.inbox()).filter((notice) => notice.kind === "rsvp-prompt")).toHaveLength(1);
@@ -286,7 +336,7 @@ test("late standing joiners receive one prompt and leaving suppresses its pendin
   expect((await bo.inbox()).filter((notice) => notice.kind === "rsvp-prompt")).toHaveLength(1);
   await bo.leaveSeries(first.recurrence!.id);
   await h.app.deliverNotices();
-  expect(h.email.outbox).toEqual([]);
+  expect(h.email.outbox.filter((message) => message.to === "bo@example.test")).toEqual([]);
   h.clock.set(new Date("2026-01-07T10:01:00Z"));
   await bo.joinSeries(first.recurrence!.id);
   await h.app.processRecurrences();

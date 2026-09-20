@@ -4,8 +4,8 @@ import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
-import { cancelOccurrence, notify, promoteWaitlist, readMeetups, requireScheduledMeetup, takePlace, type RsvpAnswer } from "./meetups";
-import { readRecurrences, visibleRecurrences, type Recurrence } from "./recurrence-records";
+import { cancelOccurrence, notify, readMeetups, releasePlace, requireScheduledMeetup, takePlace, type RsvpAnswer } from "./meetups";
+import { readRecurrences, saveRsvp, visibleRecurrences, type Recurrence } from "./recurrence-records";
 import { expandRecurrence } from "./recurrence-rule";
 import { supersedeRsvpDeliveries } from "./notifications";
 import { activities, gatheringInterests, gatheringMembers, gatheringRsvps, gatherings, members, organisations, recurrenceInterests, recurrenceMembers, recurrences } from "./schema";
@@ -35,55 +35,54 @@ async function futureOccurrences(db: Queryable, actor: Actor, id: string, siteId
   return readMeetups(db, actor, rows.map((row) => row.id), siteId, now);
 }
 
-export async function joinSeries(deps: Deps, actor: Actor, id: string): Promise<void> {
+export async function joinSeries(deps: Deps, actor: Actor, id: string): Promise<string[]> {
   return withActiveMember(deps, actor, async (db, current) => {
     const now = deps.clock.now();
     const series = await requireSeries(db, actor, id, current.siteId);
     if (series.stoppedAt || series.endsOn && now > new Date(`${series.endsOn}T23:59:59.999Z`)) throw new InvalidInputError("invalid-meetup", "This series has ended.");
     const standing = await db.select({ memberId: recurrenceMembers.memberId }).from(recurrenceMembers)
       .where(and(eq(recurrenceMembers.organisationId, actor.organisationId), eq(recurrenceMembers.recurrenceId, id)));
-    if (standing.some(({ memberId }) => memberId === actor.memberId)) return;
+    if (standing.some(({ memberId }) => memberId === actor.memberId)) return [];
     if (standing.length >= series.capacity) throw new InvalidInputError("invalid-meetup", "This series has no standing places left.");
     await db.insert(recurrenceMembers).values({ organisationId: actor.organisationId, recurrenceId: id, memberId: actor.memberId });
-    for (const meetup of await futureOccurrences(db, actor, id, current.siteId, now)) {
-      if (!meetup.canChange) continue;
-      await takePlace(db, actor.organisationId, meetup, actor.memberId);
-      const answer = meetup.rsvp === "going" ? "going" as const : null;
-      await db.insert(gatheringRsvps).values({ organisationId: actor.organisationId, gatheringId: meetup.id, memberId: actor.memberId, answer })
-        .onConflictDoUpdate({ target: [gatheringRsvps.organisationId, gatheringRsvps.gatheringId, gatheringRsvps.memberId], set: { answer } });
+    const occurrences = (await futureOccurrences(db, actor, id, current.siteId, now)).filter((meetup) => meetup.canChange);
+    for (const meetup of occurrences) {
+      await takePlace(db, actor.organisationId, meetup, current, now);
+      await saveRsvp(db, actor, meetup.id, meetup.rsvp === "going" ? "going" : null);
     }
+    return occurrences.map((meetup) => meetup.id);
   });
 }
 
-export async function leaveSeries(deps: Deps, actor: Actor, id: string): Promise<void> {
+export async function leaveSeries(deps: Deps, actor: Actor, id: string): Promise<string[]> {
   return withActiveMember(deps, actor, async (db, current) => {
     const now = deps.clock.now();
     const series = await requireSeries(db, actor, id, current.siteId);
     if (series.hostMemberId === actor.memberId) throw new InvalidInputError("invalid-meetup", "Stop your series to leave it.");
     const [standing] = await db.select({ memberId: recurrenceMembers.memberId }).from(recurrenceMembers)
       .where(and(eq(recurrenceMembers.organisationId, actor.organisationId), eq(recurrenceMembers.recurrenceId, id), eq(recurrenceMembers.memberId, actor.memberId)));
-    if (!standing) return;
+    if (!standing) return [];
     const occurrences = await futureOccurrences(db, actor, id, current.siteId, now);
     await db.delete(recurrenceMembers).where(and(eq(recurrenceMembers.organisationId, actor.organisationId), eq(recurrenceMembers.recurrenceId, id), eq(recurrenceMembers.memberId, actor.memberId)));
     for (const meetup of occurrences) {
       await supersedeRsvpDeliveries(db, actor.organisationId, meetup.id, now, actor.memberId);
-      await db.delete(gatheringMembers).where(and(eq(gatheringMembers.organisationId, actor.organisationId), eq(gatheringMembers.gatheringId, meetup.id), eq(gatheringMembers.memberId, actor.memberId)));
+      await releasePlace(db, actor.organisationId, meetup, current, now);
       await db.delete(gatheringRsvps).where(and(eq(gatheringRsvps.organisationId, actor.organisationId), eq(gatheringRsvps.gatheringId, meetup.id), eq(gatheringRsvps.memberId, actor.memberId)));
-      if (meetup.canChange) await promoteWaitlist(db, actor.organisationId, meetup, now);
     }
+    return occurrences.map((meetup) => meetup.id);
   });
 }
 
-export async function stopSeries(deps: Deps, actor: Actor, id: string): Promise<void> {
+export async function stopSeries(deps: Deps, actor: Actor, id: string): Promise<string[]> {
   return withActiveMember(deps, actor, async (db, current) => {
     const series = await requireSeries(db, actor, id, current.siteId);
     if (series.hostMemberId !== actor.memberId) throw new AccessDeniedError();
-    if (series.stoppedAt) return;
+    if (series.stoppedAt) return [];
     const now = deps.clock.now();
     await db.update(recurrences).set({ stoppedAt: now }).where(and(eq(recurrences.organisationId, actor.organisationId), eq(recurrences.id, id)));
-    for (const meetup of await futureOccurrences(db, actor, id, current.siteId, now)) {
-      if (meetup.canChange) await cancelOccurrence(db, actor.organisationId, meetup, now);
-    }
+    const occurrences = (await futureOccurrences(db, actor, id, current.siteId, now)).filter((meetup) => meetup.canChange);
+    for (const meetup of occurrences) await cancelOccurrence(db, actor.organisationId, meetup, now);
+    return occurrences.map((meetup) => meetup.id);
   });
 }
 
@@ -95,11 +94,9 @@ export async function answerRsvp(deps: Deps, actor: Actor, id: string, answer: R
     const [existing] = await db.select().from(gatheringRsvps)
       .where(and(eq(gatheringRsvps.organisationId, actor.organisationId), eq(gatheringRsvps.gatheringId, id), eq(gatheringRsvps.memberId, actor.memberId)));
     if (!meetup.recurrence || !meetup.recurrence.isStanding && !meetup.membership && !existing) throw new AccessDeniedError();
-    await db.insert(gatheringRsvps).values({ organisationId: actor.organisationId, gatheringId: id, memberId: actor.memberId, answer })
-      .onConflictDoUpdate({ target: [gatheringRsvps.organisationId, gatheringRsvps.gatheringId, gatheringRsvps.memberId], set: { answer } });
-    if (answer === "going") return takePlace(db, actor.organisationId, meetup, actor.memberId);
-    await db.delete(gatheringMembers).where(and(eq(gatheringMembers.organisationId, actor.organisationId), eq(gatheringMembers.gatheringId, id), eq(gatheringMembers.memberId, actor.memberId)));
-    await promoteWaitlist(db, actor.organisationId, meetup, now);
+    await saveRsvp(db, actor, id, answer);
+    if (answer === "going") return takePlace(db, actor.organisationId, meetup, current, now);
+    await releasePlace(db, actor.organisationId, meetup, current, now);
     return null;
   });
 }
@@ -113,6 +110,8 @@ export async function processRecurrences(deps: Deps): Promise<void> {
       const through = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
       const templates = await db.select().from(recurrences).where(and(eq(recurrences.organisationId, organisationId), isNull(recurrences.stoppedAt)));
       for (const series of templates) {
+        const dates = expandRecurrence(series, now, through);
+        if (!dates.length) continue;
         const standing = await db.select({ memberId: recurrenceMembers.memberId }).from(recurrenceMembers)
           .innerJoin(members, and(eq(members.organisationId, recurrenceMembers.organisationId), eq(members.id, recurrenceMembers.memberId)))
           .where(and(eq(recurrenceMembers.organisationId, organisationId), eq(recurrenceMembers.recurrenceId, series.id), eq(members.status, "active")))
@@ -120,7 +119,7 @@ export async function processRecurrences(deps: Deps): Promise<void> {
         if (!standing.some(({ memberId }) => memberId === series.hostMemberId)) continue;
         const interests = await db.select({ interestId: recurrenceInterests.interestId }).from(recurrenceInterests)
           .where(and(eq(recurrenceInterests.organisationId, organisationId), eq(recurrenceInterests.recurrenceId, series.id)));
-        for (const startsAt of expandRecurrence(series, now, through)) {
+        for (const startsAt of dates) {
           const [created] = await db.insert(gatherings).values({
             organisationId, kind: series.kind, hostMemberId: series.hostMemberId,
             activityId: series.activityId, startsAt, durationMinutes: series.durationMinutes,

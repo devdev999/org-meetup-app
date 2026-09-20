@@ -146,18 +146,16 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     return result;
   }
 
+  async function withSeriesNotices(operation: () => Promise<string[]>): Promise<void> {
+    for (const gatheringId of await operation()) await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId });
+  }
+
   return {
-    joinSeries: (id) => joinSeries(deps, actor, id),
+    joinSeries: (id) => withSeriesNotices(() => joinSeries(deps, actor, id)),
     listSeries: () => listSeries(deps, actor),
     answerRsvp: (id, answer) => withNotices(id, () => answerRsvp(deps, actor, id, answer)),
-    leaveSeries: async (id) => {
-      await leaveSeries(deps, actor, id);
-      await deliverSoon(deps, { organisationId: actor.organisationId });
-    },
-    stopSeries: async (id) => {
-      await stopSeries(deps, actor, id);
-      await deliverSoon(deps, { organisationId: actor.organisationId });
-    },
+    leaveSeries: (id) => withSeriesNotices(() => leaveSeries(deps, actor, id)),
+    stopSeries: (id) => withSeriesNotices(() => stopSeries(deps, actor, id)),
     postAvailability: async (input) => {
       const posted = await postAvailability(deps, actor, input);
       await deliverSoon(deps, { organisationId: actor.organisationId, kind: "availability-overlap" });

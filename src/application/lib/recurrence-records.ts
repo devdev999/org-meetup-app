@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
 import type { RecurrenceRule } from "./recurrence-rule";
-import { gatherings, invites, members, recurrenceMembers, recurrences } from "./schema";
+import { gatheringRsvps, gatherings, invites, members, recurrenceMembers, recurrences } from "./schema";
 
 export type RecurrenceInput = Pick<RecurrenceRule, "frequency" | "endsOn">;
 export interface Recurrence extends RecurrenceRule {
@@ -20,6 +20,11 @@ export const recurrenceSchema = z.object({
   frequency: z.enum(["weekly", "fortnightly", "monthly"]),
   endsOn: z.iso.date().nullable().optional(),
 });
+
+export async function saveRsvp(db: Queryable, actor: Actor, gatheringId: string, answer: typeof gatheringRsvps.$inferSelect.answer): Promise<void> {
+  await db.insert(gatheringRsvps).values({ organisationId: actor.organisationId, gatheringId, memberId: actor.memberId, answer })
+    .onConflictDoUpdate({ target: [gatheringRsvps.organisationId, gatheringRsvps.gatheringId, gatheringRsvps.memberId], set: { answer } });
+}
 
 export function visibleRecurrences(actor: Actor, siteId: string | null) {
   return and(eq(recurrences.organisationId, actor.organisationId), eq(recurrences.kind, "meetup"), or(
