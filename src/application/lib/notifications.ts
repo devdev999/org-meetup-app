@@ -72,14 +72,13 @@ export async function recordNotices(db: Queryable, organisationId: string, recip
     .where(and(eq(telegramLinks.organisationId, organisationId), inArray(telegramLinks.memberId, memberIds)));
   const preferences = await db.select().from(noticePreferences)
     .where(and(eq(noticePreferences.organisationId, organisationId), inArray(noticePreferences.memberId, memberIds), eq(noticePreferences.kind, input.kind)));
-  const timeZone = await deploymentTimeZone(db);
+  const urgent = URGENT_KINDS.includes(input.kind);
+  const scheduledFor = urgent ? now : nextMorning(now, await deploymentTimeZone(db));
   const deliveries: Array<typeof noticeDeliveries.$inferInsert> = [];
   for (const notice of created) {
     const base = { organisationId, noticeId: notice.id, mode: "immediate" as const, scheduledFor: now, availableAt: now };
     const preference = preferences.find((entry) => entry.memberId === notice.memberId);
     if (channelEnabled(preference, "email")) {
-      const urgent = URGENT_KINDS.includes(notice.kind);
-      const scheduledFor = urgent ? now : nextMorning(now, timeZone);
       deliveries.push({ ...base, channel: "email", mode: urgent ? "immediate" : "digest", scheduledFor, availableAt: scheduledFor });
     }
     if (channelEnabled(preference, "telegram") && links.some((link) => link.memberId === notice.memberId)) deliveries.push({ ...base, channel: "telegram" });

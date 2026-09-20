@@ -258,7 +258,7 @@ Secrets and process settings come from the environment; see [`.env.example`](./.
 | `OIDC_CREDENTIALS` | JSON mapping of credential references to installed OIDC client secrets. Supply it to web, worker and setup. |
 | `BOOTSTRAP_*` | Creates only the first platform owner Organisation and Platform Admin. Unset all fields to skip. Later setup runs leave an existing owner unchanged. |
 | `BOOTSTRAP_OIDC_CREDENTIAL_REF` | Optional installed credential reference for the initial owner issuer. Blank means a public client. |
-| `AI_BASE_URL`, `AI_MODEL`, `AI_EXTRACTION_MODEL` | Initial AI endpoint, Scout model and small Interest model. Both model defaults are `gpt-5.6-luna`. |
+| `AI_BASE_URL`, `AI_MODEL`, `AI_EXTRACTION_MODEL` | Initial AI endpoint, Scout model and small Interest model. An unset extraction model keeps `AI_MODEL`; when neither is set, both default to `gpt-5.6-luna`. |
 | `TELEGRAM_BOT_USERNAME`, `EMAIL_FROM`, `TIME_ZONE` | Initial non-secret defaults. Time zone defaults to UTC. |
 
 Open Platform Admin, then Organisations, to create an Organisation or appoint an existing Organisation's first admin. Creation accepts issuer, client ID, claim mapping and an optional credential reference. Leave the reference blank only for a public client. A required reference with no installed secret shows "Sign-in awaiting OIDC credential". An operator installs that reference in `OIDC_CREDENTIALS` and restarts the services. The UI and database hold no OIDC secret value. Confidential clients use `client_secret_basic` or `client_secret_post`; public clients rely on PKCE. Sign-in rejects an explicit `email_verified: false` claim.
@@ -277,7 +277,7 @@ To check a configured endpoint, put `AI_CONTRACT_TEST=yes`, `AI_BASE_URL`, `AI_A
 
 Canonicalisation sends the typed Interest phrase and shortlisted Interest names, kinds and counts. Extraction sends the selected Activity name and description, then canonicalises each extracted phrase within the Member's Organisation. These texts may contain identifying information under ADR 0009. Requests time out after five seconds. Failed canonicalisation falls back to text similarity; failed extraction adds no Interests and leaves manual creation available.
 
-Set the Interest extraction model independently of Scout in Platform Admin settings. Both extraction and canonicalisation use this small model. Its default is `gpt-5.6-luna`; choose a supported model for the endpoint. Both operations require JSON mode. The production adapter lives in `src/adapters/ai/chat-completion.ts`; `MemoryAi` records requests and accepts scripted results or errors for application tests. HTTP adapter tests cover the request, invalid output and timeout behavior with a local stub endpoint.
+Set the Interest extraction model independently of Scout in Platform Admin settings. Both extraction and canonicalisation use this small model. Initial setup keeps an existing `AI_MODEL` when `AI_EXTRACTION_MODEL` is unset; new deployments with neither value default to `gpt-5.6-luna`. Choose a supported model for the endpoint. Both operations require JSON mode. The production adapter lives in `src/adapters/ai/chat-completion.ts`; `MemoryAi` records requests and accepts scripted results or errors for application tests. HTTP adapter tests cover the request, invalid output and timeout behavior with a local stub endpoint.
 
 ## Upgrading existing Organisations to Platform Admin configuration
 

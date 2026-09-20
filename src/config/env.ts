@@ -25,7 +25,7 @@ export function aiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig {
 export function deploymentSettingsFromEnv(env: NodeJS.ProcessEnv = process.env): DeploymentSettings {
   const values = present(env);
   return { aiBaseUrl: values.AI_BASE_URL ?? null, scoutModel: values.AI_MODEL ?? "gpt-5.6-luna",
-    extractionModel: values.AI_EXTRACTION_MODEL ?? "gpt-5.6-luna", telegramBotUsername: values.TELEGRAM_BOT_USERNAME ?? null,
+    extractionModel: values.AI_EXTRACTION_MODEL ?? values.AI_MODEL ?? "gpt-5.6-luna", telegramBotUsername: values.TELEGRAM_BOT_USERNAME ?? null,
     emailFrom: values.EMAIL_FROM ?? null, timeZone: values.TIME_ZONE ?? "UTC" };
 }
 
@@ -60,7 +60,7 @@ export function identityProvider(env: NodeJS.ProcessEnv = process.env): "oidc" |
 
 export function oidcCredentials(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
   try {
-    return z.record(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/), z.string().min(1))
+    return z.record(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*$/), z.string().min(1))
       .parse(JSON.parse(present(env).OIDC_CREDENTIALS ?? "{}"));
   } catch {
     throw new Error("OIDC_CREDENTIALS must be a JSON object of credential references and installed secrets.");
@@ -99,7 +99,7 @@ export function webConfig(env: NodeJS.ProcessEnv = process.env): WebConfig {
 }
 
 const firstPlatformSchema = z.object({
-  BOOTSTRAP_ORGANISATION_SLUG: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  BOOTSTRAP_ORGANISATION_SLUG: z.string().regex(/^[a-z0-9-]+$/),
   BOOTSTRAP_ORGANISATION_NAME: z.string().trim().min(1),
   BOOTSTRAP_OIDC_ISSUER: z.url(),
   BOOTSTRAP_OIDC_CLIENT_ID: z.string().trim().min(1),

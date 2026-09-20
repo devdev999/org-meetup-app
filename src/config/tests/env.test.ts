@@ -53,6 +53,19 @@ test("first Platform Admin configuration ignores retired bootstrap lists and Org
   expect(firstPlatformAdminConfig({ NODE_ENV: "test" })).toBeUndefined();
 });
 
+test("upgrades retain the installed AI model when no extraction model was configured", () => {
+  expect(deploymentSettingsFromEnv({ NODE_ENV: "test", AI_MODEL: "existing-model", AI_EXTRACTION_MODEL: "" }))
+    .toMatchObject({ scoutModel: "existing-model", extractionModel: "existing-model" });
+});
+
+test("legacy bootstrap identifiers and credential references reach the existing deployment", () => {
+  expect(firstPlatformAdminConfig({ ...firstPlatformEnvironment, BOOTSTRAP_ORGANISATION_SLUG: "agency--one" })?.organisation.slug)
+    .toBe("agency--one");
+  const reference = `legacy-${"a".repeat(210)}`;
+  expect(oidcCredentials({ NODE_ENV: "test", OIDC_CREDENTIALS: JSON.stringify({ [reference]: "test-only-secret" }) }))
+    .toEqual({ [reference]: "test-only-secret" });
+});
+
 test("OIDC secrets stay in the environment mapping while first setup carries only the reference", () => {
   const config = firstPlatformAdminConfig({ ...firstPlatformEnvironment, BOOTSTRAP_OIDC_CREDENTIAL_REF: "owner-sso" });
   expect(config?.oidc).toMatchObject({ credentialRef: "owner-sso" });
