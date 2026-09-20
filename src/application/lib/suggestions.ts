@@ -53,40 +53,40 @@ export async function previewInviteSuggestions(deps: Deps, actor: Actor, input: 
 }
 
 export async function meetupSuggestions(deps: Deps, actor: Actor): Promise<MeetupSuggestion[]> {
-  return (await gatheringSuggestions(deps, actor, "meetup")).flatMap(({ meetup, reasons }) => meetup.kind === "meetup" ? [{ meetup, reasons }] : []);
+  return (await gatheringSuggestions(deps, actor, "meetup")).flatMap(({ gathering, reasons }) => gathering.kind === "meetup" ? [{ meetup: gathering, reasons }] : []);
 }
 
 export async function eventSuggestions(deps: Deps, actor: Actor): Promise<EventSuggestion[]> {
-  return (await gatheringSuggestions(deps, actor, "event")).flatMap(({ meetup, reasons }) => meetup.kind === "event" ? [{ event: meetup, reasons }] : []);
+  return (await gatheringSuggestions(deps, actor, "event")).flatMap(({ gathering, reasons }) => gathering.kind === "event" ? [{ event: gathering, reasons }] : []);
 }
 
-async function gatheringSuggestions(deps: Deps, actor: Actor, kind: GatheringKind): Promise<{ meetup: GatheringSummary; reasons: string[] }[]> {
+async function gatheringSuggestions(deps: Deps, actor: Actor, kind: GatheringKind): Promise<{ gathering: GatheringSummary; reasons: string[] }[]> {
   const current = await requireActiveMember(deps.db, actor);
   const now = deps.clock.now();
   const until = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-  const meetups = await deps.db.select({ id: gatherings.id, hostMemberId: gatherings.hostMemberId, startsAt: gatherings.startsAt }).from(gatherings)
+  const gatheringRows = await deps.db.select({ id: gatherings.id, hostMemberId: gatherings.hostMemberId, startsAt: gatherings.startsAt }).from(gatherings)
     .where(and(visibleGatherings(actor, current.siteId, kind), eq(gatherings.status, "scheduled"), eq(gatherings.audienceKind, "open"),
       gt(gatherings.startsAt, now), lte(gatherings.startsAt, until), ne(gatherings.hostMemberId, actor.memberId),
       sql`not exists (select 1 from ${gatheringMembers} where ${gatheringMembers.organisationId} = ${gatherings.organisationId} and ${gatheringMembers.gatheringId} = ${gatherings.id} and ${gatheringMembers.memberId} = ${actor.memberId})`));
-  if (!meetups.length) return [];
+  if (!gatheringRows.length) return [];
   const [declarations, savedInterests, hostInterests] = await Promise.all([
     memberInterestList(deps, actor),
-    relevantInterestsFor(deps.db, actor.organisationId, meetups.map((meetup) => meetup.id)),
-    memberInterestsFor(deps.db, actor.organisationId, [...new Set(meetups.map((meetup) => meetup.hostMemberId))]),
+    relevantInterestsFor(deps.db, actor.organisationId, gatheringRows.map((gathering) => gathering.id)),
+    memberInterestsFor(deps.db, actor.organisationId, [...new Set(gatheringRows.map((gathering) => gathering.hostMemberId))]),
   ]);
-  const interestsByMeetup = Map.groupBy(savedInterests, (interest) => interest.meetupId);
+  const interestsByGathering = Map.groupBy(savedInterests, (interest) => interest.meetupId);
   const interestsByHost = Map.groupBy(hostInterests, (interest) => interest.memberId);
-  const ranked = rankMeetups(declarations, meetups.map((meetup) => ({
-    meetupId: meetup.id, startsAt: meetup.startsAt, connectionCount: 0,
-    interests: interestsByMeetup.get(meetup.id) ?? [], hostInterests: interestsByHost.get(meetup.hostMemberId) ?? [],
+  const ranked = rankMeetups(declarations, gatheringRows.map((gathering) => ({
+    meetupId: gathering.id, startsAt: gathering.startsAt, connectionCount: 0,
+    interests: interestsByGathering.get(gathering.id) ?? [], hostInterests: interestsByHost.get(gathering.hostMemberId) ?? [],
   })), kind).slice(0, 20);
-  const details = new Map((await readGatherings(deps.db, actor, ranked.map((entry) => entry.meetupId), current.siteId, now)).map((meetup) => [meetup.id, meetup]));
+  const details = new Map((await readGatherings(deps.db, actor, ranked.map((entry) => entry.meetupId), current.siteId, now)).map((gathering) => [gathering.id, gathering]));
   const results = ranked.map(({ meetupId, reasons }) => {
     const detail = details.get(meetupId);
     if (!detail || detail.kind !== kind || detail.status !== "scheduled" || detail.audience.kind !== "open" || detail.membership !== null
       || detail.startsAt <= now || detail.startsAt > until) return undefined;
-    const { participants, waitlist, ...meetup } = detail;
-    return { meetup, reasons };
+    const { participants, waitlist, ...gathering } = detail;
+    return { gathering, reasons };
   });
   return results.filter((suggestion) => suggestion !== undefined);
 }
@@ -94,13 +94,13 @@ async function gatheringSuggestions(deps: Deps, actor: Actor, kind: GatheringKin
 export async function inviteSuggestions(deps: Deps, actor: Actor, id: string, kind: GatheringKind = "meetup"): Promise<InviteSuggestion[]> {
   const host = await requireActiveMember(deps.db, actor);
   if (!isUuid(id)) throw new AccessDeniedError();
-  const [meetup] = await deps.db.select().from(gatherings).where(and(
+  const [gathering] = await deps.db.select().from(gatherings).where(and(
     eq(gatherings.organisationId, actor.organisationId), eq(gatherings.id, id), eq(gatherings.kind, kind),
     eq(gatherings.hostMemberId, actor.memberId), eq(gatherings.status, "scheduled"), gt(gatherings.startsAt, deps.clock.now()),
   ));
-  if (!meetup) throw new AccessDeniedError();
+  if (!gathering) throw new AccessDeniedError();
   return candidateSuggestions(deps, actor, {
-    seed: id, kind, meetupId: id, siteId: meetup.placeKind === "physical" ? meetup.placeSiteId! : undefined,
+    seed: id, kind, meetupId: id, siteId: gathering.placeKind === "physical" ? gathering.placeSiteId! : undefined,
     relevantInterests: await relevantInterests(deps.db, actor.organisationId, id), hostDepartmentId: host.departmentId,
   });
 }

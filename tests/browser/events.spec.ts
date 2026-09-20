@@ -40,7 +40,7 @@ test("Members propose an Event with editable Interests and an Organisation Admin
     await page.reload();
     await expect(page.getByText("State: approved", { exact: true })).toBeVisible();
     await page.getByRole("link", { name: "View Event", exact: true }).click();
-    await expect(page.getByText("Organisation Event", { exact: true })).toBeVisible();
+    await expect(page.getByText("Event", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Recurring Event", exact: true })).toBeVisible();
     await expect(page.getByText("1 Participant. No capacity limit.", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Relevant Interests", exact: true }).locator("..")).toContainText("Rust");

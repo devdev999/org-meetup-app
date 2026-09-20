@@ -25,7 +25,7 @@ export async function OccurrenceList({ kind }: { kind: "meetup" | "event" }) {
         <ul className="meetup-list">
           {meetups.map((meetup) => (
             <li key={meetup.id}>
-              <p className="muted">{kind === "event" ? "Organisation Event" : "Meetup"}</p>
+              <p className="muted">{label}</p>
               <h2><Link href={`/${path}/${meetup.id}`}>{meetup.activity.name}</Link></h2>
               <p><MeetupTime value={meetup.startsAt.toISOString()} /> · {meetup.durationMinutes} minutes</p>
               <p>{meetup.place.kind === "physical" ? `${meetup.place.siteName ?? "Site"}, ${meetup.place.spot}` : "Virtual"}</p>

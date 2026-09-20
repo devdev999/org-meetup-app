@@ -15,13 +15,15 @@ export function OccurrenceDetail({ meetup }: { meetup: MeetupDetail | EventDetai
   const hostWaitlisted = isHost && meetup.waitlist?.some((participant) => participant.memberId === meetup.host.memberId);
   const otherParticipants = meetup.participants.filter((participant) => participant.memberId !== meetup.host.memberId);
   const canRsvp = meetup.recurrence && (meetup.recurrence.isStanding || meetup.membership || meetup.rsvp !== null);
+  const canJoin = meetup.canChange && !canRsvp && (!meetup.membership || isHost && !hostHasSeat && !hostWaitlisted)
+    && (meetup.audience.kind === "open" || isHost) && meetup.invite?.state !== "pending";
   return (
     <main>
       <nav className="member-nav" aria-label="Member navigation">
         <Link href={`/${path}`}>Back to {label}s</Link>
         <Link href="/inbox">Inbox</Link>
       </nav>
-      <p className="muted">{kind === "event" ? "Organisation Event" : "Meetup"}</p>
+      <p className="muted">{label}</p>
       <h1>{meetup.activity.name}</h1>
       {meetup.status === "cancelled" && <p className="notice" role="status">This {label} has been cancelled.</p>}
       {meetup.status === "completed" && <p className="notice">This {label} has ended.</p>}
@@ -65,7 +67,7 @@ export function OccurrenceDetail({ meetup }: { meetup: MeetupDetail | EventDetai
           {meetup.canChange && meetup.invite.state === "pending" && <InviteAnswerForm inviteId={meetup.invite.id} />}
         </section>
       )}
-      {meetup.canChange && !canRsvp && (!meetup.membership || isHost && !hostHasSeat && !hostWaitlisted) && (meetup.audience.kind === "open" || isHost) && meetup.invite?.state !== "pending" && (
+      {canJoin && (
         <MeetupAction meetupId={meetup.id} kind={kind} operation="join" label={meetup.capacity !== null && meetup.participantCount >= meetup.capacity ? "Join waitlist" : `Join ${label}`} />
       )}
       {meetup.canChange && !meetup.recurrence?.isStanding && (meetup.membership === "participant" || meetup.membership === "waitlisted") && (

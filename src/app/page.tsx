@@ -32,7 +32,7 @@ export default async function HomePage() {
         <p>Open Events in your scope over the next fourteen days.</p>
         <p><Link href="/events/new">Propose an Event</Link></p>
         {events.length === 0 ? <p>No Events to suggest yet.</p> : <ul className="meetup-list">{events.map(({ event, reasons }) => <li key={event.id}>
-          <p className="muted">Organisation Event</p>
+          <p className="muted">Event</p>
           <h3><Link href={`/events/${event.id}`}>{event.activity.name}</Link></h3>
           <p><MeetupTime value={event.startsAt.toISOString()} /></p>
           <p>{event.place.kind === "physical" ? `${event.place.siteName}, ${event.place.spot}` : "Virtual"}</p>

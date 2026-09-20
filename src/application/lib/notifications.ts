@@ -161,7 +161,7 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
     const where = deliveryWhere(candidate);
     const [delivery] = await db.select().from(noticeDeliveries).where(and(where, duePredicate("immediate", now))).for("update", { skipLocked: true });
     if (!delivery) return null;
-    const [row] = await db.select({ notice: notices, member: members, meetup: gatherings, activityName: activities.name, siteName: sites.name }).from(notices)
+    const [row] = await db.select({ notice: notices, member: members, gathering: gatherings, activityName: activities.name, siteName: sites.name }).from(notices)
       .innerJoin(members, and(eq(members.organisationId, notices.organisationId), eq(members.id, notices.memberId)))
       .leftJoin(gatherings, and(eq(gatherings.organisationId, notices.organisationId), eq(gatherings.id, notices.gatheringId)))
       .leftJoin(activities, and(eq(activities.organisationId, gatherings.organisationId), eq(activities.id, gatherings.activityId)))
@@ -174,32 +174,32 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
     if (row && delivery.channel === "telegram") {
       [link] = await db.select().from(telegramLinks).where(and(eq(telegramLinks.organisationId, delivery.organisationId), eq(telegramLinks.memberId, row.member.id)));
     }
-    const [invite] = row?.meetup && (row.notice.kind === "invite-received" || row.notice.kind === "meetup-edited") && delivery.channel === "telegram" ? await db.select({ id: invites.id }).from(invites)
-      .where(and(eq(invites.organisationId, row.notice.organisationId), eq(invites.gatheringId, row.meetup.id),
+    const [invite] = row?.gathering && (row.notice.kind === "invite-received" || row.notice.kind === "meetup-edited") && delivery.channel === "telegram" ? await db.select({ id: invites.id }).from(invites)
+      .where(and(eq(invites.organisationId, row.notice.organisationId), eq(invites.gatheringId, row.gathering.id),
         eq(invites.memberId, row.member.id), eq(invites.state, "pending"))) : [];
-    const canAnswer = row?.meetup?.status === "scheduled" && row.meetup.startsAt > now;
-    const [rsvp] = row?.meetup && row.notice.kind === "rsvp-prompt" ? await db.select({ memberId: gatheringRsvps.memberId }).from(gatheringRsvps)
-      .innerJoin(recurrenceMembers, and(eq(recurrenceMembers.organisationId, gatheringRsvps.organisationId), eq(recurrenceMembers.memberId, gatheringRsvps.memberId), eq(recurrenceMembers.recurrenceId, row.meetup.recurrenceId!)))
-      .where(and(eq(gatheringRsvps.organisationId, row.notice.organisationId), eq(gatheringRsvps.gatheringId, row.meetup.id), eq(gatheringRsvps.memberId, row.member.id), eq(gatheringRsvps.promptedAt, row.notice.createdAt))) : [];
+    const canAnswer = row?.gathering?.status === "scheduled" && row.gathering.startsAt > now;
+    const [rsvp] = row?.gathering && row.notice.kind === "rsvp-prompt" ? await db.select({ memberId: gatheringRsvps.memberId }).from(gatheringRsvps)
+      .innerJoin(recurrenceMembers, and(eq(recurrenceMembers.organisationId, gatheringRsvps.organisationId), eq(recurrenceMembers.memberId, gatheringRsvps.memberId), eq(recurrenceMembers.recurrenceId, row.gathering.recurrenceId!)))
+      .where(and(eq(gatheringRsvps.organisationId, row.notice.organisationId), eq(gatheringRsvps.gatheringId, row.gathering.id), eq(gatheringRsvps.memberId, row.member.id), eq(gatheringRsvps.promptedAt, row.notice.createdAt))) : [];
     const owned = await claimLease(db, where, now);
-    const content = row?.notice.kind === "invite-received" && row.meetup && row.activityName && row.notice.messagePrefix
+    const content = row?.notice.kind === "invite-received" && row.gathering && row.activityName && row.notice.messagePrefix
       ? gatheringNoticeText({
         message: row.notice.messagePrefix,
-        activity: row.activityName, startsAt: row.meetup.startsAt,
-        place: row.meetup.placeKind === "physical" ? `${row.meetup.placeSpot}, ${row.siteName}` : row.meetup.placeUrl!,
-        externalPlace: row.meetup.placeKind === "physical" ? `${row.meetup.placeSpot}, ${row.siteName}` : "Online",
+        activity: row.activityName, startsAt: row.gathering.startsAt,
+        place: row.gathering.placeKind === "physical" ? `${row.gathering.placeSpot}, ${row.siteName}` : row.gathering.placeUrl!,
+        externalPlace: row.gathering.placeKind === "physical" ? `${row.gathering.placeSpot}, ${row.siteName}` : "Online",
       }) : row?.notice;
     const send = async () => {
       if (!row || !VISIBLE_MEMBER_STATUSES.includes(row.member.status) || !channelEnabled(preference, delivery.channel)) return;
       if (row.notice.kind === "rsvp-prompt" && (!canAnswer || !rsvp)) return;
       if (delivery.channel === "email") {
-        await deps.email.sendMessage({ id: row.notice.id, to: row.member.email, subject: row.notice.kind === "availability-overlap" ? "Availability overlap" : row.meetup?.kind === "event" ? "Event notice" : "Meetup notice", text: content!.message });
+        await deps.email.sendMessage({ id: row.notice.id, to: row.member.email, subject: row.notice.kind === "availability-overlap" ? "Availability overlap" : row.gathering?.kind === "event" ? "Event notice" : "Meetup notice", text: content!.message });
       } else if (link) {
         await deps.telegram.sendMessage({
           chatId: link.chatId, text: content!.externalMessage,
-          ...(canAnswer && row.notice.kind === "rsvp-prompt" ? row.meetup!.kind === "event" ? { rsvpEventId: row.meetup!.id } : { rsvpMeetupId: row.meetup!.id }
+          ...(canAnswer && row.notice.kind === "rsvp-prompt" ? row.gathering!.kind === "event" ? { rsvpEventId: row.gathering!.id } : { rsvpMeetupId: row.gathering!.id }
             : canAnswer && invite ? { inviteId: invite.id }
-            : canAnswer && row.meetup?.audienceKind === "open" && !row.notice.kind.startsWith("invite-") ? row.meetup.kind === "event" ? { joinEventId: row.meetup.id } : { joinMeetupId: row.meetup.id } : {}),
+            : canAnswer && row.gathering?.audienceKind === "open" && !row.notice.kind.startsWith("invite-") ? row.gathering.kind === "event" ? { joinEventId: row.gathering.id } : { joinMeetupId: row.gathering.id } : {}),
         });
       }
     };
