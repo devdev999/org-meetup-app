@@ -60,7 +60,7 @@ Only the series Host can stop the series. This cancels its future occurrences an
 
 ## Events
 
-Open Events from your profile or home to propose one. A proposal stays private to its proposer and Organisation Admins until approval. The Organisation Admin queue records approval or rejection, with a required rejection note and an optional approval note. The proposer sees the decision under Your Event proposals and becomes Host on approval. Approval rechecks the start time, Activity, Sites and proposer before publishing. It creates the first occurrence, standing membership and selected Invites together. Rejected proposals create none of these.
+Open Events from your profile or home to propose one. A proposal stays private to its proposer and Organisation Admins until approval. The Organisation Admin queue records approval or rejection, with a required rejection note and an optional approval note. The proposer sees the decision under Your Event proposals and becomes Host on approval. Approval rechecks the start time, Activity, Sites, proposer and selected invitees before publishing. It creates the first occurrence, standing membership and selected Invites together. If an invitee has become ineligible, the Organisation Admin can reject with a note asking the proposer to submit again with eligible invitees. Rejected proposals create none of these.
 
 The proposer keeps the decision and note if they later lose access to the published Event. Proposal history shows its current details only while the Event remains visible to them.
 
@@ -266,7 +266,7 @@ Migrations `0011` and `0012` add Availability and allow notices without a Meetup
 
 Migrations `0013` and `0014` add recurring Meetups and RSVP. Upgrade the web and worker together with the same stop, migrate and restart sequence. Once series or RSVP prompts exist, rollback to earlier images is unsupported because they cannot manage recurrence or deliver the correct RSVP actions. Deploy a forward fix.
 
-Migration `0015` adds Event proposals and the unused sharing relationship, and makes occurrence and series capacity nullable for uncapped Events. Migration `0016` preserves the original Invite sender when retries refresh the meeting details, including existing Invites. Stop the web and worker, migrate, then restart both with this release. Existing Meetup capacities, participation, recurrence and notices are preserved. Once Events exist, earlier images cannot safely process them or display their actions, so deploy a forward fix instead of rolling back.
+Migration `0015` adds Event proposals and the unused sharing relationship, and makes occurrence and series capacity nullable for uncapped Events. Migration `0016` preserves the original Invite sender when retries refresh the Activity, time and Place, including existing Invites. Stop the web and worker, migrate, then restart both with this release. Existing Meetup capacities, participation, recurrence and notices are preserved. Once Events exist, earlier images cannot safely process them or display their actions, so deploy a forward fix instead of rolling back.
 
 For an existing local Compose stack, leave Postgres running and run these steps in order. Continue only when each command succeeds:
 

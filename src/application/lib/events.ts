@@ -5,7 +5,7 @@ import type { Deps } from "./deps";
 import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
 import { relevantInterestsFor } from "./meetup-interests";
-import { createGathering, listGatherings, noticeRecipients, notify, publishGathering, readGathering, readGatheringDetail, visibleGatherings, type CreateEventInput, type EventDetail, type EventSummary, type MeetupPerson } from "./meetups";
+import { createGathering, firstName, listGatherings, noticeRecipients, notify, publishGathering, readGathering, readGatheringDetail, visibleGatherings, type CreateEventInput, type EventDetail, type EventSummary, type MeetupPerson } from "./meetups";
 import type { RecurrenceInput } from "./recurrence-records";
 import { activities, eventProposals, gatherings, members, sites } from "./schema";
 
@@ -127,5 +127,5 @@ export async function reassignEventHost(db: Queryable, actor: Actor, id: string,
   if (row.hostMemberId === memberId) return;
   const event = (await readGathering(db, { organisationId: actor.organisationId, memberId: row.hostMemberId }, id, null, now))!;
   await db.update(gatherings).set({ hostMemberId: memberId }).where(and(eq(gatherings.organisationId, actor.organisationId), eq(gatherings.id, id)));
-  await notify(db, actor.organisationId, event, [...await noticeRecipients(db, actor.organisationId, id), row.hostMemberId, memberId], "meetup-handed-over", `${nextHost.name.split(/\s+/)[0]} is now Host of this Event.`, now);
+  await notify(db, actor.organisationId, event, [...await noticeRecipients(db, actor.organisationId, id), row.hostMemberId, memberId], "meetup-handed-over", `${firstName(nextHost.name)} is now Host of this Event.`, now);
 }

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gt, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireActiveMember, VISIBLE_MEMBER_STATUSES, withActiveMember, type Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
@@ -241,7 +241,7 @@ export async function publishGathering(db: Queryable, actor: Actor, row: typeof 
   }
   if (!invitedMemberIds.length) return;
   const meetup = (await readGathering(db, actor, row.id, host.siteId, now))!;
-  for (const memberId of invitedMemberIds) await saveInvite(db, actor, meetup, memberId, host.name, now, { fromSuggestion: true });
+  for (const memberId of invitedMemberIds) await saveInvite(db, actor, meetup, memberId, host.name, now, { selectionSource: row.status === "proposed" ? "proposal" : "suggestion" });
 }
 
 export function visibleGatherings(actor: Actor, siteId: string | null, kind?: GatheringKind) {
@@ -360,7 +360,7 @@ function membershipWhere(organisationId: string, meetupId: string) {
   return and(eq(gatheringMembers.organisationId, organisationId), eq(gatheringMembers.gatheringId, meetupId));
 }
 
-function firstName(name: string) {
+export function firstName(name: string) {
   return name.split(/\s+/)[0];
 }
 
@@ -384,11 +384,11 @@ export async function notify(db: Queryable, organisationId: string, meetup: Gath
 
 export async function inbox(deps: Deps, actor: Actor): Promise<Notice[]> {
   await requireActiveMember(deps.db, actor);
-  const rows = await deps.db.select({ id: notices.id, kind: notices.kind, meetupId: notices.gatheringId, message: notices.message, createdAt: notices.createdAt, meetingKind: gatherings.kind })
+  const rows = await deps.db.select({ id: notices.id, kind: notices.kind, meetupId: notices.gatheringId, message: notices.message, createdAt: notices.createdAt, gatheringKind: gatherings.kind })
     .from(notices).leftJoin(gatherings, and(eq(gatherings.organisationId, notices.organisationId), eq(gatherings.id, notices.gatheringId)))
     .where(and(eq(notices.organisationId, actor.organisationId), eq(notices.memberId, actor.memberId)))
     .orderBy(desc(notices.position));
-  return rows.map(({ meetingKind, ...notice }) => meetingKind === "event" ? { ...notice, meetupId: null, eventId: notice.meetupId! } : notice);
+  return rows.map(({ gatheringKind, ...notice }) => gatheringKind === "event" ? { ...notice, meetupId: null, eventId: notice.meetupId! } : notice);
 }
 
 export function meetupOrEvent(meetup: { kind: GatheringKind }): "Meetup" | "Event" {
@@ -454,7 +454,7 @@ function requireHost(meetup: GatheringSummary, actor: Actor) {
   if (meetup.host.memberId !== actor.memberId) throw new AccessDeniedError();
 }
 
-interface InviteOptions { previousInviteId?: string; fromSuggestion?: boolean }
+interface InviteOptions { previousInviteId?: string; selectionSource?: "suggestion" | "proposal" }
 
 export async function inviteMember(deps: Deps, actor: Actor, id: string, memberId: string, options: InviteOptions = {}, kind: GatheringKind = "meetup"): Promise<Invite> {
   return withActiveMember(deps, actor, async (db, current) => {
@@ -465,13 +465,16 @@ export async function inviteMember(deps: Deps, actor: Actor, id: string, memberI
   });
 }
 
-async function saveInvite(db: Queryable, actor: Actor, meetup: GatheringSummary & Pick<MeetupDetail, "participants">, memberId: string, hostName: string, now: Date, { previousInviteId, fromSuggestion = false }: InviteOptions = {}): Promise<Invite> {
+async function saveInvite(db: Queryable, actor: Actor, meetup: GatheringSummary & Pick<MeetupDetail, "participants">, memberId: string, hostName: string, now: Date, { previousInviteId, selectionSource }: InviteOptions = {}): Promise<Invite> {
   if (!isUuid(memberId) || (previousInviteId !== undefined && !isUuid(previousInviteId))) throw new AccessDeniedError();
+  if (memberId === meetup.host.memberId) invalid("The Host cannot Invite themselves.");
   const [member] = await db.select({ memberId: members.id, name: members.name }).from(members)
     .where(and(eq(members.organisationId, actor.organisationId), eq(members.id, memberId),
-      fromSuggestion ? eq(members.status, "active") : inArray(members.status, VISIBLE_MEMBER_STATUSES),
-      fromSuggestion && meetup.place.kind === "physical" ? eq(members.siteId, meetup.place.siteId) : undefined)).for("update");
-  if (!member && fromSuggestion) invalid("This Suggestion is no longer available. Refresh the page.");
+      selectionSource ? eq(members.status, "active") : inArray(members.status, VISIBLE_MEMBER_STATUSES),
+      selectionSource && meetup.place.kind === "physical" ? eq(members.siteId, meetup.place.siteId) : undefined)).for("update");
+  if (!member && selectionSource) invalid(selectionSource === "proposal"
+    ? "A selected invitee is no longer eligible. Reject this Event proposal with a note asking the proposer to submit again with eligible invitees."
+    : "This Suggestion is no longer available. Refresh the page.");
   if (!member) throw new AccessDeniedError();
   const [existing] = await db.select({ id: invites.id, state: invites.state }).from(invites)
     .where(and(eq(invites.organisationId, actor.organisationId), eq(invites.gatheringId, meetup.id), eq(invites.memberId, memberId)));
@@ -503,7 +506,7 @@ export async function inviteChoices(deps: Deps, actor: Actor, id: string, input:
   const choices = await deps.db.select({ memberId: members.id, name: members.name, department: departments.name, site: sites.name }).from(members)
     .leftJoin(departments, and(eq(departments.organisationId, members.organisationId), eq(departments.id, members.departmentId)))
     .leftJoin(sites, and(eq(sites.organisationId, members.organisationId), eq(sites.id, members.siteId)))
-    .where(and(eq(members.organisationId, actor.organisationId), inArray(members.status, VISIBLE_MEMBER_STATUSES), ilike(members.name, pattern),
+    .where(and(eq(members.organisationId, actor.organisationId), ne(members.id, actor.memberId), inArray(members.status, VISIBLE_MEMBER_STATUSES), ilike(members.name, pattern),
       sql`not exists (select 1 from ${gatheringMembers} where ${gatheringMembers.organisationId} = ${members.organisationId} and ${gatheringMembers.gatheringId} = ${id} and ${gatheringMembers.memberId} = ${members.id} and ${gatheringMembers.status} = 'participant')`,
       sql`not exists (select 1 from ${invites} where ${invites.organisationId} = ${members.organisationId} and ${invites.gatheringId} = ${id} and ${invites.memberId} = ${members.id})`))
     .orderBy(members.name, members.id).offset(parsed.data.page * INVITE_PAGE_SIZE).limit(INVITE_PAGE_SIZE + 1);

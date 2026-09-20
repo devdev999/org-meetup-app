@@ -140,6 +140,35 @@ test.each(["departed proposer", "retired Activity", "past start"] as const)("app
   expect(h.email.outbox).toEqual([]);
 });
 
+test.each(["departed", "changed Site"] as const)("approval explains how to replace a proposal after an invitee has %s without partial publication", async (change) => {
+  const { ana, admin, input } = await setup();
+  const bo = await member("bo");
+  const cy = await member("cy");
+  const { sites } = await ana.meetupChoices();
+  const site = sites.find((entry) => entry.id === input.place.siteId)!;
+  await bo.updateProfile({ department: "", site: site.name });
+  await cy.updateProfile({ department: "", site: site.name });
+  const cyId = (await cy.profile()).memberId;
+  const proposal = await ana.proposeEvent({ ...input, recurrence: { frequency: "weekly" }, invitedMemberIds: [cyId, (await bo.profile()).memberId] });
+  if (change === "departed") {
+    const rows = (await admin.roster()).filter((entry) => entry.email !== "bo@example.test");
+    await admin.commitRoster(rows, (await admin.previewRoster(rows)).revision);
+  } else await bo.updateProfile({ department: "", site: sites.find((entry) => entry.id !== site.id)!.name });
+  await expect(admin.approveEvent(proposal.id)).rejects.toMatchObject({
+    message: "A selected invitee is no longer eligible. Reject this Event proposal with a note asking the proposer to submit again with eligible invitees.",
+  });
+  expect((await ana.eventProposals())[0]).toMatchObject({ state: "proposed" });
+  expect(await admin.events()).toEqual([]);
+  expect(await ana.listEventSeries()).toEqual([]);
+  expect(await cy.inbox()).toEqual([]);
+  expect(h.email.outbox).toEqual([]);
+  await admin.rejectEvent(proposal.id, "Please submit again with eligible invitees.");
+  expect((await ana.eventProposals())[0]).toMatchObject({ state: "rejected", note: "Please submit again with eligible invitees." });
+  const replacement = await ana.proposeEvent({ ...input, invitedMemberIds: [cyId] });
+  await admin.approveEvent(replacement.id);
+  expect((await ana.viewEvent(replacement.id))?.invites).toMatchObject([{ member: { memberId: cyId }, state: "pending" }]);
+});
+
 test("retained Organisation Admin actors recheck authority for Event decisions and management", async () => {
   const { ana, admin, input } = await setup();
   const proposal = await ana.proposeEvent(input);
@@ -170,6 +199,38 @@ test("Event capacity can be removed to promote its waitlist and cannot undercut 
   expect(await nextHost.joinEvent(proposal.id)).toBe("waitlisted");
   await bo.leaveEvent(proposal.id);
   expect(await nextHost.viewEvent(proposal.id)).toMatchObject({ participantCount: 3, waitlist: [], participants: expect.arrayContaining([expect.objectContaining({ name: "new-host" })]) });
+});
+
+test("a reassigned Event Host without a seat cannot self-Invite or bypass the waitlist", async () => {
+  const { ana, admin, input } = await setup();
+  const bo = await member("bo");
+  const cy = await member("cy");
+  const nextHost = await member("new-host");
+  const nextHostId = (await nextHost.profile()).memberId;
+  const proposal = await ana.proposeEvent({ ...input, capacity: 2 });
+  await admin.approveEvent(proposal.id);
+  await bo.joinEvent(proposal.id);
+  await cy.joinEvent(proposal.id);
+  await admin.reassignEventHost(proposal.id, nextHostId);
+  await nextHost.joinEvent(proposal.id);
+  expect.soft((await nextHost.eventInviteChoices(proposal.id)).members).not.toContainEqual(expect.objectContaining({ memberId: nextHostId }));
+  await expect(nextHost.inviteToEvent(proposal.id, nextHostId)).rejects.toBeInstanceOf(InvalidInputError);
+  await bo.leaveEvent(proposal.id);
+  expect(await cy.viewEvent(proposal.id)).toMatchObject({ membership: "participant" });
+  expect(await nextHost.viewEvent(proposal.id)).toMatchObject({ waitlist: [{ memberId: nextHostId }] });
+});
+
+test("a reassigned Event Host can still answer an Invite sent by the previous Host", async () => {
+  const { ana, admin, input } = await setup();
+  const bo = await member("bo");
+  const boId = (await bo.profile()).memberId;
+  const proposal = await ana.proposeEvent(input);
+  await admin.approveEvent(proposal.id);
+  const invite = await ana.inviteToEvent(proposal.id, boId);
+  await admin.reassignEventHost(proposal.id, boId);
+  expect(await bo.answerInvite(invite.id, "accept")).toMatchObject({ state: "accepted", membership: "participant" });
+  expect(await bo.answerInvite(invite.id, "accept")).toMatchObject({ state: "accepted", membership: "participant" });
+  expect((await bo.viewEvent(proposal.id))?.participants).toContainEqual(expect.objectContaining({ memberId: boId }));
 });
 
 test("an Organisation Admin creates an uncapped Event that Members across Sites can join beyond thirty places", async () => {
