@@ -85,21 +85,11 @@ export async function recordNotices(db: Queryable, organisationId: string, recip
   if (deliveries.length) await db.insert(noticeDeliveries).values(deliveries);
 }
 
-export async function supersedeInviteDeliveries(db: Queryable, organisationId: string, gatheringId: string, memberId: string, now: Date): Promise<void> {
+export async function supersedeDeliveries(db: Queryable, organisationId: string, gatheringId: string, kind: "invite-received" | "rsvp-prompt", now: Date, memberId?: string): Promise<void> {
   await db.update(noticeDeliveries).set({ finishedAt: now }).where(and(
     eq(noticeDeliveries.organisationId, organisationId), isNull(noticeDeliveries.finishedAt),
     inArray(noticeDeliveries.noticeId, db.select({ id: notices.id }).from(notices).where(and(
-      eq(notices.organisationId, organisationId), eq(notices.gatheringId, gatheringId),
-      eq(notices.memberId, memberId), eq(notices.kind, "invite-received"),
-    ))),
-  ));
-}
-
-export async function supersedeRsvpDeliveries(db: Queryable, organisationId: string, gatheringId: string, now: Date, memberId?: string): Promise<void> {
-  await db.update(noticeDeliveries).set({ finishedAt: now }).where(and(
-    eq(noticeDeliveries.organisationId, organisationId), isNull(noticeDeliveries.finishedAt),
-    inArray(noticeDeliveries.noticeId, db.select({ id: notices.id }).from(notices).where(and(
-      eq(notices.organisationId, organisationId), eq(notices.gatheringId, gatheringId), eq(notices.kind, "rsvp-prompt"),
+      eq(notices.organisationId, organisationId), eq(notices.gatheringId, gatheringId), eq(notices.kind, kind),
       memberId ? eq(notices.memberId, memberId) : undefined,
     ))),
   ));

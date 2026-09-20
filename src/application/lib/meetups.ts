@@ -8,7 +8,7 @@ import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
 import { interestChoiceSchema, type Interest, type InterestChoice } from "./interests";
 import { relevantInterests, saveRelevantInterests } from "./meetup-interests";
-import { recordNotices, supersedeInviteDeliveries, supersedeRsvpDeliveries } from "./notifications";
+import { recordNotices, supersedeDeliveries } from "./notifications";
 import { activities, departments, gatheringMembers, gatheringRsvps, gatherings, invites, members, notices, organisations, recurrenceInterests, recurrenceMembers, recurrences, sites } from "./schema";
 import { availabilityOverlapSchema, findAvailabilityOverlap, type AvailabilityOverlap } from "./availability";
 import { readRecurrences, recurrenceSchema, saveRsvp, type Recurrence, type RecurrenceInput } from "./recurrence-records";
@@ -245,7 +245,7 @@ export async function readMeetups(db: Queryable, actor: Actor, ids: string[], si
     .innerJoin(members, and(eq(members.organisationId, gatheringRsvps.organisationId), eq(members.id, gatheringRsvps.memberId)))
     .where(and(eq(gatheringRsvps.organisationId, actor.organisationId), inArray(gatheringRsvps.gatheringId, rows.map((row) => row.meetup.id))));
   const answersByMeetup = Map.groupBy(answers, (answer) => answer.meetupId);
-  const series = await readRecurrences(db, actor, [...new Set(rows.flatMap(({ meetup }) => meetup.recurrenceId ? [meetup.recurrenceId] : []))], siteId);
+  const series = await readRecurrences(db, actor, [...new Set(rows.flatMap(({ meetup }) => meetup.recurrenceId ? [meetup.recurrenceId] : []))], siteId, now);
   return rows.map((row): Omit<MeetupDetail, "invite" | "invites" | "relevantInterests"> => {
     const meetup = row.meetup;
     const people = peopleByMeetup.get(meetup.id) ?? [];
@@ -421,7 +421,7 @@ async function saveInvite(db: Queryable, actor: Actor, meetup: MeetupSummary & P
     .where(and(eq(invites.organisationId, actor.organisationId), eq(invites.gatheringId, meetup.id), eq(invites.memberId, memberId)));
   if (existing && (existing.state === "pending" || previousInviteId !== existing.id)) return { ...existing, meetupId: meetup.id, member };
   if (meetup.participants.some((person) => person.memberId === memberId)) invalid("This Member is already a Participant.");
-  if (existing) await supersedeInviteDeliveries(db, actor.organisationId, meetup.id, memberId, now);
+  if (existing) await supersedeDeliveries(db, actor.organisationId, meetup.id, "invite-received", now, memberId);
   const [created] = existing
     ? await db.update(invites).set({ id: randomUUID(), state: "pending", createdAt: now })
       .where(and(eq(invites.organisationId, actor.organisationId), eq(invites.id, existing.id))).returning()
@@ -528,7 +528,7 @@ export async function editMeetup(deps: Deps, actor: Actor, id: string, input: Ed
       startsAt: data.startsAt, durationMinutes: data.durationMinutes, ...placeColumns(data.place), capacity: data.capacity, description: data.description,
     }).where(meetupWhere(actor.organisationId, id));
     if (meetup.recurrence && data.startsAt.getTime() !== meetup.startsAt.getTime()) {
-      await supersedeRsvpDeliveries(db, actor.organisationId, id, now);
+      await supersedeDeliveries(db, actor.organisationId, id, "rsvp-prompt", now);
       await db.update(gatheringRsvps).set({ promptedAt: null }).where(and(eq(gatheringRsvps.organisationId, actor.organisationId), eq(gatheringRsvps.gatheringId, id)));
     }
     if (data.relevantInterests) await saveRelevantInterests(db, actor.organisationId, id, data.relevantInterests, now);

@@ -13,6 +13,9 @@ export interface Recurrence extends RecurrenceRule {
   standingCount: number;
   isStanding: boolean;
   canJoin: boolean;
+  canLeave: boolean;
+  canStop: boolean;
+  ended: boolean;
   stopped: boolean;
 }
 
@@ -35,7 +38,7 @@ export function visibleRecurrences(actor: Actor, siteId: string | null) {
   ));
 }
 
-export async function readRecurrences(db: Queryable, actor: Actor, ids: string[], siteId: string | null): Promise<Map<string, Recurrence>> {
+export async function readRecurrences(db: Queryable, actor: Actor, ids: string[], siteId: string | null, now: Date): Promise<Map<string, Recurrence>> {
   if (!ids.length) return new Map();
   const rows = await db.select({ recurrence: recurrences, hostName: members.name, canJoin: sql<boolean>`${visibleRecurrences(actor, siteId)}` }).from(recurrences)
     .innerJoin(members, and(eq(members.organisationId, recurrences.organisationId), eq(members.id, recurrences.hostMemberId)))
@@ -43,12 +46,18 @@ export async function readRecurrences(db: Queryable, actor: Actor, ids: string[]
   const standing = await db.select({ recurrenceId: recurrenceMembers.recurrenceId, memberId: recurrenceMembers.memberId }).from(recurrenceMembers)
     .where(and(eq(recurrenceMembers.organisationId, actor.organisationId), inArray(recurrenceMembers.recurrenceId, ids)));
   const byRecurrence = Map.groupBy(standing, (member) => member.recurrenceId);
-  return new Map(rows.map(({ recurrence, hostName, canJoin }) => [recurrence.id, {
-    id: recurrence.id, frequency: recurrence.frequency, startsAt: recurrence.startsAt, endsOn: recurrence.endsOn,
-    host: { memberId: recurrence.hostMemberId, name: hostName }, capacity: recurrence.capacity,
-    standingCount: byRecurrence.get(recurrence.id)?.length ?? 0,
-    isStanding: byRecurrence.get(recurrence.id)?.some((member) => member.memberId === actor.memberId) ?? false,
-    canJoin,
-    stopped: recurrence.stoppedAt !== null,
-  }]));
+  return new Map(rows.map(({ recurrence, hostName, canJoin }) => {
+    const participants = byRecurrence.get(recurrence.id) ?? [];
+    const isStanding = participants.some((member) => member.memberId === actor.memberId);
+    const isHost = recurrence.hostMemberId === actor.memberId;
+    const stopped = recurrence.stoppedAt !== null;
+    const ended = recurrence.endsOn !== null && recurrence.endsOn < now.toISOString().slice(0, 10);
+    return [recurrence.id, {
+      id: recurrence.id, frequency: recurrence.frequency, startsAt: recurrence.startsAt, endsOn: recurrence.endsOn,
+      host: { memberId: recurrence.hostMemberId, name: hostName }, capacity: recurrence.capacity,
+      standingCount: participants.length, isStanding, ended, stopped,
+      canJoin: canJoin && !stopped && !ended && !isStanding && participants.length < recurrence.capacity,
+      canLeave: isStanding && !isHost, canStop: isHost && !stopped,
+    }];
+  }));
 }

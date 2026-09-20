@@ -4,7 +4,7 @@ import { MeetupTime } from "./meetup-time";
 import { RecurrenceDetails } from "./recurrence";
 
 export default async function MeetupsPage() {
-  const { member, profile } = await requireMemberPastWelcome();
+  const { member } = await requireMemberPastWelcome();
   const [meetups, series] = await Promise.all([member.listMeetups(), member.listSeries()]);
   return (
     <main>
@@ -37,7 +37,7 @@ export default async function MeetupsPage() {
         <h2>Recurring Meetups</h2>
         <ul className="meetup-list">{series.map((entry) => <li key={entry.id}>
           <h3>{entry.activity.name}</h3>
-          <RecurrenceDetails series={entry} memberId={profile.memberId} />
+          <RecurrenceDetails series={entry} />
         </li>)}</ul>
       </section>}
     </main>

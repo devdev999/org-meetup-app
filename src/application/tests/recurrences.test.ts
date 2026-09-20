@@ -410,6 +410,27 @@ test("joining the series after declining a drop-in occurrence allocates its plac
   expect(await bo.viewMeetup(first.id)).toMatchObject({ membership: "participant", rsvp: null, recurrence: { isStanding: true } });
 });
 
+test("an occurrence moved beyond the series end keeps its prompt and series management actions", async () => {
+  const { ana, input } = await setup();
+  const bo = await member("bo");
+  const cy = await member("cy");
+  const first = await ana.createMeetup({ ...input, recurrence: { frequency: "weekly", endsOn: "2026-01-08" } });
+  await bo.joinSeries(first.recurrence!.id);
+  await ana.editMeetup(first.id, { ...input, startsAt: new Date("2026-01-20T10:00:00Z") });
+  h.clock.set(new Date("2026-01-09T10:00:00Z"));
+  expect(await ana.listSeries()).toMatchObject([{ id: first.recurrence!.id, ended: true, canStop: true, canJoin: false }]);
+  expect(await bo.listSeries()).toMatchObject([{ id: first.recurrence!.id, canLeave: true, canJoin: false }]);
+  await expect(cy.joinSeries(first.recurrence!.id)).rejects.toBeInstanceOf(InvalidInputError);
+  h.clock.set(new Date("2026-01-18T10:00:00Z"));
+  await h.app.processRecurrences();
+  expect((await bo.inbox()).filter((notice) => notice.kind === "rsvp-prompt")).toMatchObject([{ meetupId: first.id }]);
+  await bo.leaveSeries(first.recurrence!.id);
+  expect((await bo.viewMeetup(first.id))?.membership).toBeNull();
+  await ana.stopSeries(first.recurrence!.id);
+  expect((await ana.viewMeetup(first.id))?.status).toBe("cancelled");
+  expect(await ana.listSeries()).toEqual([]);
+});
+
 test("rescheduling an occurrence replaces its pending prompt and uses the new forty-eight-hour threshold", async () => {
   const { ana, input } = await setup();
   const bo = await member("bo");

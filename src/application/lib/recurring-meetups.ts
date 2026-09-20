@@ -1,4 +1,4 @@
-import { and, eq, gt, gte, inArray, isNull, lte, or } from "drizzle-orm";
+import { and, eq, exists, gt, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import { requireActiveMember, withActiveMember, type Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
@@ -7,18 +7,25 @@ import { isUuid } from "./input";
 import { cancelOccurrence, notify, readMeetups, releasePlace, requireScheduledMeetup, takePlace, type RsvpAnswer } from "./meetups";
 import { readRecurrences, saveRsvp, visibleRecurrences, type Recurrence } from "./recurrence-records";
 import { expandRecurrence } from "./recurrence-rule";
-import { supersedeRsvpDeliveries } from "./notifications";
+import { supersedeDeliveries } from "./notifications";
 import { activities, gatheringInterests, gatheringMembers, gatheringRsvps, gatherings, members, organisations, recurrenceInterests, recurrenceMembers, recurrences } from "./schema";
 
 export interface RecurringMeetup extends Recurrence { activity: { id: string; name: string } }
 
 export async function listSeries(deps: Deps, actor: Actor): Promise<RecurringMeetup[]> {
   const current = await requireActiveMember(deps.db, actor);
+  const now = deps.clock.now();
   const rows = await deps.db.select({ id: recurrences.id, activity: { id: activities.id, name: activities.name } }).from(recurrences)
     .innerJoin(activities, and(eq(activities.organisationId, recurrences.organisationId), eq(activities.id, recurrences.activityId)))
-    .where(and(visibleRecurrences(actor, current.siteId), isNull(recurrences.stoppedAt), or(isNull(recurrences.endsOn), gte(recurrences.endsOn, deps.clock.now().toISOString().slice(0, 10)))))
+    .where(and(visibleRecurrences(actor, current.siteId), isNull(recurrences.stoppedAt), or(
+      isNull(recurrences.endsOn), gte(recurrences.endsOn, now.toISOString().slice(0, 10)),
+      exists(deps.db.select({ id: gatherings.id }).from(gatherings).where(and(
+        eq(gatherings.organisationId, recurrences.organisationId), eq(gatherings.recurrenceId, recurrences.id),
+        eq(gatherings.status, "scheduled"), gt(gatherings.startsAt, now),
+      ))),
+    )))
     .orderBy(recurrences.startsAt, recurrences.id);
-  const series = await readRecurrences(deps.db, actor, rows.map(({ id }) => id), current.siteId);
+  const series = await readRecurrences(deps.db, actor, rows.map(({ id }) => id), current.siteId, now);
   return rows.map(({ id, activity }) => ({ ...series.get(id)!, activity }));
 }
 
@@ -65,7 +72,7 @@ export async function leaveSeries(deps: Deps, actor: Actor, id: string): Promise
     const occurrences = await futureOccurrences(db, actor, id, current.siteId, now);
     await db.delete(recurrenceMembers).where(and(eq(recurrenceMembers.organisationId, actor.organisationId), eq(recurrenceMembers.recurrenceId, id), eq(recurrenceMembers.memberId, actor.memberId)));
     for (const meetup of occurrences) {
-      await supersedeRsvpDeliveries(db, actor.organisationId, meetup.id, now, actor.memberId);
+      await supersedeDeliveries(db, actor.organisationId, meetup.id, "rsvp-prompt", now, actor.memberId);
       await releasePlace(db, actor.organisationId, meetup, current, now);
       await db.delete(gatheringRsvps).where(and(eq(gatheringRsvps.organisationId, actor.organisationId), eq(gatheringRsvps.gatheringId, meetup.id), eq(gatheringRsvps.memberId, actor.memberId)));
     }

@@ -8,7 +8,7 @@ import { RecurrenceDetails } from "../recurrence";
 import { RsvpForm } from "../rsvp-form";
 
 export default async function MeetupPage({ params }: { params: Promise<{ id: string }> }) {
-  const { member, profile } = await requireMemberPastWelcome();
+  const { member } = await requireMemberPastWelcome();
   const { id } = await params;
   const meetup = await member.viewMeetup(id);
   if (!meetup) notFound();
@@ -37,7 +37,7 @@ export default async function MeetupPage({ params }: { params: Promise<{ id: str
       </dl>
       {meetup.recurrence && <section>
         <h2>Recurring Meetup</h2>
-        <RecurrenceDetails series={meetup.recurrence} memberId={profile.memberId} />
+        <RecurrenceDetails series={meetup.recurrence} />
       </section>}
       {canRsvp && <section>
         <h2>Your RSVP</h2>
