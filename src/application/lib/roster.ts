@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ensureDepartment, ensureSite, nameKey, type Queryable } from "./departments-and-sites";
 import { InvalidInputError } from "./errors";
+import { removeFromFutureOccurrences } from "./member-lifecycle";
 import { departments, members, sites } from "./schema";
 
 export interface RosterRow {
@@ -128,7 +129,7 @@ export async function commitRoster(
   if (preview.departures.length > 0) {
     await db
       .update(members)
-      .set({ status: "departed", updatedAt: now })
+      .set({ status: "departed", statusBeforeSuspension: null, updatedAt: now })
       .where(
         and(
           eq(members.organisationId, organisationId),
@@ -138,6 +139,7 @@ export async function commitRoster(
           ),
         ),
       );
+    await removeFromFutureOccurrences(db, organisationId, preview.departures.map((member) => member.memberId), now);
   }
 }
 

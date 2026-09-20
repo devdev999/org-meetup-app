@@ -39,6 +39,7 @@ export { AccessDeniedError, AdminVisibilityNoticeRequiredError, InvalidInputErro
 export type { AdminAuditEntry, OrganisationAdminActions, UnknownLoginNotice } from "./lib/organisation-admin";
 export type { OrganisationListEntry, OrganisationListKind, OrganisationLists } from "./lib/organisation-lists";
 export type { RosterRow, RosterMember, RosterPreview } from "./lib/roster";
+export type { Flag, FlagInput, ModerationOccurrence } from "./lib/moderation";
 export type {
   AdminVisibilityNotice,
   BeginSignInInput,

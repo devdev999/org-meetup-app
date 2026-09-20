@@ -20,6 +20,7 @@ import type { RsvpAnswer } from "./meetups";
 import { listEvents, ownEventProposals, proposeEvent, viewEvent, type EventProposal } from "./events";
 import type { CreateEventInput, EditEventInput, EventDetail, EventSummary } from "./meetups";
 import { attendance, attendanceHistory, confirmAttendance, connections, rateOccurrence, type Attendance, type AttendanceHistoryEntry, type Connection } from "./attendance";
+import { flag, type FlagInput } from "./moderation";
 
 export type MemberStatus = (typeof members.status.enumValues)[number];
 
@@ -74,6 +75,7 @@ export interface MemberSearch {
  * to it, so nothing a page passes in can reach another Organisation.
  */
 export interface MemberActions {
+  flag(input: FlagInput): Promise<void>;
   confirmAttendance(id: string, memberIds: string[]): Promise<void>;
   attendance(id: string): Promise<Attendance | undefined>;
   attendanceHistory(): Promise<AttendanceHistoryEntry[]>;
@@ -176,6 +178,7 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
 
   return {
     proposeEvent: (input) => proposeEvent(deps, actor, input),
+    flag: (input) => flag(deps, actor, input),
     confirmAttendance: (id, memberIds) => withNotices(id, () => confirmAttendance(deps, actor, id, memberIds)),
     attendance: (id) => afterNotice(() => attendance(deps, actor, id), { action: "attendance", filter: { gatheringId: id } }),
     attendanceHistory: () => attendanceHistory(deps, actor),
