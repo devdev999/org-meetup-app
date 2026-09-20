@@ -203,6 +203,24 @@ test.each([new Error("Timed out"), [{ phrase: "", kind: "skill" as const }], []]
   expect(meetup.relevantInterests).toEqual([sql]);
 });
 
+test("one extraction resolves distinct Aliases and collapses repeated canonical Interests", async () => {
+  const host = await setup();
+  const catalog = await host.interests();
+  const sql = catalog.find((interest) => interest.name === "SQL")!;
+  const rust = catalog.find((interest) => interest.name === "Rust")!;
+  await host.confirmInterest({ phrase: "İ", selection: { interestId: sql.interestId }, stance: "shares" });
+  await host.confirmInterest({ phrase: "systems craft", selection: { interestId: rust.interestId }, stance: "seeks" });
+  const declarations = await host.myInterests();
+  h.ai.extractionResponses.push([
+    { phrase: "i", kind: "skill" }, { phrase: "SYSTEMS CRAFT", kind: "skill" }, { phrase: "İ", kind: "skill" },
+  ]);
+  h.ai.responses.push(new Error("offline"), new Error("offline"), new Error("offline"));
+  const { activityId } = await input(host);
+  const proposals = await host.extractMeetupInterests({ activityId, description: "Practice both Interests." });
+  expect(proposals.map((proposal) => proposal.proposed)).toEqual([{ interestId: sql.interestId }, { interestId: rust.interestId }]);
+  expect(await host.myInterests()).toEqual(declarations);
+});
+
 test("extraction validates the Activity and canonicalises only within the actor's Organisation", async () => {
   const host = await setup();
   await h.app.bootstrap(withDepartmentAndSiteClaims(ministryB));

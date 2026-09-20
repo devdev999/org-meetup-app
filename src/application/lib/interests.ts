@@ -81,56 +81,69 @@ export function listInterests({ db }: Deps, actor: Actor): Promise<Interest[]> {
     .from(interests).where(eq(interests.organisationId, actor.organisationId)).orderBy(asc(interests.kind), asc(interests.name));
 }
 
-export function memberInterestList({ db }: Deps, actor: Actor, memberId = actor.memberId): Promise<MemberInterest[]> {
-  return db.select({ interestId: interests.id, name: interests.name, kind: interests.kind, stance: memberInterests.stance })
+export function memberInterestsFor(db: Queryable, organisationId: string, memberIds: string[]): Promise<(MemberInterest & { memberId: string })[]> {
+  if (!memberIds.length) return Promise.resolve([]);
+  return db.select({ memberId: memberInterests.memberId, interestId: interests.id, name: interests.name, kind: interests.kind, stance: memberInterests.stance })
     .from(memberInterests)
     .innerJoin(interests, and(eq(interests.organisationId, memberInterests.organisationId), eq(interests.id, memberInterests.interestId)))
-    .where(and(eq(memberInterests.organisationId, actor.organisationId), eq(memberInterests.memberId, memberId)))
+    .where(and(eq(memberInterests.organisationId, organisationId), inArray(memberInterests.memberId, memberIds)))
     .orderBy(asc(interests.kind), asc(interests.name));
 }
 
+export async function memberInterestList({ db }: Deps, actor: Actor, memberId = actor.memberId): Promise<MemberInterest[]> {
+  return (await memberInterestsFor(db, actor.organisationId, [memberId])).map(({ memberId: _, ...interest }) => interest);
+}
+
 export async function resolveInterest(deps: Deps, actor: Actor, input: { phrase: string; kind: InterestKind }): Promise<InterestResolution> {
-  const { phrase, kind } = parse(z.object({ phrase: phraseSchema, kind: kindSchema }), input,
-    "Enter an Interest of up to 120 characters and choose Skill or Hobby.");
-  const catalog = await listInterests(deps, actor);
-  const aliases = await deps.db.select({
-    interestId: interestAliases.interestId, phrase: interestAliases.phrase,
-    matchesPhrase: eq(interestAliases.phraseKey, aliasKey(phrase)),
-  })
-    .from(interestAliases).where(eq(interestAliases.organisationId, actor.organisationId));
-  const knownAlias = aliases.find((alias) => alias.matchesPhrase);
-  const ranked = catalog.map((interest) => ({
-    interest,
-    score: Math.max(similarity(phrase, interest.name), ...aliases.filter((alias) => alias.interestId === interest.interestId).map((alias) => similarity(phrase, alias.phrase))),
-  })).filter(({ score }) => score > MIN_SHORTLIST_SCORE).sort((a, b) => b.score - a.score || a.interest.name.localeCompare(b.interest.name));
-  const shortlist = ranked.slice(0, SHORTLIST_SIZE).map(({ interest }) => interest);
-  const closest = ranked[0];
-  let proposed: InterestSelection = closest && closest.score >= FALLBACK_PROPOSAL_SCORE ? { interestId: closest.interest.interestId } : { name: phrase.trim(), kind };
-  const counts = await deps.db.select({ interestId: memberInterests.interestId, count: count() }).from(memberInterests)
-    .innerJoin(members, and(eq(members.organisationId, memberInterests.organisationId), eq(members.id, memberInterests.memberId)))
-    .where(and(eq(memberInterests.organisationId, actor.organisationId), inArray(members.status, VISIBLE_MEMBER_STATUSES)))
-    .groupBy(memberInterests.interestId);
-  const result = await deps.ai.resolveInterest({
-    phrase,
-    shortlist: shortlist.map(({ interestId, name, kind }) => ({ name, kind, count: counts.find((entry) => entry.interestId === interestId)?.count ?? 0 })),
-  }).catch(() => undefined);
-  if (result && "existingName" in result) {
-    const existing = shortlist.find((interest) => interest.name.toLowerCase() === result.existingName.toLowerCase());
-    if (existing) proposed = { interestId: existing.interestId };
-  } else if (result) {
-    const valid = selectionSchema.safeParse(result);
-    if (valid.success) proposed = valid.data;
-  }
-  if (knownAlias) proposed = { interestId: knownAlias.interestId };
-  const selection = proposed;
-  const existing = "name" in selection
-    ? catalog.find((interest) => interest.name.toLowerCase() === selection.name.trim().toLowerCase())
-    : catalog.find((interest) => interest.interestId === selection.interestId);
-  if (existing) {
-    proposed = { interestId: existing.interestId };
-    if (!shortlist.some((interest) => interest.interestId === existing.interestId)) shortlist.unshift(existing);
-  }
-  return { phrase, proposed, shortlist };
+  return (await resolveInterests(deps, actor, [input]))[0]!;
+}
+
+export async function resolveInterests(deps: Deps, actor: Actor, inputs: { phrase: string; kind: InterestKind }[]): Promise<InterestResolution[]> {
+  const phrases = inputs.map((input) => parse(z.object({ phrase: phraseSchema, kind: kindSchema }), input,
+    "Enter an Interest of up to 120 characters and choose Skill or Hobby."));
+  if (!phrases.length) return [];
+  const [catalog, aliases, counts] = await Promise.all([
+    listInterests(deps, actor),
+    deps.db.select({
+      interestId: interestAliases.interestId, phrase: interestAliases.phrase,
+      matches: sql<boolean[]>`array[${sql.join(phrases.map(({ phrase }) => eq(interestAliases.phraseKey, aliasKey(phrase))), sql`, `)}]`,
+    }).from(interestAliases).where(eq(interestAliases.organisationId, actor.organisationId)),
+    deps.db.select({ interestId: memberInterests.interestId, count: count() }).from(memberInterests)
+      .innerJoin(members, and(eq(members.organisationId, memberInterests.organisationId), eq(members.id, memberInterests.memberId)))
+      .where(and(eq(memberInterests.organisationId, actor.organisationId), inArray(members.status, VISIBLE_MEMBER_STATUSES)))
+      .groupBy(memberInterests.interestId),
+  ]);
+  return Promise.all(phrases.map(async ({ phrase, kind }, index) => {
+    const knownAlias = aliases.find((alias) => alias.matches[index]);
+    const ranked = catalog.map((interest) => ({
+      interest,
+      score: Math.max(similarity(phrase, interest.name), ...aliases.filter((alias) => alias.interestId === interest.interestId).map((alias) => similarity(phrase, alias.phrase))),
+    })).filter(({ score }) => score > MIN_SHORTLIST_SCORE).sort((a, b) => b.score - a.score || a.interest.name.localeCompare(b.interest.name));
+    const shortlist = ranked.slice(0, SHORTLIST_SIZE).map(({ interest }) => interest);
+    const closest = ranked[0];
+    let proposed: InterestSelection = closest && closest.score >= FALLBACK_PROPOSAL_SCORE ? { interestId: closest.interest.interestId } : { name: phrase.trim(), kind };
+    const result = await deps.ai.resolveInterest({
+      phrase,
+      shortlist: shortlist.map(({ interestId, name, kind }) => ({ name, kind, count: counts.find((entry) => entry.interestId === interestId)?.count ?? 0 })),
+    }).catch(() => undefined);
+    if (result && "existingName" in result) {
+      const existing = shortlist.find((interest) => interest.name.toLowerCase() === result.existingName.toLowerCase());
+      if (existing) proposed = { interestId: existing.interestId };
+    } else if (result) {
+      const valid = selectionSchema.safeParse(result);
+      if (valid.success) proposed = valid.data;
+    }
+    if (knownAlias) proposed = { interestId: knownAlias.interestId };
+    const selection = proposed;
+    const existing = "name" in selection
+      ? catalog.find((interest) => interest.name.toLowerCase() === selection.name.trim().toLowerCase())
+      : catalog.find((interest) => interest.interestId === selection.interestId);
+    if (existing) {
+      proposed = { interestId: existing.interestId };
+      if (!shortlist.some((interest) => interest.interestId === existing.interestId)) shortlist.unshift(existing);
+    }
+    return { phrase, proposed, shortlist };
+  }));
 }
 
 function similarity(left: string, right: string): number {

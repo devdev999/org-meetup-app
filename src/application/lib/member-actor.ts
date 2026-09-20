@@ -9,7 +9,7 @@ import { organisationAdmin, type OrganisationAdminActions } from "./organisation
 import { answerInvite, cancelMeetup, createMeetup, editMeetup, handOverMeetup, inbox, inviteChoices, inviteMember, joinMeetup, leaveMeetup, listMeetups, meetupChoices, viewMeetup, type CreateMeetupInput, type EditMeetupInput, type Invite, type InviteAnswer, type InviteChoices, type InviteSearch, type MeetupChoices, type MeetupDetail, type MeetupSummary, type Notice } from "./meetups";
 import { departments, interestAliases, interests, memberInterests, members, organisations, sites } from "./schema";
 import type { InterestKind } from "../ports";
-import { confirmInterest, listInterests, memberInterestList, resolveInterest, setInterestStance, type ConfirmInterestInput, type Interest, type InterestResolution, type MemberInterest, type Stance } from "./interests";
+import { confirmInterest, listInterests, memberInterestList, memberInterestsFor, resolveInterest, setInterestStance, type ConfirmInterestInput, type Interest, type InterestResolution, type MemberInterest, type Stance } from "./interests";
 import { beginTelegramLink, unlinkTelegram, type TelegramLink } from "./telegram";
 import { deliverSoon, notificationSettings, setNoticePreference, type NotificationSettings, type NoticePreference } from "./notifications";
 import { inviteSuggestions, meetupSuggestions, previewInviteSuggestions, type InviteSuggestion, type MeetupSuggestion, type PreviewInviteSuggestionsInput } from "./suggestions";
@@ -307,10 +307,6 @@ async function searchMembers({ db }: Deps, actor: Actor, input: MemberSearch): P
         .where(and(eq(memberInterests.organisationId, actor.organisationId), eq(memberInterests.memberId, members.id), or(ilike(interests.name, pattern), ilike(interestAliases.phrase, pattern))))) : undefined,
     )).orderBy(asc(members.name), asc(members.id));
   if (!rows.length) return [];
-  const declarations = await db.select({ memberId: memberInterests.memberId, interestId: interests.id, name: interests.name, kind: interests.kind, stance: memberInterests.stance })
-    .from(memberInterests)
-    .innerJoin(interests, and(eq(interests.organisationId, memberInterests.organisationId), eq(interests.id, memberInterests.interestId)))
-    .where(and(eq(memberInterests.organisationId, actor.organisationId), inArray(memberInterests.memberId, rows.map((row) => row.memberId))))
-    .orderBy(asc(interests.kind), asc(interests.name));
+  const declarations = await memberInterestsFor(db, actor.organisationId, rows.map((row) => row.memberId));
   return rows.map((row) => ({ ...row, interests: declarations.filter((declaration) => declaration.memberId === row.memberId).map(({ memberId: _, ...interest }) => interest) }));
 }

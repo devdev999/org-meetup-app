@@ -4,10 +4,10 @@ import { requireActiveMember, type Actor } from "./actor";
 import type { Deps } from "./deps";
 import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
-import { interestChoiceSchema, listInterests, memberInterestList, type Interest, type InterestChoice } from "./interests";
+import { interestChoiceSchema, listInterests, memberInterestList, memberInterestsFor, type Interest, type InterestChoice } from "./interests";
 import { relevantInterests } from "./meetup-interests";
-import { readMeetup, validSite, visibleMeetups, type InviteChoices, type MeetupSummary } from "./meetups";
-import { departments, gatheringInterests, gatheringMembers, gatherings, interests, invites, memberInterests, members, sites } from "./schema";
+import { readMeetups, validSite, visibleMeetups, type InviteChoices, type MeetupSummary } from "./meetups";
+import { departments, gatheringInterests, gatheringMembers, gatherings, interests, invites, members, sites } from "./schema";
 import { rankInvitees, rankMeetups } from "./suggestion-ranking";
 
 export interface InviteSuggestion {
@@ -63,9 +63,7 @@ export async function meetupSuggestions(deps: Deps, actor: Actor): Promise<Meetu
     deps.db.select({ meetupId: gatheringInterests.gatheringId, interestId: interests.id, name: interests.name, kind: interests.kind })
       .from(gatheringInterests).innerJoin(interests, and(eq(interests.organisationId, gatheringInterests.organisationId), eq(interests.id, gatheringInterests.interestId)))
       .where(and(eq(gatheringInterests.organisationId, actor.organisationId), inArray(gatheringInterests.gatheringId, meetups.map((meetup) => meetup.id)))),
-    deps.db.select({ memberId: memberInterests.memberId, interestId: interests.id, name: interests.name, kind: interests.kind, stance: memberInterests.stance })
-      .from(memberInterests).innerJoin(interests, and(eq(interests.organisationId, memberInterests.organisationId), eq(interests.id, memberInterests.interestId)))
-      .where(and(eq(memberInterests.organisationId, actor.organisationId), inArray(memberInterests.memberId, [...new Set(meetups.map((meetup) => meetup.hostMemberId))]))),
+    memberInterestsFor(deps.db, actor.organisationId, [...new Set(meetups.map((meetup) => meetup.hostMemberId))]),
   ]);
   const interestsByMeetup = Map.groupBy(savedInterests, (interest) => interest.meetupId);
   const interestsByHost = Map.groupBy(hostInterests, (interest) => interest.memberId);
@@ -73,13 +71,14 @@ export async function meetupSuggestions(deps: Deps, actor: Actor): Promise<Meetu
     meetupId: meetup.id, startsAt: meetup.startsAt, connectionCount: 0,
     interests: interestsByMeetup.get(meetup.id) ?? [], hostInterests: interestsByHost.get(meetup.hostMemberId) ?? [],
   }))).slice(0, 20);
-  const results = await Promise.all(ranked.map(async ({ meetupId, reasons }) => {
-    const detail = await readMeetup(deps.db, actor, meetupId, current.siteId, now);
+  const details = new Map((await readMeetups(deps.db, actor, ranked.map((entry) => entry.meetupId), current.siteId, now)).map((meetup) => [meetup.id, meetup]));
+  const results = ranked.map(({ meetupId, reasons }) => {
+    const detail = details.get(meetupId);
     if (!detail || detail.status !== "scheduled" || detail.audience.kind !== "open" || detail.membership !== null
       || detail.startsAt <= now || detail.startsAt > until) return undefined;
     const { participants, waitlist, ...meetup } = detail;
     return { meetup, reasons };
-  }));
+  });
   return results.filter((suggestion) => suggestion !== undefined);
 }
 
@@ -113,9 +112,7 @@ async function candidateSuggestions(deps: Deps, actor: Actor, input: {
       input.meetupId ? sql`not exists (select 1 from ${gatheringMembers} where ${gatheringMembers.organisationId} = ${members.organisationId} and ${gatheringMembers.gatheringId} = ${input.meetupId} and ${gatheringMembers.memberId} = ${members.id} and ${gatheringMembers.status} = 'participant')` : undefined));
   if (!candidates.length) return [];
   const [declarations, hostInterests] = await Promise.all([
-    deps.db.select({ memberId: memberInterests.memberId, interestId: interests.id, name: interests.name, kind: interests.kind, stance: memberInterests.stance })
-      .from(memberInterests).innerJoin(interests, and(eq(interests.organisationId, memberInterests.organisationId), eq(interests.id, memberInterests.interestId)))
-      .where(and(eq(memberInterests.organisationId, actor.organisationId), inArray(memberInterests.memberId, candidates.map((candidate) => candidate.memberId)))),
+    memberInterestsFor(deps.db, actor.organisationId, candidates.map((candidate) => candidate.memberId)),
     memberInterestList(deps, actor),
   ]);
   const byId = new Map(candidates.map((candidate) => [candidate.memberId, candidate]));

@@ -1,8 +1,17 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useState, type ReactNode } from "react";
 import type { InterestChoice, InviteSuggestion } from "../../application";
 import { sendInvite, type MeetupActionState } from "./actions";
+
+function InviteSuggestionCard({ suggestion, children }: { suggestion: InviteSuggestion; children: ReactNode }) {
+  return <li className="notice">
+    <h3>{suggestion.member.name}</h3>
+    <p>{suggestion.member.department ?? "Department not set"}, {suggestion.member.site ?? "Site not set"}</p>
+    <p>{suggestion.reasons.join(" ")}</p>
+    {children}
+  </li>;
+}
 
 export function InviteSuggestions({ meetupId, suggestions }: { meetupId: string; suggestions: InviteSuggestion[] }) {
   const [state, action, pending] = useActionState<MeetupActionState, FormData>(async (_previous, form) => {
@@ -16,12 +25,9 @@ export function InviteSuggestions({ meetupId, suggestions }: { meetupId: string;
       <p>Based on your saved relevant Interests and Place.</p>
       <form action={action}>
         {suggestions.length === 0 ? <p>No eligible Members to suggest.</p> : <ul className="member-list">{suggestions.map((suggestion) => (
-          <li className="notice" key={suggestion.member.memberId}>
-            <h3>{suggestion.member.name}</h3>
-            <p>{suggestion.member.department ?? "Department not set"}, {suggestion.member.site ?? "Site not set"}</p>
-            <p>{suggestion.reasons.join(" ")}</p>
+          <InviteSuggestionCard key={suggestion.member.memberId} suggestion={suggestion}>
             <button name="memberId" value={suggestion.member.memberId} disabled={pending}>Invite {suggestion.member.name}</button>
-          </li>
+          </InviteSuggestionCard>
         ))}</ul>}
         {state.error && <p className="error" role="alert">{state.error}</p>}
         {state.message && <p role="status">{state.message}</p>}
@@ -72,12 +78,9 @@ export function DraftInviteSuggestions({ seed, placeKind, siteId, interests }: {
       ))}</ul>}
       {status && <p className="muted" role="status">{status}</p>}
       <ul className="member-list">{suggestions.filter((suggestion) => !selected.some((member) => member.memberId === suggestion.member.memberId)).map((suggestion) => (
-        <li className="notice" key={suggestion.member.memberId}>
-          <h3>{suggestion.member.name}</h3>
-          <p>{suggestion.member.department ?? "Department not set"}, {suggestion.member.site ?? "Site not set"}</p>
-          <p>{suggestion.reasons.join(" ")}</p>
+        <InviteSuggestionCard key={suggestion.member.memberId} suggestion={suggestion}>
           <button type="button" disabled={selected.length >= 20} onClick={() => setSelected((current) => [...current, suggestion.member])}>Invite {suggestion.member.name} on creation</button>
-        </li>
+        </InviteSuggestionCard>
       ))}</ul>
     </fieldset>
   );

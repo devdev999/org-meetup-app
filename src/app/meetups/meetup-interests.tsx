@@ -41,8 +41,12 @@ export function MeetupInterests({ catalog, activityId, description, initialInter
     }, 500);
     return () => { controller.abort(); clearTimeout(timer); };
   }, [activityId, description, initialInterests]);
-  const selected = useMemo(() => [...new Map([...manual, ...automatic.filter((choice) => !excluded.includes(choiceKey(choice))
-    && !manual.some((entry) => choiceKey(entry) === choiceKey(choice)))].map((choice) => [choiceKey(choice), choice])).values()].slice(0, 20), [manual, automatic, excluded]);
+  const selected = useMemo(() => {
+    const included = automatic.filter((choice) => !excluded.includes(choiceKey(choice))
+      && !manual.some((entry) => choiceKey(entry) === choiceKey(choice)));
+    const unique = new Map([...manual, ...included].map((choice) => [choiceKey(choice), choice]));
+    return [...unique.values()].slice(0, 20);
+  }, [manual, automatic, excluded]);
   useEffect(() => onChange(selected), [selected, onChange]);
   return (
     <fieldset>

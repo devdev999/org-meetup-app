@@ -4,7 +4,7 @@ import { requireActiveMember, type Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
-import { resolveInterest, saveCanonicalInterest, saveInterestChoice, type Interest, type InterestChoice, type InterestResolution } from "./interests";
+import { resolveInterests, saveCanonicalInterest, saveInterestChoice, type Interest, type InterestChoice, type InterestResolution } from "./interests";
 import { activities, gatheringInterests, interests } from "./schema";
 
 export interface ExtractMeetupInterestsInput { activityId: string; description: string }
@@ -16,20 +16,21 @@ export async function extractMeetupInterests(deps: Deps, actor: Actor, input: Ex
   const [activity] = await deps.db.select({ name: activities.name }).from(activities)
     .where(and(eq(activities.organisationId, actor.organisationId), eq(activities.id, parsed.data.activityId), eq(activities.retired, false)));
   if (!activity) throw new InvalidInputError("invalid-meetup", "Choose a current Activity in your Organisation.");
+  let result;
   try {
-    const result = z.array(z.object({ phrase: z.string().trim().min(1).max(120), kind: z.enum(["skill", "hobby"]) })).max(10)
+    result = z.array(z.object({ phrase: z.string().trim().min(1).max(120), kind: z.enum(["skill", "hobby"]) })).max(10)
       .parse(await deps.ai.extractInterests({ activity: activity.name, description: parsed.data.description }));
-    const resolved = await Promise.all(result.map((proposal) => resolveInterest(deps, actor, proposal)));
-    const seen = new Set<string>();
-    return resolved.filter(({ proposed }) => {
-      const key = "interestId" in proposed ? proposed.interestId : proposed.name.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
   } catch {
     return [];
   }
+  const resolved = await resolveInterests(deps, actor, result);
+  const seen = new Set<string>();
+  return resolved.filter(({ proposed }) => {
+    const key = "interestId" in proposed ? proposed.interestId : proposed.name.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export async function relevantInterests(db: Queryable, organisationId: string, meetupId: string): Promise<Interest[]> {
