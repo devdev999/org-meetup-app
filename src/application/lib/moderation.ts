@@ -98,19 +98,19 @@ export async function cancelManagedOccurrence(db: Queryable, actor: Actor, id: s
   await cancelOccurrence(db, actor.organisationId, occurrence, now, `The Organisation Admin cancelled this ${meetupOrEvent(row)}.`);
 }
 
-export async function changeMemberAccess(db: Queryable, actor: Actor, id: string, action: "suspend" | "reinstate", now: Date): Promise<void> {
+export async function changeMemberAccess(db: Queryable, actor: Actor, id: string, action: "suspend" | "reinstate", now: Date): Promise<string[]> {
   if (!isUuid(id)) throw new AccessDeniedError();
   const [member] = await db.select().from(members).where(and(eq(members.organisationId, actor.organisationId), eq(members.id, id)));
   if (!member) throw new AccessDeniedError();
   if (member.status === "departed") throw new InvalidInputError("invalid-moderation", "Restore a Departed Member through the roster.");
   if (action === "suspend") {
-    if (member.status === "suspended") return;
+    if (member.status === "suspended") return [];
     await db.update(members).set({ status: "suspended", statusBeforeSuspension: member.status, updatedAt: now })
       .where(and(eq(members.organisationId, actor.organisationId), eq(members.id, id)));
-    await removeFromFutureOccurrences(db, actor.organisationId, [id], now);
-    return;
+    return removeFromFutureOccurrences(db, actor.organisationId, [id], now);
   }
-  if (member.status !== "suspended") return;
+  if (member.status !== "suspended") return [];
   await db.update(members).set({ status: member.statusBeforeSuspension ?? "provisioned", statusBeforeSuspension: null, updatedAt: now })
     .where(and(eq(members.organisationId, actor.organisationId), eq(members.id, id)));
+  return [];
 }

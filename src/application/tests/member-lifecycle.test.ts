@@ -11,6 +11,18 @@ function member(name: string) {
   return signInAndAcknowledgeAs(h, "ministry-a", { sub: name, name, email: `${name.toLowerCase()}@example.test` });
 }
 
+async function setup() {
+  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson });
+  const admin = await (await signInAndAcknowledgeAs(h, "ministry-a", adminPerson)).organisationAdmin();
+  const ana = await member("Ana");
+  const bo = await member("Bo");
+  return { admin, ana, bo, input: {
+    activityId: (await ana.meetupChoices()).activities[0]!.id,
+    startsAt: new Date("2026-09-19T10:00:00Z"), durationMinutes: 60, capacity: 4,
+    place: { kind: "virtual" as const, url: "https://meet.example/coffee" },
+  } };
+}
+
 test.each(["suspension", "departure"] as const)("%s cancels hosted occurrences, releases future seats and preserves past Attendance", async (change) => {
   await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson });
   const admin = await (await signInAndAcknowledgeAs(h, "ministry-a", adminPerson)).organisationAdmin();
@@ -162,4 +174,74 @@ test("batch departures release moved occurrences after a series ends and expire 
   await expect(cy.answerInvite(invite.id, "accept")).rejects.toBeInstanceOf(InvalidInputError);
   expect(await bo.viewMeetup(occurrence.id)).toMatchObject({ membership: null, rsvp: null, recurrence: { isStanding: false } });
   expect((await cy.inbox()).filter((notice) => notice.kind === "meetup-promoted")).toEqual([]);
+});
+
+test.each(["meetup", "event"] as const)("suspension removes a former Host from a future %s Attendance checklist", async (kind) => {
+  const { admin, ana, bo, input } = await setup();
+  const anaId = (await ana.profile()).memberId;
+  const boId = (await bo.profile()).memberId;
+  const occurrence = await createMeetupOrEvent(h, ana, input, kind);
+  await participationFor(bo, kind).join(occurrence.id);
+  await participationFor(ana, kind).handOver(occurrence.id, boId);
+  await admin.suspendMember(anaId);
+  h.clock.set(new Date("2026-09-19T12:00:00Z"));
+  expect((await bo.attendance(occurrence.id))!.checklist).not.toContainEqual(expect.objectContaining({ memberId: anaId }));
+  await expect(bo.confirmAttendance(occurrence.id, [anaId, boId])).rejects.toBeInstanceOf(InvalidInputError);
+  await bo.confirmAttendance(occurrence.id, [boId]);
+  await admin.reinstateMember(anaId);
+  expect(await ana.connections()).toEqual([]);
+});
+
+test.each(["suspension", "departure"] as const)("%s tells standing Participants when a monthly series has no generated future occurrence", async (change) => {
+  const { admin, ana, bo, input } = await setup();
+  const anaId = (await ana.profile()).memberId;
+  const first = await ana.createMeetup({ ...input, recurrence: { frequency: "monthly" } });
+  await bo.joinSeries(first.recurrence!.id);
+  h.clock.set(new Date("2026-09-20T09:00:00Z"));
+  await h.app.processRecurrences();
+  expect(await bo.listMeetups()).toEqual([]);
+  h.email.reset();
+  if (change === "suspension") await admin.suspendMember(anaId);
+  else {
+    const remaining = (await admin.roster()).filter((person) => person.memberId !== anaId);
+    await admin.commitRoster(remaining, (await admin.previewRoster(remaining)).revision);
+  }
+  expect(await bo.listSeries()).toEqual([]);
+  expect(await bo.viewMeetup(first.id)).toMatchObject({ status: "scheduled", membership: "participant", recurrence: { stopped: true } });
+  expect((await bo.inbox()).filter((notice) => notice.kind === "meetup-cancelled")).toHaveLength(1);
+  expect(h.email.outbox.filter((message) => message.to === "bo@example.test")).toHaveLength(1);
+});
+
+test("suspension tells a Host about a Participant departure but not a waitlist removal", async () => {
+  const { admin, ana, bo, input } = await setup();
+  const cy = await member("Cy");
+  const boId = (await bo.profile()).memberId;
+  const joined = await ana.createMeetup(input);
+  await bo.joinMeetup(joined.id);
+  const waiting = await ana.createMeetup({ ...input, capacity: 2 });
+  await cy.joinMeetup(waiting.id);
+  expect(await bo.joinMeetup(waiting.id)).toBe("waitlisted");
+  await admin.suspendMember(boId);
+  await admin.suspendMember(boId);
+  expect((await ana.inbox()).filter((notice) => notice.kind === "meetup-left")).toEqual([
+    expect.objectContaining({ meetupId: joined.id, message: expect.stringContaining("Bo left your Meetup.") }),
+  ]);
+});
+
+test.each(["suspend", "repeat-suspend", "unchanged-roster"] as const)("%s leaves unrelated delivery retries to the worker", async (operation) => {
+  const { admin, ana, bo, input } = await setup();
+  const cyId = (await (await member("Cy")).profile()).memberId;
+  if (operation === "repeat-suspend") await admin.suspendMember(cyId);
+  const occurrence = await ana.createMeetup(input);
+  h.email.failure = new Error("Email unavailable");
+  await bo.joinMeetup(occurrence.id);
+  h.email.reset();
+  h.clock.set(new Date("2026-09-18T09:02:00Z"));
+  if (operation === "unchanged-roster") {
+    const roster = await admin.roster();
+    await admin.commitRoster(roster, (await admin.previewRoster(roster)).revision);
+  } else await admin.suspendMember(cyId);
+  expect(h.email.outbox).toEqual([]);
+  await h.app.deliverNotices();
+  expect(h.email.outbox).toEqual([expect.objectContaining({ to: "ana@example.test", text: expect.stringContaining("Bo joined") })]);
 });

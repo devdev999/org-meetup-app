@@ -95,10 +95,12 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
   return {
     upcomingOccurrences: () => authorised((db) => upcomingOccurrences(db, actor.organisationId, deps.clock.now()), "moderation-occurrences"),
     suspendMember: async (id) => {
-      await authorised((db) => changeMemberAccess(db, actor, id, "suspend", deps.clock.now()));
-      await deliverSoon(deps, { organisationId: actor.organisationId });
+      const ids = await authorised((db) => changeMemberAccess(db, actor, id, "suspend", deps.clock.now()));
+      for (const gatheringId of ids) await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId });
     },
-    reinstateMember: (id) => authorised((db) => changeMemberAccess(db, actor, id, "reinstate", deps.clock.now())),
+    reinstateMember: async (id) => {
+      await authorised((db) => changeMemberAccess(db, actor, id, "reinstate", deps.clock.now()));
+    },
     cancelMeetup: (id) => cancel(id, "meetup"),
     cancelEvent: (id) => cancel(id, "event"),
     flags: (state = "open") => authorised((db) => readFlags(db, actor.organisationId, state), "flags", { state }),
@@ -129,8 +131,8 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
     roster: () => authorised((db) => readRoster(db, actor.organisationId), "roster"),
     previewRoster: (rows) => authorised((db) => previewRoster(db, actor.organisationId, rows), "roster-preview"),
     commitRoster: async (rows, revision) => {
-      await authorised((db) => commitRoster(db, actor.organisationId, rows, revision, deps.clock.now()));
-      await deliverSoon(deps, { organisationId: actor.organisationId });
+      const ids = await authorised((db) => commitRoster(db, actor.organisationId, rows, revision, deps.clock.now()));
+      for (const gatheringId of ids) await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId });
     },
     lists: () => authorised((db) => organisationLists(db, actor.organisationId)),
     createListEntry: (kind, name) =>
