@@ -1,11 +1,11 @@
-import { and, eq, exists, gt, gte, inArray, isNull, lte, or } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import { requireActiveMember, withActiveMember, type Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
 import { cancelOccurrence, meetupOrEvent, notify, readGatherings, releasePlace, requireScheduledGathering, takePlace, type GatheringKind, type RsvpAnswer } from "./meetups";
-import { readRecurrences, saveRsvp, visibleRecurrences, type Recurrence } from "./recurrence-records";
+import { readRecurrences, recurrencesWithFutureWork, saveRsvp, visibleRecurrences, type Recurrence } from "./recurrence-records";
 import { expandRecurrence } from "./recurrence-rule";
 import { supersedeDeliveries } from "./notifications";
 import { activities, gatheringInterests, gatheringMembers, gatheringRsvps, gatherings, members, organisations, recurrenceInterests, recurrenceMembers, recurrences } from "./schema";
@@ -18,13 +18,7 @@ export async function listSeries(deps: Deps, actor: Actor, kind: GatheringKind =
   const now = deps.clock.now();
   const rows = await deps.db.select({ id: recurrences.id, activity: { id: activities.id, name: activities.name } }).from(recurrences)
     .innerJoin(activities, and(eq(activities.organisationId, recurrences.organisationId), eq(activities.id, recurrences.activityId)))
-    .where(and(visibleRecurrences(actor, current.siteId, kind), isNull(recurrences.stoppedAt), or(
-      isNull(recurrences.endsOn), gte(recurrences.endsOn, now.toISOString().slice(0, 10)),
-      exists(deps.db.select({ id: gatherings.id }).from(gatherings).where(and(
-        eq(gatherings.organisationId, recurrences.organisationId), eq(gatherings.recurrenceId, recurrences.id),
-        eq(gatherings.status, "scheduled"), gt(gatherings.startsAt, now),
-      ))),
-    )))
+    .where(and(visibleRecurrences(actor, current.siteId, kind), isNull(recurrences.stoppedAt), recurrencesWithFutureWork(deps.db, now)))
     .orderBy(recurrences.startsAt, recurrences.id);
   const series = await readRecurrences(deps.db, actor, rows.map(({ id }) => id), current.siteId, now);
   return rows.map(({ id, activity }) => ({ ...series.get(id)!, activity }));

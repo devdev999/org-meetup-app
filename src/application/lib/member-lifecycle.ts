@@ -1,8 +1,9 @@
-import { and, eq, gt, inArray, isNull } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { cancelOccurrence, firstName, meetupOrEvent, notify, promoteWaitlist, readGatherings } from "./meetups";
 import { notifySeriesStopped } from "./recurring-meetups";
+import { recurrencesWithFutureWork } from "./recurrence-records";
 import { attendanceMembers, gatheringMembers, gatheringRsvps, gatherings, invites, members, noticeDeliveries, notices, organisations, recurrenceMembers, recurrences } from "./schema";
 
 export async function reconcileMemberLifecycles(deps: Deps): Promise<void> {
@@ -28,10 +29,17 @@ async function readOccurrences(db: Queryable, organisationId: string, rows: { id
 export async function removeFromFutureOccurrences(db: Queryable, organisationId: string, memberIds: string[], now: Date): Promise<string[]> {
   if (!memberIds.length) return [];
   const notified = new Set<string>();
+  const series = await db.select({ id: recurrences.id }).from(recurrences).where(and(
+    eq(recurrences.organisationId, organisationId), recurrencesWithFutureWork(db, now),
+    or(inArray(recurrences.hostMemberId, memberIds), inArray(recurrences.id,
+      db.select({ id: recurrenceMembers.recurrenceId }).from(recurrenceMembers)
+        .where(and(eq(recurrenceMembers.organisationId, organisationId), inArray(recurrenceMembers.memberId, memberIds))))),
+  ));
+  const seriesIds = series.map((entry) => entry.id);
   const stopped = await db.update(recurrences).set({ stoppedAt: now }).where(and(
-    eq(recurrences.organisationId, organisationId), inArray(recurrences.hostMemberId, memberIds), isNull(recurrences.stoppedAt),
+    eq(recurrences.organisationId, organisationId), inArray(recurrences.id, seriesIds), inArray(recurrences.hostMemberId, memberIds), isNull(recurrences.stoppedAt),
   )).returning({ id: recurrences.id, kind: recurrences.kind, endsOn: recurrences.endsOn });
-  await db.delete(recurrenceMembers).where(and(eq(recurrenceMembers.organisationId, organisationId), inArray(recurrenceMembers.memberId, memberIds)));
+  await db.delete(recurrenceMembers).where(and(eq(recurrenceMembers.organisationId, organisationId), inArray(recurrenceMembers.recurrenceId, seriesIds), inArray(recurrenceMembers.memberId, memberIds)));
   const future = and(eq(gatherings.organisationId, organisationId), gt(gatherings.startsAt, now));
   const hosted = await db.select({ id: gatherings.id, hostMemberId: gatherings.hostMemberId, recurrenceId: gatherings.recurrenceId }).from(gatherings)
     .where(and(future, eq(gatherings.status, "scheduled"), inArray(gatherings.hostMemberId, memberIds)));

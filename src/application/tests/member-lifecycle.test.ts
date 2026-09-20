@@ -112,6 +112,29 @@ test.each(["meetup", "event"] as const)("suspension stops hosted %s series and r
   ]);
 });
 
+test.each(["meetup", "event"] as const)("lifecycle cleanup preserves ended and already-stopped %s series history", async (kind) => {
+  const { admin, ana: anaMember, bo: boMember, input } = await setup();
+  const ana = participationFor(anaMember, kind);
+  const bo = participationFor(boMember, kind);
+  const ended = { ...input, recurrence: { frequency: "weekly" as const, endsOn: "2026-09-19" } };
+  const hosted = await createMeetupOrEvent(h, bo, ended, kind);
+  await ana.joinSeries(hosted.recurrence!.id);
+  const joined = await createMeetupOrEvent(h, ana, ended, kind);
+  await bo.joinSeries(joined.recurrence!.id);
+  const stopped = await createMeetupOrEvent(h, bo, { ...input, recurrence: { frequency: "weekly" } }, kind);
+  await ana.joinSeries(stopped.recurrence!.id);
+  await bo.stopSeries(stopped.recurrence!.id);
+  h.clock.set(new Date("2026-09-20T09:00:00Z"));
+  const ids = [hosted.id, joined.id, stopped.id];
+  const before = await Promise.all(ids.map(async (id) => ({ ana: (await ana.view(id))!.recurrence, bo: (await bo.view(id))!.recurrence })));
+  const boId = (await bo.profile()).memberId;
+  await admin.suspendMember(boId);
+  await h.app.reconcileMemberLifecycles();
+  expect(await Promise.all(ids.map(async (id) => (await ana.view(id))!.recurrence))).toEqual(before.map((entry) => entry.ana));
+  await admin.reinstateMember(boId);
+  expect(await Promise.all(ids.map(async (id) => (await bo.view(id))!.recurrence))).toEqual(before.map((entry) => entry.bo));
+});
+
 test("reinstatement does not retry old external notices while the inbox history remains", async () => {
   await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson });
   const admin = await (await signInAndAcknowledgeAs(h, "ministry-a", adminPerson)).organisationAdmin();
