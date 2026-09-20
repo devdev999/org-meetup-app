@@ -131,6 +131,9 @@ export const members = pgTable(
     isOrganisationAdmin: boolean().notNull().default(false),
     /** When the Member acknowledged the first-login notice about what admins can see (ADR 0006). */
     adminVisibilityNoticeAcknowledgedAt: timestamptz(),
+    hasDeclaredInterest: boolean().notNull().default(false),
+    firstInterestDeclaredAt: timestamptz(),
+    lastActivityAt: timestamptz(),
     createdAt: timestamptz().notNull(),
     updatedAt: timestamptz().notNull(),
   },
@@ -348,6 +351,7 @@ export const recurrenceInterests = pgTable("recurrence_interests", {
 export const gatherings = pgTable("gatherings", {
   ...gatheringFields(),
   status: gatheringStatus().notNull(),
+  hadWaitlist: boolean().default(false),
   recurrenceId: uuid(),
   scheduledStartsAt: timestamptz(),
 }, (table) => [

@@ -21,12 +21,14 @@ export default async function AdminAttendancePage({ searchParams }: { searchPara
         <button type="submit">View Attendance</button>
       </form>
       <p>Every individual view is recorded in the audit log.</p>
+      {memberId && <p><a href={`/admin/attendance/export?${new URLSearchParams({ memberId })}`} download>Export Member Attendance as CSV</a></p>}
       {history && (history.length === 0 ? <p>No past occurrences for this Member.</p> : <ul className="meetup-list">{history.map((occurrence) => <li key={occurrence.id}>
         <PastOccurrence occurrence={occurrence} /><p>Attendance: {attendanceLabels[occurrence.outcome]}.</p>
       </li>)}</ul>)}
     </section>
     <section>
       <h3>Ratings by Activity</h3>
+      <p><a href="/admin/attendance/export" download>Export ratings as CSV</a></p>
       {ratings.length === 0 ? <p>No ratings recorded yet.</p> : <table>
         <thead><tr><th>Activity</th><th>Ratings</th><th>Average out of five</th></tr></thead>
         <tbody>{ratings.map((rating) => <tr key={rating.activity.id}><td>{rating.activity.name}</td><td>{rating.ratingCount}</td><td>{rating.averageRating.toFixed(2)}</td></tr>)}</tbody>

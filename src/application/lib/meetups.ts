@@ -416,6 +416,7 @@ export async function takePlace(db: Queryable, organisationId: string, gathering
   if (existing) return existing.status;
   const status = (gathering.capacity === null || entries.filter((entry) => entry.status === "participant").length < gathering.capacity) ? "participant" : "waitlisted";
   await db.insert(gatheringMembers).values({ organisationId, gatheringId: gathering.id, memberId: member.id, status });
+  if (status === "waitlisted") await db.update(gatherings).set({ hadWaitlist: true }).where(gatheringWhere(organisationId, gathering.id));
   if (status === "participant") await notify(db, organisationId, gathering, [gathering.host.memberId], "meetup-joined", `${firstName(member.name)} joined your ${meetupOrEvent(gathering)}.`, now);
   return status;
 }
@@ -538,6 +539,7 @@ export async function answerInvite(deps: Deps, actor: Actor, id: string, answer:
       membership = gathering.capacity === null || gathering.participantCount < gathering.capacity ? "participant" : "waitlisted";
       let position: number | undefined;
       if (membership === "waitlisted") {
+        await db.update(gatherings).set({ hadWaitlist: true }).where(gatheringWhere(actor.organisationId, gathering.id));
         const [front] = await db.select({ position: gatheringMembers.position }).from(gatheringMembers)
           .where(and(membershipWhere(actor.organisationId, gathering.id), eq(gatheringMembers.status, "waitlisted")))
           .orderBy(gatheringMembers.position).limit(1);
