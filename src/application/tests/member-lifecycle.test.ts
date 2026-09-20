@@ -54,6 +54,9 @@ test.each(["suspension", "departure"] as const)("%s cancels hosted occurrences, 
     const remaining = fullRoster.filter((entry) => entry.memberId !== boId);
     await admin.commitRoster(remaining, (await admin.previewRoster(remaining)).revision);
   }
+  await h.app.reconcileMemberLifecycles();
+  await h.app.reconcileMemberLifecycles();
+  await h.app.deliverNotices();
 
   expect(await ana.viewMeetup(hostedMeetup.id)).toMatchObject({ status: "cancelled" });
   expect(await ana.viewEvent(hostedEvent.id)).toMatchObject({ status: "cancelled" });

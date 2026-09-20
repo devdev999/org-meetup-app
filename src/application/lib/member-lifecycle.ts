@@ -1,8 +1,21 @@
 import { and, eq, gt, inArray, isNull } from "drizzle-orm";
 import type { Queryable } from "./departments-and-sites";
+import type { Deps } from "./deps";
 import { cancelOccurrence, firstName, meetupOrEvent, notify, promoteWaitlist, readGatherings } from "./meetups";
 import { notifySeriesStopped } from "./recurring-meetups";
-import { attendanceMembers, gatheringMembers, gatheringRsvps, gatherings, invites, members, noticeDeliveries, notices, recurrenceMembers, recurrences } from "./schema";
+import { attendanceMembers, gatheringMembers, gatheringRsvps, gatherings, invites, members, noticeDeliveries, notices, organisations, recurrenceMembers, recurrences } from "./schema";
+
+export async function reconcileMemberLifecycles(deps: Deps): Promise<void> {
+  const inactive = inArray(members.status, ["departed", "suspended"]);
+  const affected = await deps.db.selectDistinct({ organisationId: members.organisationId }).from(members).where(inactive);
+  for (const { organisationId } of affected) {
+    await deps.db.transaction(async (db) => {
+      await db.select({ id: organisations.id }).from(organisations).where(eq(organisations.id, organisationId)).for("update");
+      const current = await db.select({ id: members.id }).from(members).where(and(eq(members.organisationId, organisationId), inactive));
+      await removeFromFutureOccurrences(db, organisationId, current.map((member) => member.id), deps.clock.now());
+    });
+  }
+}
 
 async function readOccurrences(db: Queryable, organisationId: string, rows: { id: string; hostMemberId: string }[], now: Date) {
   const occurrences = [];

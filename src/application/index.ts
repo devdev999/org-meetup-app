@@ -30,6 +30,7 @@ import { expireInvites } from "./lib/meetups";
 import { processAvailability } from "./lib/availability";
 import { processRecurrences } from "./lib/recurring-meetups";
 import { processAttendance } from "./lib/attendance";
+import { reconcileMemberLifecycles } from "./lib/member-lifecycle";
 
 export type { TelegramCommand, TelegramLink } from "./lib/telegram";
 export type { NotificationSettings, NoticePreference } from "./lib/notifications";
@@ -107,6 +108,7 @@ export interface ApplicationDependencies {
  * Organisation the application derives itself, never from input.
  */
 export interface Application {
+  reconcileMemberLifecycles(): Promise<void>;
   processAttendance(): Promise<void>;
   processRecurrences(): Promise<void>;
   processAvailability(): Promise<void>;
@@ -136,6 +138,7 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     email: dependencies.email,
   };
   return {
+    reconcileMemberLifecycles: () => reconcileMemberLifecycles(deps),
     processRecurrences: () => processRecurrences(deps),
     processAttendance: () => processAttendance(deps),
     processAvailability: () => processAvailability(deps),
