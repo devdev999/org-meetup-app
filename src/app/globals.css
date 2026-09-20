@@ -181,6 +181,16 @@ ul.options a {
   margin-bottom: 1.5rem;
 }
 
+.report-section {
+  margin-top: 2rem;
+}
+
+.audit-filters {
+  min-width: 12rem;
+  max-width: 24rem;
+  overflow-wrap: anywhere;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

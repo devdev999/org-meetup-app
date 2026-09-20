@@ -41,6 +41,9 @@ export type { AdminAuditEntry, OrganisationAdminActions, UnknownLoginNotice } fr
 export type { OrganisationListEntry, OrganisationListKind, OrganisationLists } from "./lib/organisation-lists";
 export type { RosterRow, RosterMember, RosterPreview } from "./lib/roster";
 export type { Flag, FlagInput, ModerationOccurrence } from "./lib/moderation";
+export type { Report, ReportPeriod, ReportTable } from "./lib/report-types";
+export type { ReportCsv } from "./lib/report-csv";
+export type { PlatformAdminActions } from "./lib/platform-admin";
 export type {
   AdminVisibilityNotice,
   BeginSignInInput,

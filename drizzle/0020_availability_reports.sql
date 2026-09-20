@@ -1,0 +1,1 @@
+CREATE INDEX "availabilities_report_idx" ON "availabilities" USING btree ("organisation_id","ends_at","starts_at");

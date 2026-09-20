@@ -1,4 +1,5 @@
 import { and, eq, ne } from "drizzle-orm";
+import { expireIneligibleAvailabilities } from "./availability-records";
 import { nameKey, type Queryable } from "./departments-and-sites";
 import { InvalidInputError } from "./errors";
 import { isUuid } from "./input";
@@ -82,6 +83,7 @@ export async function retireListEntry(
   organisationId: string,
   kind: OrganisationListKind,
   id: string,
+  now: Date,
 ): Promise<void> {
   const table = tableFor(kind);
   if (!isUuid(id)) throw new InvalidInputError("invalid-list-entry", "choose an entry from the Organisation's list");
@@ -91,6 +93,7 @@ export async function retireListEntry(
     .where(and(eq(table.organisationId, organisationId), eq(table.id, id)))
     .returning({ id: table.id });
   if (!retired) throw new InvalidInputError("invalid-list-entry", "this entry does not belong to the Organisation");
+  if (kind !== "department") await expireIneligibleAvailabilities(db, organisationId, now);
 }
 
 export async function seedActivities(db: Queryable, organisationId: string, now: Date): Promise<void> {

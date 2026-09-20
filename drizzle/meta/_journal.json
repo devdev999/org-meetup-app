@@ -134,6 +134,20 @@
       "when": 1789923438689,
       "tag": "0018_moderation",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1789929116718,
+      "tag": "0019_report_facts",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1789936781275,
+      "tag": "0020_availability_reports",
+      "breakpoints": true
     }
   ]
 }

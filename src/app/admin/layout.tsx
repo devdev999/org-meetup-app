@@ -8,6 +8,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     <main className="admin-area">
       <h1>Organisation Admin</h1>
       <nav aria-label="Administration">
+        <Link href="/admin/reports">Reports</Link>
         <Link href="/admin/roster">Roster</Link>
         <Link href="/admin/lists">Departments, Sites and Activities</Link>
         <Link href="/admin/events">Events</Link>

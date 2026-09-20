@@ -22,6 +22,7 @@ export default async function ProfilePage() {
       </nav>
       <h1>{profile.name}</h1>
       {profile.isOrganisationAdmin && <p><Link href="/admin">Open Organisation Admin area</Link></p>}
+      {profile.isPlatformAdmin && <p><Link href="/platform">Open Platform Admin area</Link></p>}
       <dl>
         <dt>Organisation</dt>
         <dd>{profile.organisation.name}</dd>

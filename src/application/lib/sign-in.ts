@@ -2,6 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { IdentityError, type RawClaims } from "../ports";
 import { normaliseEmail } from "./db";
+import { recordMemberActivity } from "./actor";
 import { ensureDepartment, ensureSite, type Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { blankToNull } from "./input";
@@ -127,6 +128,7 @@ export async function completeSignIn(
     await tx.select({ id: organisations.id }).from(organisations).where(eq(organisations.id, organisation.id)).for("update");
     const memberId = await bindMember(tx, organisation.id, person, now);
     await fillBlanksFromLogin(tx, organisation.id, memberId, person, now);
+    await recordMemberActivity(tx, { organisationId: organisation.id, memberId }, now);
     return { memberId };
   });
 }

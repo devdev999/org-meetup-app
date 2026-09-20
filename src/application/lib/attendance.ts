@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { requireActiveMember, VISIBLE_MEMBER_STATUSES, withActiveMember, type Actor } from "./actor";
@@ -40,7 +40,7 @@ export async function attendanceHistory(deps: Deps, actor: Actor): Promise<Atten
   return readAttendanceHistory(deps.db, actor, deps.clock.now());
 }
 
-export async function readAttendanceHistory(db: Queryable, actor: Actor, now: Date): Promise<AttendanceHistoryEntry[]> {
+export async function readAttendanceHistory(db: Queryable, actor: Actor, now: Date, period?: { start: Date; end: Date }): Promise<AttendanceHistoryEntry[]> {
   const rows = await db.select({ gathering: gatherings, activityName: activities.name, siteName: sites.name,
     confirmedAt: attendanceRecords.confirmedAt, present: attendanceMembers.memberId, membership: gatheringMembers.status, answer: gatheringRsvps.answer })
     .from(gatherings)
@@ -51,6 +51,7 @@ export async function readAttendanceHistory(db: Queryable, actor: Actor, now: Da
     .leftJoin(gatheringMembers, and(eq(gatheringMembers.organisationId, gatherings.organisationId), eq(gatheringMembers.gatheringId, gatherings.id), eq(gatheringMembers.memberId, actor.memberId)))
     .leftJoin(gatheringRsvps, and(eq(gatheringRsvps.organisationId, gatherings.organisationId), eq(gatheringRsvps.gatheringId, gatherings.id), eq(gatheringRsvps.memberId, actor.memberId)))
     .where(and(eq(gatherings.organisationId, actor.organisationId), inArray(gatherings.status, ["scheduled", "completed"]),
+      period ? and(gte(gatherings.startsAt, period.start), lt(gatherings.startsAt, period.end)) : undefined,
       sql`${gatherings.startsAt} + ${gatherings.durationMinutes} * interval '1 minute' <= ${now.toISOString()}::timestamptz`,
       or(eq(gatherings.hostMemberId, actor.memberId), isNotNull(gatheringMembers.memberId), isNotNull(gatheringRsvps.memberId), isNotNull(attendanceMembers.memberId))))
     .orderBy(desc(gatherings.startsAt), gatherings.id);
@@ -227,12 +228,13 @@ export interface ActivityRating {
   averageRating: number;
 }
 
-export async function ratings(db: Queryable, organisationId: string): Promise<ActivityRating[]> {
+export async function ratings(db: Queryable, organisationId: string, period?: { start: Date; end: Date }): Promise<ActivityRating[]> {
   return db.select({ activity: { id: activities.id, name: activities.name }, ratingCount: sql<number>`count(*)::integer`, averageRating: sql<number>`avg(${occurrenceRatings.value})::double precision` })
     .from(occurrenceRatings)
     .innerJoin(gatherings, and(eq(gatherings.organisationId, occurrenceRatings.organisationId), eq(gatherings.id, occurrenceRatings.gatheringId)))
     .innerJoin(activities, and(eq(activities.organisationId, gatherings.organisationId), eq(activities.id, gatherings.activityId)))
-    .where(eq(occurrenceRatings.organisationId, organisationId)).groupBy(activities.id, activities.name).orderBy(activities.name, activities.id);
+    .where(and(eq(occurrenceRatings.organisationId, organisationId), period ? and(gte(gatherings.startsAt, period.start), lt(gatherings.startsAt, period.end)) : undefined))
+    .groupBy(activities.id, activities.name).orderBy(activities.name, activities.id);
 }
 
 export async function connectedMemberIds(db: Queryable, actor: Actor): Promise<Set<string>> {
@@ -245,15 +247,20 @@ export async function connectedMemberIds(db: Queryable, actor: Actor): Promise<S
 
 export async function connections(deps: Deps, actor: Actor): Promise<Connection[]> {
   await requireActiveMember(deps.db, actor);
+  return readConnections(deps.db, actor);
+}
+
+export async function readConnections(db: Queryable, actor: Actor, period?: { start: Date; end: Date }): Promise<Connection[]> {
   const other = alias(attendanceMembers, "other_attendance");
-  const rows = await deps.db.select({ gathering: gatherings, memberId: members.id, name: members.name, status: members.status, activityName: activities.name, siteName: sites.name })
+  const rows = await db.select({ gathering: gatherings, memberId: members.id, name: members.name, status: members.status, activityName: activities.name, siteName: sites.name })
     .from(attendanceMembers)
     .innerJoin(other, and(eq(other.organisationId, attendanceMembers.organisationId), eq(other.gatheringId, attendanceMembers.gatheringId), ne(other.memberId, attendanceMembers.memberId), eq(other.attended, true)))
     .innerJoin(members, and(eq(members.organisationId, other.organisationId), eq(members.id, other.memberId)))
     .innerJoin(gatherings, and(eq(gatherings.organisationId, attendanceMembers.organisationId), eq(gatherings.id, attendanceMembers.gatheringId)))
     .innerJoin(activities, and(eq(activities.organisationId, gatherings.organisationId), eq(activities.id, gatherings.activityId)))
     .leftJoin(sites, and(eq(sites.organisationId, gatherings.organisationId), eq(sites.id, gatherings.placeSiteId)))
-    .where(and(eq(attendanceMembers.organisationId, actor.organisationId), eq(attendanceMembers.memberId, actor.memberId), eq(attendanceMembers.attended, true)))
+    .where(and(eq(attendanceMembers.organisationId, actor.organisationId), eq(attendanceMembers.memberId, actor.memberId), eq(attendanceMembers.attended, true),
+      period ? and(gte(gatherings.startsAt, period.start), lt(gatherings.startsAt, period.end)) : undefined))
     .orderBy(members.name, members.id, desc(gatherings.startsAt), gatherings.id);
   const result = new Map<string, Connection>();
   for (const row of rows) {

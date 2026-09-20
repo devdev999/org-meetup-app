@@ -1,6 +1,7 @@
 import { and, eq, gt, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import { z } from "zod";
 import { requireActiveMember, withActiveMember, type Actor } from "./actor";
+import { availabilityEligibility, expireIneligibleAvailabilities } from "./availability-records";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
@@ -88,8 +89,7 @@ async function openAvailabilities(db: Queryable, organisationId: string, now: Da
       eq(availabilities.organisationId, organisationId), isNull(availabilities.expiredAt),
       scope?.ids ? inArray(availabilities.id, scope.ids) : undefined,
       scope?.siteId !== undefined ? or(isNull(availabilities.siteId), scope.siteId ? eq(availabilities.siteId, scope.siteId) : undefined) : undefined,
-      lte(availabilities.startsAt, now), gt(availabilities.endsAt, now), eq(members.status, "active"), eq(activities.retired, false),
-      or(isNull(availabilities.siteId), and(eq(availabilities.siteId, members.siteId), eq(sites.retired, false))),
+      lte(availabilities.startsAt, now), gt(availabilities.endsAt, now), availabilityEligibility,
     )).orderBy(availabilities.endsAt, availabilities.id);
   return rows.map(({ availability: row, name, activityName, siteName }) => ({
     id: row.id, member: { memberId: row.memberId, name }, activity: { id: row.activityId, name: activityName },
@@ -182,6 +182,7 @@ export async function processAvailability(deps: Deps): Promise<void> {
     await deps.db.transaction(async (db) => {
       await db.select({ id: organisations.id }).from(organisations).where(eq(organisations.id, organisationId)).for("update");
       const now = deps.clock.now();
+      await expireIneligibleAvailabilities(db, organisationId, now);
       const dayStart = new Date(now);
       dayStart.setUTCHours(0, 0, 0, 0);
       await db.update(availabilities).set({ expiredAt: now }).where(and(

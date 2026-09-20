@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt } from "drizzle-orm";
 import { z } from "zod";
-import { requireActiveMember, withActiveMember, type Actor } from "./actor";
+import { recordMemberActivity, requireActiveMember, withActiveMember, type Actor } from "./actor";
 import type { Deps } from "./deps";
 import { AccessDeniedError, AdminVisibilityNoticeRequiredError, InvalidInputError } from "./errors";
 import { answerInvite, joinMeetup, meetupChoices } from "./meetups";
@@ -60,6 +60,7 @@ async function linkTelegram(deps: Deps, code: string, chatId: string): Promise<b
       .onConflictDoNothing().returning();
     if (!link) return false;
     await db.delete(telegramLinkCodes).where(eq(telegramLinkCodes.codeHash, codeHash));
+    await recordMemberActivity(db, current, deps.clock.now());
     return true;
   });
 }

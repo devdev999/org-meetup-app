@@ -136,7 +136,7 @@ Register the public HTTPS URL `<APP_URL>/api/telegram` with Telegram's [setWebho
 
 ## Availability
 
-Open **Availability** from home, your profile or Meetups to post an Activity and a window today. Physical posts use your current Site. Virtual posts are visible across your Organisation. Only open windows from Active Members appear. A changed or retired Site hides its physical posts, and retired Activities disappear. The page refreshes while open and removes posts when their windows end.
+Open **Availability** from home, your profile or Meetups to post an Activity and a window today. Physical posts use your current Site. Virtual posts are visible across your Organisation. Only open windows from Active Members appear. Suspension or departure closes a Member's posts. A Site change or retirement closes affected physical posts, and retiring an Activity closes its posts. Earlier overlaps remain in reports. The page refreshes while open and removes posts when their windows end.
 
 Matching Activities with intersecting windows at the same Site, or both virtual, produce Suggestions for both Members. Each pair receives one overlap notice per UTC day, even across multiple posts or Activities. The inbox always receives it. Enabled Telegram and email notices send immediately through the existing delivery queue and retry policy. The worker checks newly open windows and expires ended windows every minute.
 
@@ -181,6 +181,18 @@ pnpm check             # all three
 ```
 
 CI runs the same three checks, builds the web app, runs the browser smoke test and builds both container images on every push.
+
+## Reports and audit
+
+The Organisation Admin area opens Reports. Select an inclusive UTC date period for weekly Meetup and Event totals, participation, RSVP and Attendance, waitlists, Availability, activation and ratings. Interest demand and Telegram linkage show current Active Members. Each table states its basis and exports the same figures as CSV.
+
+Participation uses current Active Members and their current Department and Site, even for an earlier period. The numerator counts Members with confirmed Attendance in that period. Suspended and Departed Members remain in individual history but do not count in this participation population.
+
+Activation cohorts use initial provisioning in the selected period. Both the first declared Interest and first confirmed Attendance must fall within thirty days of that original date. Attendance uses the occurrence start time; joining or a Going answer alone does not qualify. Reactivation does not restart the window. Legacy declarations with no reliable first date remain unknown, including after reconfirmation. Waitlist frequency retains an occurrence's waitlist history after promotion or removal; older occurrences without surviving evidence show unknown history separately.
+
+Organisation Admins can select any Member, including Suspended and Departed Members, for participation counts, Connections, Availability posts, Interests, Flags and last activity. Last activity records successful logins and explicit commands by that Member. Reads, automatic jobs and an Organisation Admin editing someone else do not update the target Member. Dates from before activity tracking remain unknown until a new action.
+
+Every individual view and every export records its actor, action, filters and time. Organisation Admins see their own Organisation's audit entries. Platform Admins open their area from their profile and can view or export the cross-Organisation audit log. They see the actor's identity, but no viewed Member identity or personal filter values. Individual reports require the separate Organisation Admin role. CSV downloads quote text and protect formula-leading values.
 
 ## Layout
 
@@ -283,6 +295,10 @@ Migration `0015` adds Event proposals and the unused sharing relationship, and m
 Migration `0017` adds Attendance confirmations, per-occurrence checklists and ratings. It preserves existing occurrences, proposals, participation, RSVP answers and notices. Stop the web and worker before migrating, then restart both at this release. Older versions cannot handle the new notice kinds and Telegram actions. Once Attendance notices exist, deploy a forward fix instead of rolling back.
 
 Migration `0018` adds Flags and the prior Member status needed for reinstatement. Database setup also completes lifecycle cleanup for Members already Departed or Suspended before the upgrade. It cancels their upcoming hosted occurrences, stops their series, removes future places and queues notices for the worker. Past Attendance and Connections remain intact. Repeating setup is safe. Run the complete setup command before restarting the web and worker; applying SQL alone does not perform this cleanup.
+
+Migration `0019` adds reporting facts for first Interest declaration, last activity and retained waitlist history. It preserves unknown legacy dates and histories instead of inventing them. Stop the web and worker, run complete database setup, then restart both. Keep versions together so commands continue recording these facts. The migration retains existing Member, occurrence, Attendance and moderation data.
+
+Migration `0020` indexes retained Availability for reports. Complete setup closes outstanding posts that have lost Member, Site or Activity eligibility. For posts already ineligible before this release, setup records the closure at upgrade time. Earlier eligibility changes cannot be reconstructed. Repeating setup preserves the first recorded closure.
 
 For an existing local Compose stack, leave Postgres running and run these steps in order. Continue only when each command succeeds:
 

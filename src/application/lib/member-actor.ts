@@ -1,11 +1,13 @@
 import { and, asc, eq, exists, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
-import { requireActiveMember, VISIBLE_MEMBER_STATUSES, type Actor } from "./actor";
+import { requireActiveMember, VISIBLE_MEMBER_STATUSES, withActiveMember, type Actor } from "./actor";
 import { recordAdminView, type AdminView } from "./admin-audit";
-import { findDepartment, findSite, listDepartmentsAndSites } from "./departments-and-sites";
+import { expireIneligibleAvailabilities } from "./availability-records";
+import { findDepartment, findSite, listDepartmentsAndSites, type Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
 import { blankToNull, isUuid } from "./input";
 import { organisationAdmin, type OrganisationAdminActions } from "./organisation-admin";
+import { platformAdmin, type PlatformAdminActions } from "./platform-admin";
 import { answerInvite, cancelMeetup, createMeetup, editMeetup, handOverMeetup, inbox, inviteChoices, inviteMember, joinMeetup, leaveMeetup, listMeetups, meetupChoices, viewMeetup, type CreateMeetupInput, type EditMeetupInput, type Invite, type InviteAnswer, type InviteChoices, type InviteSearch, type MeetupChoices, type MeetupDetail, type MeetupSummary, type Notice } from "./meetups";
 import { departments, interestAliases, interests, memberInterests, members, organisations, sites } from "./schema";
 import type { InterestKind } from "../ports";
@@ -133,6 +135,7 @@ export interface MemberActions {
   confirmInterest(input: ConfirmInterestInput): Promise<MemberInterest[]>;
   setInterestStance(input: { interestId: string; stance: Stance }): Promise<MemberInterest[]>;
   organisationAdmin(): Promise<OrganisationAdminActions>;
+  platformAdmin(): Promise<PlatformAdminActions>;
   adminVisibilityNotice(): Promise<AdminVisibilityNotice | undefined>;
   profile(): Promise<Profile>;
   /** Records that the Member has read the notice about admin visibility. The first time counts. */
@@ -247,6 +250,7 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     confirmInterest: (input) => afterNotice(() => confirmInterest(deps, actor, input)),
     setInterestStance: (input) => afterNotice(() => setInterestStance(deps, actor, input)),
     organisationAdmin: () => organisationAdmin(deps, actor),
+    platformAdmin: () => platformAdmin(deps, actor),
     adminVisibilityNotice: () => adminVisibilityNotice(deps, actor),
     profile: () => afterNotice(() => profile(deps, actor)),
     acknowledgeAdminVisibilityNotice: () => acknowledgeAdminVisibilityNotice(deps, actor),
@@ -288,7 +292,7 @@ async function adminVisibilityNotice({ db }: Deps, actor: Actor): Promise<AdminV
   return notice;
 }
 
-async function profile({ db }: Deps, actor: Actor): Promise<Profile> {
+async function profile({ db }: { db: Queryable }, actor: Actor): Promise<Profile> {
   const [row] = await db
     .select({
       memberId: members.id,
@@ -312,39 +316,31 @@ async function profile({ db }: Deps, actor: Actor): Promise<Profile> {
   return row;
 }
 
-async function acknowledgeAdminVisibilityNotice({ db, clock }: Deps, actor: Actor): Promise<void> {
-  await requireActiveMember(db, actor, false);
-  const now = clock.now();
-  await db
-    .update(members)
-    .set({ adminVisibilityNoticeAcknowledgedAt: now, updatedAt: now })
-    .where(and(self(actor), isNull(members.adminVisibilityNoticeAcknowledgedAt)));
+async function acknowledgeAdminVisibilityNotice(deps: Deps, actor: Actor): Promise<void> {
+  await withActiveMember(deps, actor, async (db) => {
+    const now = deps.clock.now();
+    await db.update(members).set({ adminVisibilityNoticeAcknowledgedAt: now, updatedAt: now })
+      .where(and(self(actor), isNull(members.adminVisibilityNoticeAcknowledgedAt)));
+  }, false);
 }
 
 async function updateProfile(deps: Deps, actor: Actor, input: UpdateProfileInput): Promise<Profile> {
-  const { db, clock } = deps;
-  const department = blankToNull(input.department);
-  const site = blankToNull(input.site);
-  const current = await requireActiveMember(db, actor);
-  const departmentId = department === null ? null : await findDepartment(db, actor.organisationId, department, current.departmentId);
-  if (departmentId === undefined) {
-    throw new InvalidInputError("unknown-department", `"${department}" is not a Department of this Organisation`);
-  }
-  const siteId = site === null ? null : await findSite(db, actor.organisationId, site, current.siteId);
-  if (siteId === undefined) {
-    throw new InvalidInputError("unknown-site", `"${site}" is not a Site of this Organisation`);
-  }
-  await db
-    .update(members)
-    .set({
-      departmentId,
-      siteId,
+  return withActiveMember(deps, actor, async (db, current) => {
+    const department = blankToNull(input.department);
+    const site = blankToNull(input.site);
+    const departmentId = department === null ? null : await findDepartment(db, actor.organisationId, department, current.departmentId);
+    if (departmentId === undefined) throw new InvalidInputError("unknown-department", `"${department}" is not a Department of this Organisation`);
+    const siteId = site === null ? null : await findSite(db, actor.organisationId, site, current.siteId);
+    if (siteId === undefined) throw new InvalidInputError("unknown-site", `"${site}" is not a Site of this Organisation`);
+    await db.update(members).set({
+      departmentId, siteId,
       departmentCorrectedByMember: sql`${members.departmentCorrectedByMember} or (${members.departmentId} is distinct from ${departmentId}::uuid)`,
       siteCorrectedByMember: sql`${members.siteCorrectedByMember} or (${members.siteId} is distinct from ${siteId}::uuid)`,
-      updatedAt: clock.now(),
-    })
-    .where(self(actor));
-  return profile(deps, actor);
+      updatedAt: deps.clock.now(),
+    }).where(self(actor));
+    if (siteId !== current.siteId) await expireIneligibleAvailabilities(db, actor.organisationId, deps.clock.now());
+    return profile({ db }, actor);
+  });
 }
 
 async function viewMember(deps: Deps, actor: Actor, memberId: string): Promise<MemberProfile | undefined> {

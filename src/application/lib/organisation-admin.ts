@@ -1,10 +1,15 @@
 import { and, eq } from "drizzle-orm";
-import { requireActiveMember, type Actor } from "./actor";
-import { recordAdminView } from "./admin-audit";
+import { recordMemberActivity, requireActiveMember, type Actor } from "./actor";
+import { auditTable, readAdminAudit, recordAdminView, type AdminAuditEntry } from "./admin-audit";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { AccessDeniedError } from "./errors";
 import { isUuid } from "./input";
+import { organisationReport } from "./reports";
+import type { Report, ReportPeriod } from "./report-types";
+import { memberReport } from "./member-reports";
+import { attendanceHistoryTable, ratingsTable } from "./attendance-reports";
+import { exportReportTable, tableCsv, type ReportCsv } from "./report-csv";
 import { ratings, readAttendanceHistory, type ActivityRating, type AttendanceHistoryEntry } from "./attendance";
 import { approveEvent, createEvent, managedEvents, readEventProposals, reassignEventHost, rejectEvent, type EventProposal, type ManagedEvent } from "./events";
 import type { CreateEventInput, EventDetail, GatheringKind } from "./meetups";
@@ -18,7 +23,7 @@ import {
   type RosterPreview,
   type RosterRow,
 } from "./roster";
-import { adminAuditEntries, members, organisationAdminNotices, organisations } from "./schema";
+import { members, organisationAdminNotices, organisations } from "./schema";
 import {
   organisationLists,
   retireListEntry,
@@ -29,6 +34,13 @@ import {
 } from "./organisation-lists";
 
 export interface OrganisationAdminActions {
+  reports(period: ReportPeriod): Promise<Report>;
+  memberReport(memberId: string, period: ReportPeriod): Promise<Report>;
+  exportReport(tableId: string, period: ReportPeriod): Promise<ReportCsv>;
+  exportMemberReport(memberId: string, tableId: string, period: ReportPeriod): Promise<ReportCsv>;
+  exportAuditLog(): Promise<ReportCsv>;
+  exportRatings(): Promise<ReportCsv>;
+  exportMemberAttendance(memberId: string): Promise<ReportCsv>;
   upcomingOccurrences(): Promise<ModerationOccurrence[]>;
   flags(state?: Flag["state"]): Promise<Flag[]>;
   resolveFlag(id: string, note: string): Promise<void>;
@@ -62,10 +74,7 @@ export interface UnknownLoginNotice {
   createdAt: Date;
 }
 
-export type AdminAuditEntry = Pick<
-  typeof adminAuditEntries.$inferSelect,
-  "id" | "actorMemberId" | "action" | "filter" | "createdAt"
-> & { actorName: string };
+export type { AdminAuditEntry } from "./admin-audit";
 
 export async function organisationAdmin(deps: Deps, actor: Actor): Promise<OrganisationAdminActions> {
   async function requireAdmin(db: Queryable) {
@@ -89,57 +98,68 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
     });
   }
   async function cancel(id: string, kind: GatheringKind): Promise<void> {
-    await authorised((db) => cancelManagedOccurrence(db, actor, id, kind, deps.clock.now()));
+    await command((db) => cancelManagedOccurrence(db, actor, id, kind, deps.clock.now()));
     await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: id });
   }
+  function command<T>(operation: (db: Queryable) => Promise<T>, auditAction?: string, filter: Record<string, string> = {}): Promise<T> {
+    return authorised(async (db) => {
+      const result = await operation(db);
+      await recordMemberActivity(db, actor, deps.clock.now());
+      return result;
+    }, auditAction, filter);
+  }
   return {
+    reports: (period) => authorised((db) => organisationReport(db, actor.organisationId, period, deps.clock.now())),
+    memberReport: (memberId, period) => authorised((db) => memberReport(db, actor, memberId, period, deps.clock.now()), "member-report", { memberId, ...period }),
+    exportReport: async (table, period) => command(async (db) => exportReportTable(await organisationReport(db, actor.organisationId, period, deps.clock.now(), table), table),
+      "aggregate-report-export", { table, ...period }),
+    exportMemberReport: async (memberId, table, period) => command(async (db) => exportReportTable(await memberReport(db, actor, memberId, period, deps.clock.now(), table), table),
+      "member-report-export", { memberId, table, ...period }),
+    exportAuditLog: () => command(async (db) => tableCsv(auditTable(await readAdminAudit(db, actor.organisationId))), "audit-log-export"),
+    exportRatings: () => command(async (db) => tableCsv(ratingsTable(await ratings(db, actor.organisationId))), "ratings-export"),
+    exportMemberAttendance: (memberId) => command(async (db) => tableCsv(attendanceHistoryTable(await memberAttendance(db, actor, memberId, deps.clock.now()))), "member-attendance-export", { memberId }),
     upcomingOccurrences: () => authorised((db) => upcomingOccurrences(db, actor.organisationId, deps.clock.now()), "moderation-occurrences"),
     suspendMember: async (id) => {
-      const ids = await authorised((db) => changeMemberAccess(db, actor, id, "suspend", deps.clock.now()));
+      const ids = await command((db) => changeMemberAccess(db, actor, id, "suspend", deps.clock.now()));
       for (const gatheringId of ids) await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId });
     },
     reinstateMember: async (id) => {
-      await authorised((db) => changeMemberAccess(db, actor, id, "reinstate", deps.clock.now()));
+      await command((db) => changeMemberAccess(db, actor, id, "reinstate", deps.clock.now()));
     },
     cancelMeetup: (id) => cancel(id, "meetup"),
     cancelEvent: (id) => cancel(id, "event"),
     flags: (state = "open") => authorised((db) => readFlags(db, actor.organisationId, state), "flags", { state }),
-    resolveFlag: (id, note) => authorised((db) => resolveFlag(db, actor, id, note, deps.clock.now())),
+    resolveFlag: (id, note) => command((db) => resolveFlag(db, actor, id, note, deps.clock.now())),
     ratings: () => authorised((db) => ratings(db, actor.organisationId)),
-    memberAttendance: (memberId) => authorised(async (db) => {
-      if (!isUuid(memberId)) throw new AccessDeniedError();
-      const [member] = await db.select({ id: members.id }).from(members).where(and(eq(members.organisationId, actor.organisationId), eq(members.id, memberId)));
-      if (!member) throw new AccessDeniedError();
-      return readAttendanceHistory(db, { ...actor, memberId }, deps.clock.now());
-    }, "member-attendance", { memberId }),
+    memberAttendance: (memberId) => authorised((db) => memberAttendance(db, actor, memberId, deps.clock.now()), "member-attendance", { memberId }),
     createEvent: async (input) => {
-      const event = await authorised((db) => createEvent(db, actor, input, deps.clock.now()));
+      const event = await command((db) => createEvent(db, actor, input, deps.clock.now()));
       await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: event.id });
       return event;
     },
     eventProposals: () => authorised((db) => readEventProposals(db, actor, { administration: true }), "event-proposals"),
     events: () => authorised((db) => managedEvents(db, actor), "events"),
     approveEvent: async (id, note) => {
-      await authorised((db) => approveEvent(db, actor, id, deps.clock.now(), note));
+      await command((db) => approveEvent(db, actor, id, deps.clock.now(), note));
       await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: id });
     },
-    rejectEvent: (id, note) => authorised((db) => rejectEvent(db, actor, id, note)),
+    rejectEvent: (id, note) => command((db) => rejectEvent(db, actor, id, note)),
     reassignEventHost: async (id, memberId) => {
-      await authorised((db) => reassignEventHost(db, actor, id, memberId, deps.clock.now()));
+      await command((db) => reassignEventHost(db, actor, id, memberId, deps.clock.now()));
       await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: id });
     },
     roster: () => authorised((db) => readRoster(db, actor.organisationId), "roster"),
     previewRoster: (rows) => authorised((db) => previewRoster(db, actor.organisationId, rows), "roster-preview"),
     commitRoster: async (rows, revision) => {
-      const ids = await authorised((db) => commitRoster(db, actor.organisationId, rows, revision, deps.clock.now()));
+      const ids = await command((db) => commitRoster(db, actor.organisationId, rows, revision, deps.clock.now()));
       for (const gatheringId of ids) await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId });
     },
     lists: () => authorised((db) => organisationLists(db, actor.organisationId)),
     createListEntry: (kind, name) =>
-      authorised((db) => saveListEntry(db, actor.organisationId, kind, undefined, name, deps.clock.now())),
+      command((db) => saveListEntry(db, actor.organisationId, kind, undefined, name, deps.clock.now())),
     renameListEntry: (kind, id, name) =>
-      authorised((db) => saveListEntry(db, actor.organisationId, kind, id, name, deps.clock.now())),
-    retireListEntry: (kind, id) => authorised((db) => retireListEntry(db, actor.organisationId, kind, id)),
+      command((db) => saveListEntry(db, actor.organisationId, kind, id, name, deps.clock.now())),
+    retireListEntry: (kind, id) => command((db) => retireListEntry(db, actor.organisationId, kind, id, deps.clock.now())),
     unknownLoginNotices: () =>
       authorised(
         (db) =>
@@ -167,27 +187,13 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
             .orderBy(organisationAdminNotices.createdAt, members.email),
         "unknown-login-notices",
       ),
-    auditLog: () =>
-      authorised((db) =>
-        db
-          .select({
-            id: adminAuditEntries.id,
-            actorMemberId: adminAuditEntries.actorMemberId,
-            action: adminAuditEntries.action,
-            filter: adminAuditEntries.filter,
-            createdAt: adminAuditEntries.createdAt,
-            actorName: members.name,
-          })
-          .from(adminAuditEntries)
-          .innerJoin(
-            members,
-            and(
-              eq(members.id, adminAuditEntries.actorMemberId),
-              eq(members.organisationId, adminAuditEntries.organisationId),
-            ),
-          )
-          .where(eq(adminAuditEntries.organisationId, actor.organisationId))
-          .orderBy(adminAuditEntries.createdAt, adminAuditEntries.id),
-      ),
+    auditLog: () => authorised((db) => readAdminAudit(db, actor.organisationId)),
   };
+}
+
+async function memberAttendance(db: Queryable, actor: Actor, memberId: string, now: Date): Promise<AttendanceHistoryEntry[]> {
+  if (!isUuid(memberId)) throw new AccessDeniedError();
+  const [member] = await db.select({ id: members.id }).from(members).where(and(eq(members.organisationId, actor.organisationId), eq(members.id, memberId)));
+  if (!member) throw new AccessDeniedError();
+  return readAttendanceHistory(db, { ...actor, memberId }, now);
 }

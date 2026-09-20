@@ -1,7 +1,7 @@
 import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { InterestKind } from "../ports";
-import { requireActiveMember, VISIBLE_MEMBER_STATUSES, type Actor } from "./actor";
+import { VISIBLE_MEMBER_STATUSES, withActiveMember, type Actor } from "./actor";
 import type { Database } from "./db";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
@@ -166,11 +166,12 @@ function similarity(left: string, right: string): number {
 export async function confirmInterest(deps: Deps, actor: Actor, input: ConfirmInterestInput): Promise<MemberInterest[]> {
   const { phrase, selection, stance } = parse(confirmSchema, input,
     "Enter an Interest of up to 120 characters, choose its listing, and choose Shares or Seeks.");
-  await deps.db.transaction(async (tx) => {
-    await requireActiveMember(tx, actor);
+  await withActiveMember(deps, actor, async (tx, current) => {
     const interestId = await saveInterestChoice(tx, actor.organisationId, { phrase, selection }, deps.clock.now());
     await tx.insert(memberInterests).values({ organisationId: actor.organisationId, memberId: actor.memberId, interestId, stance })
       .onConflictDoUpdate({ target: [memberInterests.organisationId, memberInterests.memberId, memberInterests.interestId], set: { stance } });
+    if (!current.hasDeclaredInterest) await tx.update(members).set({ hasDeclaredInterest: true, firstInterestDeclaredAt: deps.clock.now() })
+      .where(and(eq(members.organisationId, actor.organisationId), eq(members.id, actor.memberId)));
   });
   return memberInterestList(deps, actor);
 }
@@ -208,9 +209,11 @@ export async function saveInterestChoice(db: Queryable, organisationId: string, 
 export async function setInterestStance(deps: Deps, actor: Actor, input: { interestId: string; stance: Stance }): Promise<MemberInterest[]> {
   const selection = parse(z.object({ interestId: z.uuid(), stance: z.enum(["shares", "seeks"]) }), input,
     "Choose a declared Interest and select Shares or Seeks.");
-  const updated = await deps.db.update(memberInterests).set({ stance: selection.stance })
-    .where(and(eq(memberInterests.organisationId, actor.organisationId), eq(memberInterests.memberId, actor.memberId), eq(memberInterests.interestId, selection.interestId)))
-    .returning({ interestId: memberInterests.interestId });
-  if (!updated.length) throw new InvalidInputError("unknown-interest", "Declare this Interest before changing its Stance.");
+  await withActiveMember(deps, actor, async (db) => {
+    const updated = await db.update(memberInterests).set({ stance: selection.stance })
+      .where(and(eq(memberInterests.organisationId, actor.organisationId), eq(memberInterests.memberId, actor.memberId), eq(memberInterests.interestId, selection.interestId)))
+      .returning({ interestId: memberInterests.interestId });
+    if (!updated.length) throw new InvalidInputError("unknown-interest", "Declare this Interest before changing its Stance.");
+  });
   return memberInterestList(deps, actor);
 }

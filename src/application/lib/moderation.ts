@@ -1,4 +1,5 @@
 import { and, eq, gt, inArray } from "drizzle-orm";
+import { expireIneligibleAvailabilities } from "./availability-records";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { VISIBLE_MEMBER_STATUSES, withActiveMember, type Actor } from "./actor";
@@ -114,6 +115,7 @@ export async function changeMemberAccess(db: Queryable, actor: Actor, id: string
     if (member.status === "suspended") return [];
     await db.update(members).set({ status: "suspended", statusBeforeSuspension: member.status, updatedAt: now })
       .where(and(eq(members.organisationId, actor.organisationId), eq(members.id, id)));
+    await expireIneligibleAvailabilities(db, actor.organisationId, now);
     return removeFromFutureOccurrences(db, actor.organisationId, [id], now);
   }
   if (member.status !== "suspended") return [];
