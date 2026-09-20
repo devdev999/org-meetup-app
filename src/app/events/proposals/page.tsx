@@ -10,7 +10,7 @@ export default async function EventProposalsPage() {
     <h1>Your Event proposals</h1>
     {proposals.length === 0 ? <p>You have no Event proposals yet.</p> : proposals.map((proposal) => <article className="notice" key={proposal.id}>
       <ProposalDetails proposal={proposal} />
-      {proposal.state === "approved" && <Link href={`/events/${proposal.id}`}>View Event</Link>}
+      {proposal.state === "approved" && proposal.details && <Link href={`/events/${proposal.id}`}>View Event</Link>}
     </article>)}
   </main>;
 }

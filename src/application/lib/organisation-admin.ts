@@ -82,7 +82,7 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
       await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: event.id });
       return event;
     },
-    eventProposals: () => authorised((db) => readEventProposals(db, actor, true), "event-proposals"),
+    eventProposals: () => authorised((db) => readEventProposals(db, actor, { administration: true }), "event-proposals"),
     events: () => authorised((db) => managedEvents(db, actor), "events"),
     approveEvent: async (id, note) => {
       await authorised((db) => approveEvent(db, actor, id, deps.clock.now(), note));

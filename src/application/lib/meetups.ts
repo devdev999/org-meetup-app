@@ -626,7 +626,7 @@ export async function cancelMeetup(deps: Deps, actor: Actor, id: string, kind: G
 }
 
 export async function cancelOccurrence(db: Queryable, organisationId: string, meetup: GatheringSummary, now: Date): Promise<void> {
-  const recipients = await noticeRecipients(db, organisationId, meetup.id);
+  const recipients = [meetup.host.memberId, ...await noticeRecipients(db, organisationId, meetup.id)];
   await db.update(gatherings).set({ status: "cancelled" }).where(gatheringWhere(organisationId, meetup.id));
   await db.update(invites).set({ state: "expired" }).where(and(eq(invites.organisationId, organisationId), eq(invites.gatheringId, meetup.id), eq(invites.state, "pending")));
   await notify(db, organisationId, meetup, recipients, "meetup-cancelled", `The Host cancelled this ${meetupOrEvent(meetup)}.`, now);

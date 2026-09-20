@@ -62,7 +62,11 @@ Only the series Host can stop the series. This cancels its future occurrences an
 
 Open Events from your profile or home to propose one. A proposal stays private to its proposer and Organisation Admins until approval. The Organisation Admin queue records approval or rejection, with a required rejection note and an optional approval note. The proposer sees the decision under Your Event proposals and becomes Host on approval. Approval rechecks the start time, Activity, Sites and proposer before publishing. It creates the first occurrence, standing membership and selected Invites together. Rejected proposals create none of these.
 
+The proposer keeps the decision and note if they later lose access to the published Event. Proposal history shows its current details only while the Event remains visible to them.
+
 Organisation Admins can create an Event directly or reassign the Host of any published occurrence, including past and cancelled Events. Reassignment changes that occurrence's Host without changing participation, the original proposer or the series Host. A new Host can explicitly join a future occurrence, subject to its capacity.
+
+Stopping a series also sends a cancellation notice to each occurrence's current Host, including a reassigned Host who has not joined it.
 
 Events default to the whole Organisation and have no capacity limit unless one is supplied. A limit must be a positive whole number and includes the Host. Joining, FIFO waitlists, Invites, occurrence edits, recurrence and RSVP use the same rules as Meetups. Relevant Interests, automatic extraction and Suggestions also work on proposals and direct creation. Selected Invites on a proposal wait for approval. Event labels, inbox links, Telegram actions and email subjects identify Events separately. Delivery preferences apply to both kinds.
 

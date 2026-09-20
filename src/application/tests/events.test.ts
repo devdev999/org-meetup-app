@@ -41,6 +41,23 @@ test("an Event proposal stays private until an Organisation Admin publishes it w
   expect((await ana.eventProposals())[0]).toMatchObject({ state: "approved", note: "Room booking confirmed." });
 });
 
+test("an approved proposal keeps its decision but hides Event details after the proposer loses access", async () => {
+  const { ana, admin, input } = await setup();
+  const bo = await member("bo");
+  const proposal = await ana.proposeEvent({ ...input, audience: { kind: "invite-only" }, place: { kind: "virtual", url: "https://meet.example/original" } });
+  await admin.approveEvent(proposal.id, "Approved with a booking.");
+  const invite = await ana.inviteToEvent(proposal.id, (await bo.profile()).memberId);
+  await bo.answerInvite(invite.id, "accept");
+  await ana.handOverEvent(proposal.id, (await bo.profile()).memberId);
+  await ana.leaveEvent(proposal.id);
+  await bo.editEvent(proposal.id, { ...input, description: "A private new agenda", place: { kind: "virtual", url: "https://meet.example/private-new-room" } });
+  expect(await ana.viewEvent(proposal.id)).toBeUndefined();
+  expect(await ana.eventProposals()).toEqual([{
+    id: proposal.id, state: "approved", note: "Approved with a booking.", proposer: { memberId: (await ana.profile()).memberId, name: "ana" }, details: null,
+  }]);
+  expect((await admin.eventProposals())[0]).toMatchObject({ details: { description: "A private new agenda", place: { url: "https://meet.example/private-new-room" } } });
+});
+
 test("Organisation Admin Event management includes private and past published Events, excludes proposals and other Organisations, and records the view", async () => {
   const { ana, admin, input } = await setup();
   const bo = await member("bo");
@@ -218,6 +235,25 @@ test("approval activates Event recurrence once, with shared standing membership,
   expect((await bo.inbox()).filter((notice) => notice.kind === "meetup-cancelled").every((notice) => notice.eventId && notice.message.startsWith("The Host cancelled this Event."))).toBe(true);
 });
 
+test("stopping an Event series notifies a reassigned occurrence Host who has no seat", async () => {
+  const { ana, admin, input } = await setup();
+  const cy = await member("cy");
+  const link = await cy.beginTelegramLink();
+  await h.app.handleTelegram({ kind: "link", chatId: "103", code: new URL(link.url).searchParams.get("start")! });
+  const proposal = await ana.proposeEvent({ ...input, recurrence: { frequency: "weekly" } });
+  await admin.approveEvent(proposal.id);
+  const event = (await ana.viewEvent(proposal.id))!;
+  await admin.reassignEventHost(event.id, (await cy.profile()).memberId);
+  expect(await cy.viewEvent(event.id)).toMatchObject({ membership: "host", participantCount: 1, participants: [{ name: "ana" }] });
+  h.email.reset();
+  h.telegram.reset();
+  await ana.stopSeries(event.recurrence!.id);
+  await ana.stopSeries(event.recurrence!.id);
+  expect((await cy.inbox()).filter((notice) => notice.kind === "meetup-cancelled")).toMatchObject([{ eventId: event.id }]);
+  expect(h.email.outbox.filter((notice) => notice.to === "cy@example.test")).toEqual([expect.objectContaining({ subject: "Event notice", text: expect.stringContaining("cancelled this Event") })]);
+  expect(h.telegram.outbox).toEqual([expect.objectContaining({ chatId: "103", text: expect.stringContaining("cancelled this Event") })]);
+});
+
 test("an Organisation Admin can reassign an Event Host after it starts without changing past participation or the proposer", async () => {
   const { ana, admin, input } = await setup();
   const bo = await member("bo");
@@ -272,13 +308,13 @@ test.each(["proposal", "direct"] as const)("%s Event creation accepts edited ext
     { phrase: "Python", selection: { name: "Python basics", kind: "skill" as const } },
   ] };
   const event = mode === "proposal" ? await ana.proposeEvent(data) : await admin.createEvent(data);
-  expect(event.relevantInterests.map((interest) => interest.name)).toEqual(["Python basics", "SQL"]);
+  expect(("details" in event ? event.details! : event).relevantInterests.map((interest) => interest.name)).toEqual(["Python basics", "SQL"]);
   expect(await host.myInterests()).toEqual([]);
   h.ai.extractionResponses.push(new Error("Timed out"));
   expect(await host.extractEventInterests({ activityId: input.activityId, description })).toEqual([]);
   const manual = { ...input, relevantInterests: [{ phrase: "SQL", selection: { interestId: sql.interestId } }] };
   const saved = mode === "proposal" ? await ana.proposeEvent(manual) : await admin.createEvent(manual);
-  expect(saved.relevantInterests).toEqual([sql]);
+  expect(("details" in saved ? saved.details! : saved).relevantInterests).toEqual([sql]);
 });
 
 test("Telegram Event actions join and answer RSVP while Event notices use the correct buttons and wording", async () => {

@@ -1,21 +1,24 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { requireActiveMember, withActiveMember, type Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
 import { relevantInterestsFor } from "./meetup-interests";
-import { createGathering, listGatherings, noticeRecipients, notify, publishGathering, readGathering, readGatheringDetail, type CreateEventInput, type EventDetail, type EventSummary, type MeetupPerson } from "./meetups";
+import { createGathering, listGatherings, noticeRecipients, notify, publishGathering, readGathering, readGatheringDetail, visibleGatherings, type CreateEventInput, type EventDetail, type EventSummary, type MeetupPerson } from "./meetups";
 import type { RecurrenceInput } from "./recurrence-records";
 import { activities, eventProposals, gatherings, members, sites } from "./schema";
 
-export interface EventProposal extends Pick<EventSummary, "id" | "activity" | "startsAt" | "durationMinutes" | "place" | "capacity" | "audience" | "description"> {
+export interface EventProposal {
+  id: string;
   state: "proposed" | "approved" | "rejected";
   note: string | null;
   proposer: MeetupPerson;
-  recurrence: RecurrenceInput | null;
-  relevantInterests: EventDetail["relevantInterests"];
-  invitedMemberIds: string[];
+  details: (Pick<EventSummary, "activity" | "startsAt" | "durationMinutes" | "place" | "capacity" | "audience" | "description"> & {
+    recurrence: RecurrenceInput | null;
+    relevantInterests: EventDetail["relevantInterests"];
+    invitedMemberIds: string[];
+  }) | null;
 }
 
 export type ManagedEvent = Pick<EventSummary, "id" | "kind" | "activity" | "host" | "status" | "startsAt">;
@@ -31,9 +34,9 @@ export async function managedEvents(db: Queryable, actor: Actor): Promise<Manage
 }
 
 export async function proposeEvent(deps: Deps, actor: Actor, input: CreateEventInput): Promise<EventProposal> {
-  return withActiveMember(deps, actor, async (db) => {
+  return withActiveMember(deps, actor, async (db, current) => {
     const id = await createGathering(db, actor, input, "event", deps.clock.now(), true);
-    return (await readEventProposals(db, actor, false, id))[0]!;
+    return (await readEventProposals(db, actor, { siteId: current.siteId }, id))[0]!;
   });
 }
 
@@ -46,29 +49,32 @@ export async function createEvent(db: Queryable, actor: Actor, input: CreateEven
 }
 
 export async function ownEventProposals(deps: Deps, actor: Actor): Promise<EventProposal[]> {
-  await requireActiveMember(deps.db, actor);
-  return readEventProposals(deps.db, actor, false);
+  const current = await requireActiveMember(deps.db, actor);
+  return readEventProposals(deps.db, actor, { siteId: current.siteId });
 }
 
-export async function readEventProposals(db: Queryable, actor: Actor, admin: boolean, id?: string): Promise<EventProposal[]> {
-  const rows = await db.select({ proposal: eventProposals, event: gatherings, proposerName: members.name, activityName: activities.name, siteName: sites.name }).from(eventProposals)
+export async function readEventProposals(db: Queryable, actor: Actor, scope: { administration: true } | { siteId: string | null }, id?: string): Promise<EventProposal[]> {
+  const detailsVisible = "siteId" in scope ? or(ne(eventProposals.state, "approved"), visibleGatherings(actor, scope.siteId, "event")) : sql`true`;
+  const rows = await db.select({ proposal: eventProposals, event: gatherings, proposerName: members.name, activityName: activities.name, siteName: sites.name, detailsVisible: sql<boolean>`${detailsVisible}` }).from(eventProposals)
     .innerJoin(gatherings, and(eq(gatherings.organisationId, eventProposals.organisationId), eq(gatherings.id, eventProposals.eventId)))
     .innerJoin(members, and(eq(members.organisationId, eventProposals.organisationId), eq(members.id, eventProposals.proposerMemberId)))
     .innerJoin(activities, and(eq(activities.organisationId, gatherings.organisationId), eq(activities.id, gatherings.activityId)))
     .leftJoin(sites, and(eq(sites.organisationId, gatherings.organisationId), eq(sites.id, gatherings.placeSiteId)))
-    .where(and(eq(eventProposals.organisationId, actor.organisationId), admin ? undefined : eq(eventProposals.proposerMemberId, actor.memberId), id ? eq(eventProposals.eventId, id) : undefined))
+    .where(and(eq(eventProposals.organisationId, actor.organisationId), "administration" in scope ? undefined : eq(eventProposals.proposerMemberId, actor.memberId), id ? eq(eventProposals.eventId, id) : undefined))
     .orderBy(gatherings.createdAt, gatherings.id);
-  const interests = Map.groupBy(await relevantInterestsFor(db, actor.organisationId, rows.map(({ event }) => event.id)), (interest) => interest.meetupId);
-  return rows.map(({ proposal, event, proposerName, activityName, siteName }) => ({
+  const interests = Map.groupBy(await relevantInterestsFor(db, actor.organisationId, rows.filter((row) => row.detailsVisible).map(({ event }) => event.id)), (interest) => interest.meetupId);
+  return rows.map(({ proposal, event, proposerName, activityName, siteName, detailsVisible }) => ({
     id: event.id, state: proposal.state, note: proposal.note, proposer: { memberId: proposal.proposerMemberId, name: proposerName },
-    activity: { id: event.activityId, name: activityName }, startsAt: event.startsAt, durationMinutes: event.durationMinutes,
-    capacity: event.capacity, description: event.description,
-    place: event.placeKind === "physical" ? { kind: "physical" as const, siteId: event.placeSiteId!, spot: event.placeSpot!, siteName: siteName! } : { kind: "virtual" as const, url: event.placeUrl! },
-    audience: event.audienceKind === "invite-only" ? { kind: "invite-only" as const }
-      : event.audienceScope === "site" ? { kind: "open" as const, scope: "site" as const, siteId: event.audienceSiteId! }
-        : { kind: "open" as const, scope: "organisation" as const },
-    recurrence: proposal.recurrence, invitedMemberIds: proposal.invitedMemberIds,
-    relevantInterests: (interests.get(event.id) ?? []).map(({ meetupId: _, ...interest }) => interest),
+    details: detailsVisible ? {
+      activity: { id: event.activityId, name: activityName }, startsAt: event.startsAt, durationMinutes: event.durationMinutes,
+      capacity: event.capacity, description: event.description,
+      place: event.placeKind === "physical" ? { kind: "physical" as const, siteId: event.placeSiteId!, spot: event.placeSpot!, siteName: siteName! } : { kind: "virtual" as const, url: event.placeUrl! },
+      audience: event.audienceKind === "invite-only" ? { kind: "invite-only" as const }
+        : event.audienceScope === "site" ? { kind: "open" as const, scope: "site" as const, siteId: event.audienceSiteId! }
+          : { kind: "open" as const, scope: "organisation" as const },
+      recurrence: proposal.recurrence, invitedMemberIds: proposal.invitedMemberIds,
+      relevantInterests: (interests.get(event.id) ?? []).map(({ meetupId: _, ...interest }) => interest),
+    } : null,
   }));
 }
 
