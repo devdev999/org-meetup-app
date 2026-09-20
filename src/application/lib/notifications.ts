@@ -6,11 +6,11 @@ import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
 import { NOTICE_KINDS, type NoticeKind } from "./notice-kinds";
-import { gatherings, invites, members, noticeDeliveries, noticePreferences, notices, telegramLinks } from "./schema";
+import { gatheringRsvps, gatherings, invites, members, noticeDeliveries, noticePreferences, notices, recurrenceMembers, telegramLinks } from "./schema";
 
 export interface NoticePreference { kind: NoticeKind; telegram: boolean; email: boolean }
 
-const URGENT_KINDS: NoticeKind[] = ["meetup-joined", "meetup-promoted", "meetup-cancelled", "meetup-edited", "invite-received", "invite-accepted", "availability-overlap"];
+const URGENT_KINDS: NoticeKind[] = ["meetup-joined", "meetup-promoted", "meetup-cancelled", "meetup-edited", "invite-received", "invite-accepted", "availability-overlap", "rsvp-prompt"];
 
 const DIGEST_HOUR_UTC = 9;
 const BATCH = 100;
@@ -85,12 +85,12 @@ export async function recordNotices(db: Queryable, organisationId: string, recip
   if (deliveries.length) await db.insert(noticeDeliveries).values(deliveries);
 }
 
-export async function supersedeInviteDeliveries(db: Queryable, organisationId: string, gatheringId: string, memberId: string, now: Date): Promise<void> {
+export async function supersedeDeliveries(db: Queryable, organisationId: string, gatheringId: string, kind: "invite-received" | "rsvp-prompt", now: Date, memberId?: string): Promise<void> {
   await db.update(noticeDeliveries).set({ finishedAt: now }).where(and(
     eq(noticeDeliveries.organisationId, organisationId), isNull(noticeDeliveries.finishedAt),
     inArray(noticeDeliveries.noticeId, db.select({ id: notices.id }).from(notices).where(and(
-      eq(notices.organisationId, organisationId), eq(notices.gatheringId, gatheringId),
-      eq(notices.memberId, memberId), eq(notices.kind, "invite-received"),
+      eq(notices.organisationId, organisationId), eq(notices.gatheringId, gatheringId), eq(notices.kind, kind),
+      memberId ? eq(notices.memberId, memberId) : undefined,
     ))),
   ));
 }
@@ -170,15 +170,20 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
       .where(and(eq(invites.organisationId, row.notice.organisationId), eq(invites.gatheringId, row.meetup.id),
         eq(invites.memberId, row.member.id), eq(invites.state, "pending"))) : [];
     const canAnswer = row?.meetup?.status === "scheduled" && row.meetup.startsAt > now;
+    const [rsvp] = row?.meetup && row.notice.kind === "rsvp-prompt" ? await db.select({ memberId: gatheringRsvps.memberId }).from(gatheringRsvps)
+      .innerJoin(recurrenceMembers, and(eq(recurrenceMembers.organisationId, gatheringRsvps.organisationId), eq(recurrenceMembers.memberId, gatheringRsvps.memberId), eq(recurrenceMembers.recurrenceId, row.meetup.recurrenceId!)))
+      .where(and(eq(gatheringRsvps.organisationId, row.notice.organisationId), eq(gatheringRsvps.gatheringId, row.meetup.id), eq(gatheringRsvps.memberId, row.member.id), eq(gatheringRsvps.promptedAt, row.notice.createdAt))) : [];
     const owned = await claimLease(db, where, now);
     const send = async () => {
       if (!row || !VISIBLE_MEMBER_STATUSES.includes(row.member.status) || !channelEnabled(preference, delivery.channel)) return;
+      if (row.notice.kind === "rsvp-prompt" && (!canAnswer || !rsvp)) return;
       if (delivery.channel === "email") {
         await deps.email.sendMessage({ id: row.notice.id, to: row.member.email, subject: row.notice.kind === "availability-overlap" ? "Availability overlap" : "Meetup notice", text: row.notice.message });
       } else if (link) {
         await deps.telegram.sendMessage({
           chatId: link.chatId, text: row.notice.externalMessage,
-          ...(canAnswer && invite ? { inviteId: invite.id }
+          ...(canAnswer && row.notice.kind === "rsvp-prompt" ? { rsvpMeetupId: row.meetup!.id }
+            : canAnswer && invite ? { inviteId: invite.id }
             : canAnswer && row.meetup?.audienceKind === "open" && !row.notice.kind.startsWith("invite-") ? { joinMeetupId: row.meetup.id } : {}),
         });
       }

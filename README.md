@@ -46,6 +46,18 @@ The inbox receives channel-neutral notices for joins, departures, promotions, ti
 
 The application stores Meetups and future Events together with a kind. All commands and queries derive the Organisation from the Member actor. Mutations use the same Organisation transaction lock as roster and admin changes, so seating and notices commit together.
 
+### Recurring Meetups and RSVP
+
+Choose Weekly, Fortnightly or Monthly when creating a Meetup. The first start sets its weekday and UTC time. Monthly repeats on the same numbered weekday, and a fifth-weekday series skips months without one. The optional end date includes that whole UTC day.
+
+The worker creates ordinary occurrences fourteen days ahead. Each inherits the original series fields, relevant Interests and standing Participants. Editing, handing over or cancelling one occurrence affects that occurrence only. Its original scheduled slot stays recorded, so the worker does not create it again. The Recurring Meetups list keeps series controls available between monthly occurrences.
+
+Standing places include the series Host and are capped by its capacity. Joining the series takes a place in each generated future occurrence or joins its FIFO waitlist when full. Leaving removes future places, waitlist entries and answers, promotes the next waiting Member, and preserves past participation.
+
+Each standing Participant receives an RSVP prompt forty-eight hours before the occurrence, in the inbox and on enabled Telegram and email channels. A Member joining inside that window receives the prompt on the next worker run. Going and Not going buttons appear in the app and on Telegram. Not going frees this occurrence's place and keeps the standing place. Going again takes an available place or joins the ordinary waitlist without displacing anyone. The Host sees each answer and the waitlist separately. Joining a one-off counts as Going, including existing Meetups created before the RSVP migration.
+
+Only the series Host can stop the series. This cancels its future occurrences and sends ordinary cancellation notices, including to Members who answered Not going. Started occurrences keep their history. Each worker run shares the Organisation lock with Member actions; occurrence generation and prompts are deduplicated across retries.
+
 ## Suggestions
 
 The home page suggests up to twenty open, unjoined Meetups in your scope over the next fourteen days. It ranks overlap with the Host's declarations and saved relevant Interests before start time and shows the reasons. Broad Activity names and descriptions are not ranking inputs.
@@ -72,7 +84,7 @@ Open **Notification settings** from the profile or inbox. Members can enable Tel
 
 The app creates a single-use Telegram link valid for ten minutes. Open it and press Start in a private chat, then refresh the link status in the app. Creating another link invalidates the previous code. A Telegram account can belong to only one Member across the deployment. Unlinking removes the binding and pending link codes. Telegram buttons join a Meetup through the same Member command as the web app, including its access and capacity checks.
 
-Enabled Telegram notices arrive immediately. Email for new and accepted Invites, joins, waitlist promotions, cancellations and time, duration or Place changes also arrives immediately. Other email notices, including declined Invites, batch into the next daily digest at 09:00 UTC. Delivery preferences are checked again before a retry or digest. Provisioned Members can receive email before first login. Departed and Suspended Members receive no external notices.
+Enabled Telegram notices arrive immediately. Email for new and accepted Invites, joins, waitlist promotions, cancellations, RSVP prompts, Availability overlaps and time, duration or Place changes also arrives immediately. Other email notices, including declined Invites, batch into the next daily digest at 09:00 UTC. Delivery preferences are checked again before a retry or digest. Provisioned Members can receive email before first login. Departed and Suspended Members receive no external notices.
 
 Notices and pending deliveries are saved with the Meetup change. Sending runs after that transaction commits and outside any transaction, so a slow provider holds no database connection. While sending, the process renews its one-minute lease every twenty seconds. Only the owning claim can renew or settle a delivery. A member action sends only its own Meetup's notices; the worker delivers the rest and checks for retries and due digests every minute. A failed delivery retries each minute and is given up after 15 attempts, after which it stays queryable but is no longer retried, while the inbox keeps every notice. Completed deliveries are not replayed. A process failure after provider acceptance, or an interruption that prevents lease renewal for a full minute, can still cause a duplicate. Telegram has no server-side key to prevent it.
 
@@ -235,6 +247,8 @@ pnpm db:setup        # applies it locally
 Apply migrations before starting the web and worker code that needs them. Check each migration's compatibility before upgrading or reverting an image.
 
 Migrations `0011` and `0012` add Availability and allow notices without a Meetup. Earlier web and worker versions cannot read these notices safely. Stop every old web and worker instance before applying these migrations, then start both at the new version. Do not run mixed versions.
+
+Migrations `0013` and `0014` add recurring Meetups and RSVP. Upgrade the web and worker together with the same stop, migrate and restart sequence. Once series or RSVP prompts exist, rollback to earlier images is unsupported because they cannot manage recurrence or deliver the correct RSVP actions. Deploy a forward fix.
 
 For an existing local Compose stack, leave Postgres running and run these steps in order. Continue only when each command succeeds:
 

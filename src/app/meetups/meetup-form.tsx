@@ -21,6 +21,8 @@ export function MeetupForm({
 }) {
   const [placeKind, setPlaceKind] = useState(meetup?.place.kind ?? availability?.place.kind ?? "physical");
   const [audience, setAudience] = useState("default");
+  const [frequency, setFrequency] = useState("once");
+  const [endsOn, setEndsOn] = useState("");
   const [activityId, setActivityId] = useState(meetup?.activity.id ?? availability?.activity.id ?? "");
   const [description, setDescription] = useState(meetup?.description ?? "");
   const [siteId, setSiteId] = useState(meetup?.place.kind === "physical" ? meetup.place.siteId : availability?.place.kind === "physical" ? availability.place.siteId : choices.defaultSiteId ?? "");
@@ -65,6 +67,25 @@ export function MeetupForm({
         <input type="datetime-local" name="startsAt" required step={availability ? 1 : 60} value={startsAt} onChange={(change) => setStartsAt(change.target.value)} />
       </label>
       <p className="muted">All Meetup times use UTC.</p>
+      {!meetup && <>
+        <label>
+          Repeats
+          <select name="frequency" value={frequency} onChange={(change) => setFrequency(change.target.value)}>
+            <option value="once">Once</option>
+            <option value="weekly">Weekly</option>
+            <option value="fortnightly">Fortnightly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </label>
+        {frequency !== "once" && <>
+          <p className="muted">The first start sets the weekday and time. Monthly uses the same numbered weekday and skips months without a matching fifth weekday.</p>
+          <label>
+            Series end date in UTC, optional
+            <input type="date" name="endsOn" value={endsOn} onChange={(change) => setEndsOn(change.target.value)} />
+          </label>
+        </>}
+      </>}
+      {meetup?.recurrence && <p className="notice">These changes apply to this occurrence.</p>}
       <label>
         Duration in minutes
         <input type="number" name="durationMinutes" min="1" max="1440" step="1" required defaultValue={meetup?.durationMinutes ?? 60} />

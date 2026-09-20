@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
-import { boolean, foreignKey, index, integer, jsonb, pgEnum, pgTable, primaryKey, serial, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, date, foreignKey, index, integer, jsonb, pgEnum, pgTable, primaryKey, serial, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type { NoticeKind } from "./notice-kinds";
+import type { RecurrenceRule } from "./recurrence-rule";
 
 /**
  * Every table except platform configuration carries `organisationId`
@@ -265,7 +266,7 @@ export const availabilityNoticePairs = pgTable("availability_notice_pairs", {
 export const gatheringKind = pgEnum("gathering_kind", ["meetup", "event"]);
 export const gatheringStatus = pgEnum("gathering_status", ["scheduled", "cancelled", "completed", "proposed", "rejected"]);
 
-export const gatherings = pgTable("gatherings", {
+const gatheringFields = () => ({
   id: uuid().primaryKey().defaultRandom(),
   organisationId: uuid().notNull().references(() => organisations.id),
   kind: gatheringKind().notNull(),
@@ -282,10 +283,53 @@ export const gatherings = pgTable("gatherings", {
   audienceScope: text().$type<"site" | "organisation">(),
   audienceSiteId: uuid(),
   description: text().notNull().default(""),
-  status: gatheringStatus().notNull(),
   createdAt: timestamptz().notNull(),
+});
+
+export const recurrences = pgTable("recurrences", {
+  ...gatheringFields(),
+  frequency: text().$type<RecurrenceRule["frequency"]>().notNull(),
+  endsOn: date(),
+  stoppedAt: timestamptz(),
+}, (table) => [
+  unique("recurrences_organisation_id_id_unique").on(table.organisationId, table.id),
+  index("recurrences_active_idx").on(table.organisationId, table.startsAt).where(sql`${table.stoppedAt} is null`),
+  foreignKey({ columns: [table.organisationId, table.hostMemberId], foreignColumns: [members.organisationId, members.id] }),
+  foreignKey({ columns: [table.organisationId, table.activityId], foreignColumns: [activities.organisationId, activities.id] }),
+  foreignKey({ columns: [table.organisationId, table.placeSiteId], foreignColumns: [sites.organisationId, sites.id] }),
+  foreignKey({ columns: [table.organisationId, table.audienceSiteId], foreignColumns: [sites.organisationId, sites.id] }),
+]);
+
+export const recurrenceMembers = pgTable("recurrence_members", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  recurrenceId: uuid().notNull(),
+  memberId: uuid().notNull(),
+  position: serial().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.recurrenceId, table.memberId] }),
+  foreignKey({ columns: [table.organisationId, table.recurrenceId], foreignColumns: [recurrences.organisationId, recurrences.id] }),
+  foreignKey({ columns: [table.organisationId, table.memberId], foreignColumns: [members.organisationId, members.id] }),
+]);
+
+export const recurrenceInterests = pgTable("recurrence_interests", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  recurrenceId: uuid().notNull(),
+  interestId: uuid().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.recurrenceId, table.interestId] }),
+  foreignKey({ columns: [table.organisationId, table.recurrenceId], foreignColumns: [recurrences.organisationId, recurrences.id] }),
+  foreignKey({ columns: [table.organisationId, table.interestId], foreignColumns: [interests.organisationId, interests.id] }),
+]);
+
+export const gatherings = pgTable("gatherings", {
+  ...gatheringFields(),
+  status: gatheringStatus().notNull(),
+  recurrenceId: uuid(),
+  scheduledStartsAt: timestamptz(),
 }, (table) => [
   unique("gatherings_organisation_id_id_unique").on(table.organisationId, table.id),
+  unique("gatherings_recurrence_occurrence_unique").on(table.organisationId, table.recurrenceId, table.scheduledStartsAt),
+  foreignKey({ columns: [table.organisationId, table.recurrenceId], foreignColumns: [recurrences.organisationId, recurrences.id] }),
   foreignKey({ columns: [table.organisationId, table.hostMemberId], foreignColumns: [members.organisationId, members.id] }),
   foreignKey({ columns: [table.organisationId, table.activityId], foreignColumns: [activities.organisationId, activities.id] }),
   foreignKey({ columns: [table.organisationId, table.placeSiteId], foreignColumns: [sites.organisationId, sites.id] }),
@@ -308,6 +352,18 @@ export const gatheringMembers = pgTable("gathering_members", {
   memberId: uuid().notNull(),
   status: text().$type<"participant" | "waitlisted">().notNull(),
   position: serial().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.gatheringId, table.memberId] }),
+  foreignKey({ columns: [table.organisationId, table.gatheringId], foreignColumns: [gatherings.organisationId, gatherings.id] }),
+  foreignKey({ columns: [table.organisationId, table.memberId], foreignColumns: [members.organisationId, members.id] }),
+]);
+
+export const gatheringRsvps = pgTable("gathering_rsvps", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  gatheringId: uuid().notNull(),
+  memberId: uuid().notNull(),
+  answer: text().$type<"going" | "not-going">(),
+  promptedAt: timestamptz(),
 }, (table) => [
   primaryKey({ columns: [table.organisationId, table.gatheringId, table.memberId] }),
   foreignKey({ columns: [table.organisationId, table.gatheringId], foreignColumns: [gatherings.organisationId, gatherings.id] }),
