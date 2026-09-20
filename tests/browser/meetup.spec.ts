@@ -86,11 +86,27 @@ test("Availability only creates a Meetup and Invite after the prefilled form is 
   try {
     const di = await second.newPage();
     await signIn(di, "Di Member", "di@ministry-a.example", "Legal");
+    const midnight = new Date();
+    midnight.setUTCHours(24, 0, 0, 0);
+    const untilMidnight = midnight.getTime() - Date.now();
+    if (untilMidnight < 60_000) {
+      test.setTimeout(120_000);
+      await new Promise((resolve) => setTimeout(resolve, untilMidnight + 100));
+      midnight.setUTCHours(24, 0, 0, 0);
+    }
     const overlapStart = `${new Date().toISOString().slice(0, 10)}T00:00`;
     for (const actor of [page, di]) {
       await actor.goto("/availability");
       await actor.getByRole("combobox", { name: "Activity", exact: true }).selectOption({ label: "walk" });
       await actor.getByLabel("Available from, UTC").fill(overlapStart);
+      await actor.getByRole("combobox", { name: "Place setting", exact: true }).selectOption("virtual");
+      await actor.getByLabel("Available until, UTC").fill(overlapStart);
+      await actor.getByRole("button", { name: "Post Availability", exact: true }).click();
+      await expect(actor.getByText("Choose a window today in UTC that has not ended.", { exact: true })).toBeVisible();
+      await expect(actor.getByRole("combobox", { name: "Activity", exact: true }).locator("option:checked")).toHaveText("walk");
+      await expect(actor.getByRole("combobox", { name: "Place setting", exact: true })).toHaveValue("virtual");
+      await actor.getByRole("combobox", { name: "Place setting", exact: true }).selectOption("physical");
+      await actor.getByLabel("Available until, UTC").fill(midnight.toISOString().slice(0, 16));
       await actor.getByRole("button", { name: "Post Availability", exact: true }).click();
       await expect(actor.getByText("Availability posted for walk,", { exact: false })).toBeVisible();
     }

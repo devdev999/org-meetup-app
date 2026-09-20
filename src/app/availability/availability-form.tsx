@@ -17,7 +17,7 @@ export function AvailabilityForm({ choices }: { choices: MeetupChoices }) {
   }, []);
   const site = choices.sites.find((entry) => entry.id === choices.defaultSiteId);
   return (
-    <form action={action}>
+    <form action={action} onReset={(event) => event.preventDefault()}>
       <label>Activity
         <select name="activityId" required defaultValue="">
           <option value="" disabled>Choose an Activity</option>

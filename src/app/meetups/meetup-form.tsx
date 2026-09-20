@@ -24,11 +24,6 @@ export function MeetupForm({
   const [activityId, setActivityId] = useState(meetup?.activity.id ?? availability?.activity.id ?? "");
   const [description, setDescription] = useState(meetup?.description ?? "");
   const [siteId, setSiteId] = useState(meetup?.place.kind === "physical" ? meetup.place.siteId : availability?.place.kind === "physical" ? availability.place.siteId : choices.defaultSiteId ?? "");
-  const [spot, setSpot] = useState(meetup?.place.kind === "physical" ? meetup.place.spot : "");
-  const [url, setUrl] = useState(meetup?.place.kind === "virtual" ? meetup.place.url : "");
-  const [durationMinutes, setDurationMinutes] = useState(String(meetup?.durationMinutes ?? 60));
-  const [capacity, setCapacity] = useState(String(meetup?.capacity ?? 6));
-  const [audienceSiteId, setAudienceSiteId] = useState(choices.defaultSiteId ?? "");
   const [relevantInterests, setRelevantInterests] = useState<InterestChoice[]>([]);
   const [startsAt, setStartsAt] = useState(meetup ? new Date(meetup.startsAt).toISOString().slice(0, 16) : availability ? new Date(availability.startsAt).toISOString().slice(0, 19) : "");
   useEffect(() => {
@@ -49,7 +44,7 @@ export function MeetupForm({
     : null;
 
   return (
-    <form action={action}>
+    <form action={action} onReset={(event) => event.preventDefault()}>
       {availability && <>
         <input type="hidden" name="ownAvailabilityId" value={availability.ownAvailabilityId} />
         <input type="hidden" name="otherAvailabilityId" value={availability.otherAvailabilityId} />
@@ -72,7 +67,7 @@ export function MeetupForm({
       <p className="muted">All Meetup times use UTC.</p>
       <label>
         Duration in minutes
-        <input type="number" name="durationMinutes" min="1" max="1440" step="1" required value={durationMinutes} onChange={(change) => setDurationMinutes(change.target.value)} />
+        <input type="number" name="durationMinutes" min="1" max="1440" step="1" required defaultValue={meetup?.durationMinutes ?? 60} />
       </label>
       <label>
         Place
@@ -93,18 +88,18 @@ export function MeetupForm({
           </label>
           <label>
             Spot at the Site
-            <input name="spot" required maxLength={300} placeholder="For example, the ground floor cafe" value={spot} onChange={(change) => setSpot(change.target.value)} />
+            <input name="spot" required maxLength={300} placeholder="For example, the ground floor cafe" defaultValue={meetup?.place.kind === "physical" ? meetup.place.spot : ""} />
           </label>
         </>
       ) : (
         <label>
           Virtual Place URL
-          <input type="url" name="url" required maxLength={2000} placeholder="https://" value={url} onChange={(change) => setUrl(change.target.value)} />
+          <input type="url" name="url" required maxLength={2000} placeholder="https://" defaultValue={meetup?.place.kind === "virtual" ? meetup.place.url : ""} />
         </label>
       )}
       <label>
         Capacity, including the Host
-        <input type="number" name="capacity" min="2" max="30" step="1" required value={capacity} onChange={(change) => setCapacity(change.target.value)} />
+        <input type="number" name="capacity" min="2" max="30" step="1" required defaultValue={meetup?.capacity ?? 6} />
       </label>
       {!meetup && (
         <>
@@ -123,7 +118,7 @@ export function MeetupForm({
           {audience === "site" && (
             <label>
               Audience Site
-              <select name="audienceSiteId" required value={audienceSiteId} onChange={(change) => setAudienceSiteId(change.target.value)}>
+              <select name="audienceSiteId" required defaultValue={choices.defaultSiteId ?? ""}>
                 <option value="" disabled>Choose a Site</option>
                 {choices.sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
               </select>
