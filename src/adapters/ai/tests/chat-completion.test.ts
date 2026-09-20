@@ -113,3 +113,15 @@ test("extraction times out an unresponsive provider", async () => {
   const ai = new ChatCompletionAi({ baseUrl, apiKey: "provider-key", model: "interest-model", timeoutMs: 50 });
   await expect(ai.extractInterests({ activity: "coffee", description: "SQL" })).rejects.toMatchObject({ name: "TimeoutError" });
 }, 1_000);
+
+test.each(["canonicalisation", "extraction"])("cancelling %s aborts the provider request", async (operation) => {
+  reply = null;
+  const ai = new ChatCompletionAi({ baseUrl, apiKey: "provider-key", model: "interest-model", timeoutMs: 500 });
+  const controller = new AbortController();
+  const pending = operation === "canonicalisation" ? ai.resolveInterest(input, controller.signal)
+    : ai.extractInterests({ activity: "coffee", description: "Python" }, controller.signal);
+  const result = pending.catch((error: unknown) => error);
+  await expect.poll(() => requests.length).toBe(1);
+  controller.abort();
+  expect(await result).toMatchObject({ name: "AbortError" });
+});

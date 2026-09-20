@@ -54,8 +54,8 @@ export function MeetupInterests({ catalog, activityId, description, initialInter
       <p>These describe this Meetup and leave your own Shares and Seeks unchanged.</p>
       <label>
         Add a relevant Interest
-        <select value="" onChange={(event) => {
-          const interest = catalog.find((entry) => entry.interestId === event.target.value);
+        <select value="" onChange={(change) => {
+          const interest = catalog.find((entry) => entry.interestId === change.target.value);
           if (interest) setManual((current) => [...current, { phrase: interest.name, selection: { interestId: interest.interestId } }]);
         }} disabled={selected.length >= 20}>
           <option value="">Choose an Interest</option>

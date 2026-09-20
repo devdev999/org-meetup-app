@@ -46,7 +46,7 @@ export function MeetupForm({
       {!meetup && (
         <label>
           Activity
-          <select name="activityId" required value={activityId} onChange={(event) => setActivityId(event.target.value)}>
+          <select name="activityId" required value={activityId} onChange={(change) => setActivityId(change.target.value)}>
             <option value="" disabled>Choose an Activity</option>
             {choices.activities.map((activity) => <option key={activity.id} value={activity.id}>{activity.name}</option>)}
           </select>
@@ -72,7 +72,7 @@ export function MeetupForm({
         <>
           <label>
             Site
-            <select name="siteId" required value={siteId} onChange={(event) => setSiteId(event.target.value)}>
+            <select name="siteId" required value={siteId} onChange={(change) => setSiteId(change.target.value)}>
               <option value="" disabled>Choose a Site</option>
               {missingSite && <option value={missingSite.siteId}>{missingSite.siteName ?? "Current Site"}, retired</option>}
               {choices.sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
@@ -121,7 +121,7 @@ export function MeetupForm({
       )}
       <label>
         Description, optional
-        <textarea name="description" rows={4} maxLength={5000} value={description} onChange={(event) => setDescription(event.target.value)} />
+        <textarea name="description" rows={4} maxLength={5000} value={description} onChange={(change) => setDescription(change.target.value)} />
       </label>
       <MeetupInterests catalog={interests} activityId={activityId} description={description} initialInterests={meetup?.relevantInterests} onChange={setRelevantInterests} />
       {!meetup && suggestionSeed && <DraftInviteSuggestions key={`${placeKind}:${siteId}`} seed={suggestionSeed} placeKind={placeKind} siteId={siteId} interests={relevantInterests} />}

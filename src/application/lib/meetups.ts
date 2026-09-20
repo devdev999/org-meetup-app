@@ -348,19 +348,24 @@ function requireHost(meetup: MeetupSummary, actor: Actor) {
   if (meetup.host.memberId !== actor.memberId) throw new AccessDeniedError();
 }
 
-export async function inviteMember(deps: Deps, actor: Actor, id: string, memberId: string, previousInviteId?: string): Promise<Invite> {
+interface InviteOptions { previousInviteId?: string; fromSuggestion?: boolean }
+
+export async function inviteMember(deps: Deps, actor: Actor, id: string, memberId: string, options: InviteOptions = {}): Promise<Invite> {
   return withActiveMember(deps, actor, async (db, current) => {
     const now = deps.clock.now();
     const meetup = await requireScheduledMeetup(db, actor, id, current.siteId, now);
     requireHost(meetup, actor);
-    return saveInvite(db, actor, meetup, memberId, current.name, now, previousInviteId);
+    return saveInvite(db, actor, meetup, memberId, current.name, now, options);
   });
 }
 
-async function saveInvite(db: Queryable, actor: Actor, meetup: MeetupSummary & Pick<MeetupDetail, "participants">, memberId: string, hostName: string, now: Date, previousInviteId?: string): Promise<Invite> {
+async function saveInvite(db: Queryable, actor: Actor, meetup: MeetupSummary & Pick<MeetupDetail, "participants">, memberId: string, hostName: string, now: Date, { previousInviteId, fromSuggestion = false }: InviteOptions = {}): Promise<Invite> {
   if (!isUuid(memberId) || (previousInviteId !== undefined && !isUuid(previousInviteId))) throw new AccessDeniedError();
   const [member] = await db.select({ memberId: members.id, name: members.name }).from(members)
-    .where(and(eq(members.organisationId, actor.organisationId), eq(members.id, memberId), inArray(members.status, VISIBLE_MEMBER_STATUSES)));
+    .where(and(eq(members.organisationId, actor.organisationId), eq(members.id, memberId),
+      fromSuggestion ? eq(members.status, "active") : inArray(members.status, VISIBLE_MEMBER_STATUSES),
+      fromSuggestion && meetup.place.kind === "physical" ? eq(members.siteId, meetup.place.siteId) : undefined));
+  if (!member && fromSuggestion) invalid("This Suggestion is no longer available. Refresh the page.");
   if (!member) throw new AccessDeniedError();
   const [existing] = await db.select({ id: invites.id, state: invites.state }).from(invites)
     .where(and(eq(invites.organisationId, actor.organisationId), eq(invites.gatheringId, meetup.id), eq(invites.memberId, memberId)));

@@ -5,9 +5,9 @@ import type { Deps } from "./deps";
 import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
 import { interestChoiceSchema, listInterests, memberInterestList, memberInterestsFor, type Interest, type InterestChoice } from "./interests";
-import { relevantInterests } from "./meetup-interests";
+import { relevantInterests, relevantInterestsFor } from "./meetup-interests";
 import { readMeetups, validSite, visibleMeetups, type InviteChoices, type MeetupSummary } from "./meetups";
-import { departments, gatheringInterests, gatheringMembers, gatherings, interests, invites, members, sites } from "./schema";
+import { departments, gatheringMembers, gatherings, invites, members, sites } from "./schema";
 import { rankInvitees, rankMeetups } from "./suggestion-ranking";
 
 export interface InviteSuggestion {
@@ -60,9 +60,7 @@ export async function meetupSuggestions(deps: Deps, actor: Actor): Promise<Meetu
   if (!meetups.length) return [];
   const [declarations, savedInterests, hostInterests] = await Promise.all([
     memberInterestList(deps, actor),
-    deps.db.select({ meetupId: gatheringInterests.gatheringId, interestId: interests.id, name: interests.name, kind: interests.kind })
-      .from(gatheringInterests).innerJoin(interests, and(eq(interests.organisationId, gatheringInterests.organisationId), eq(interests.id, gatheringInterests.interestId)))
-      .where(and(eq(gatheringInterests.organisationId, actor.organisationId), inArray(gatheringInterests.gatheringId, meetups.map((meetup) => meetup.id)))),
+    relevantInterestsFor(deps.db, actor.organisationId, meetups.map((meetup) => meetup.id)),
     memberInterestsFor(deps.db, actor.organisationId, [...new Set(meetups.map((meetup) => meetup.hostMemberId))]),
   ]);
   const interestsByMeetup = Map.groupBy(savedInterests, (interest) => interest.meetupId);

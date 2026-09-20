@@ -33,11 +33,10 @@ test("Members sign in, declare Interests, create a Meetup and join from Suggesti
   await page.getByLabel("Description, optional").fill("Practice Python over coffee.");
   await expect(page.getByRole("button", { name: "Remove New Skill: Python", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Remove SQL", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Remove New Skill: Python", exact: true }).click();
   await page.getByRole("button", { name: "Create Meetup", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Manage Meetup" })).toBeVisible();
   const meetupUrl = page.url();
-  await expect(page.getByRole("heading", { name: "Relevant Interests" }).locator("..").getByRole("listitem")).toHaveText(["SQL"]);
+  await expect(page.getByRole("heading", { name: "Relevant Interests" }).locator("..").getByRole("listitem")).toHaveText(["Python", "SQL"]);
 
   const second = await browser.newContext({ baseURL });
   try {
@@ -54,10 +53,29 @@ test("Members sign in, declare Interests, create a Meetup and join from Suggesti
     await expect(page.getByRole("heading", { name: "Participants", exact: true }).locator("..").getByRole("listitem")).toHaveText(["Ana Host, Host", "Bo Member"]);
     await bo.goto("/");
     await expect(bo.getByText("No Meetups to suggest yet.", { exact: true })).toBeVisible();
+    await bo.goto(meetupUrl);
+    await bo.getByRole("button", { name: "Leave Meetup", exact: true }).click();
+    await expect(bo.getByRole("button", { name: "Join Meetup", exact: true })).toBeVisible();
+    await page.goto(`${meetupUrl}/edit`);
+    await page.getByRole("button", { name: "Remove Python", exact: true }).click();
+    await page.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Relevant Interests" }).locator("..").getByRole("listitem")).toHaveText(["SQL"]);
+    await page.goto(`${meetupUrl}/edit`);
+    await page.getByRole("button", { name: "Invite Bo Member", exact: true }).click();
+    await expect(page.getByText("Invite sent.", { exact: true })).toBeVisible();
+    await bo.reload();
+    await expect(bo.getByText("Your Invite is pending.", { exact: true })).toBeVisible();
+    await bo.getByRole("button", { name: "Decline Invite", exact: true }).click();
+    await expect(bo.getByText("Your Invite is declined.", { exact: true })).toBeVisible();
+    await page.reload();
+    await page.getByRole("button", { name: "Invite Bo Member", exact: true }).click();
+    await expect(page.getByText("Invite sent.", { exact: true })).toBeVisible();
+    await bo.reload();
+    await expect(bo.getByText("Your Invite is pending.", { exact: true })).toBeVisible();
   } finally {
     await second.close();
   }
   await page.goto("/interests");
   await expect(page.getByRole("combobox", { name: "Stance for SQL" })).toHaveValue("seeks");
-  await expect(page.getByText("Python", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Stance for Python" })).toHaveCount(0);
 });

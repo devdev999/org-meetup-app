@@ -17,7 +17,7 @@ export function InviteSuggestions({ meetupId, suggestions }: { meetupId: string;
   const [state, action, pending] = useActionState<MeetupActionState, FormData>(async (_previous, form) => {
     const suggestion = suggestions.find((entry) => entry.member.memberId === form.get("memberId"));
     if (suggestion?.previousInviteId) form.set("previousInviteId", suggestion.previousInviteId);
-    return sendInvite(meetupId, form);
+    return sendInvite(meetupId, form, "suggestion");
   }, {});
   return (
     <section>

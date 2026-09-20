@@ -98,10 +98,10 @@ export async function resolveInterest(deps: Deps, actor: Actor, input: { phrase:
   return (await resolveInterests(deps, actor, [input]))[0]!;
 }
 
-export async function resolveInterests(deps: Deps, actor: Actor, inputs: { phrase: string; kind: InterestKind }[]): Promise<InterestResolution[]> {
+export async function resolveInterests(deps: Deps, actor: Actor, inputs: { phrase: string; kind: InterestKind }[], signal?: AbortSignal): Promise<InterestResolution[]> {
   const phrases = inputs.map((input) => parse(z.object({ phrase: phraseSchema, kind: kindSchema }), input,
     "Enter an Interest of up to 120 characters and choose Skill or Hobby."));
-  if (!phrases.length) return [];
+  if (!phrases.length || signal?.aborted) return [];
   const [catalog, aliases, counts] = await Promise.all([
     listInterests(deps, actor),
     deps.db.select({
@@ -113,6 +113,7 @@ export async function resolveInterests(deps: Deps, actor: Actor, inputs: { phras
       .where(and(eq(memberInterests.organisationId, actor.organisationId), inArray(members.status, VISIBLE_MEMBER_STATUSES)))
       .groupBy(memberInterests.interestId),
   ]);
+  if (signal?.aborted) return [];
   return Promise.all(phrases.map(async ({ phrase, kind }, index) => {
     const knownAlias = aliases.find((alias) => alias.matches[index]);
     const ranked = catalog.map((interest) => ({
@@ -122,10 +123,10 @@ export async function resolveInterests(deps: Deps, actor: Actor, inputs: { phras
     const shortlist = ranked.slice(0, SHORTLIST_SIZE).map(({ interest }) => interest);
     const closest = ranked[0];
     let proposed: InterestSelection = closest && closest.score >= FALLBACK_PROPOSAL_SCORE ? { interestId: closest.interest.interestId } : { name: phrase.trim(), kind };
-    const result = await deps.ai.resolveInterest({
+    const result = knownAlias ? undefined : await deps.ai.resolveInterest({
       phrase,
       shortlist: shortlist.map(({ interestId, name, kind }) => ({ name, kind, count: counts.find((entry) => entry.interestId === interestId)?.count ?? 0 })),
-    }).catch(() => undefined);
+    }, signal).catch(() => undefined);
     if (result && "existingName" in result) {
       const existing = shortlist.find((interest) => interest.name.toLowerCase() === result.existingName.toLowerCase());
       if (existing) proposed = { interestId: existing.interestId };

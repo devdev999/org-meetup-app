@@ -113,10 +113,11 @@ export async function changeMeetup(
   return { message };
 }
 
-export async function sendInvite(meetupId: string, form: FormData): Promise<MeetupActionState> {
+export async function sendInvite(meetupId: string, form: FormData, source: "manual" | "suggestion" = "manual"): Promise<MeetupActionState> {
   const { member } = await requireMemberPastWelcome();
   try {
-    const invite = await member.inviteMember(meetupId, formText(form.get("memberId")) ?? "", formText(form.get("previousInviteId")) || undefined);
+    const inviteMember = source === "suggestion" ? member.inviteSuggestedMember : member.inviteMember;
+    const invite = await inviteMember(meetupId, formText(form.get("memberId")) ?? "", formText(form.get("previousInviteId")) || undefined);
     refreshMeetups(meetupId);
     return { message: invite.state === "pending" ? "Invite sent." : `This Invite is already ${invite.state}.` };
   } catch (error) {

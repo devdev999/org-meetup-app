@@ -52,7 +52,7 @@ The home page suggests up to twenty open, unjoined Meetups in your scope over th
 
 Hosts can select up to twenty relevant Interests while creating or editing a Meetup. Creation also extracts proposals from the selected Activity and description. Review or remove these before Create, including any proposed new Interests. Manual choices survive extraction reruns, and a failed or empty extraction leaves creation available. Saving relevant Interests never changes personal Shares or Seeks.
 
-Creation and editing show up to twenty suggested invitees. Candidates must be Active in the Host's Organisation and, for physical Meetups, based at the Place's Site. Hosts, current Participants and pending invitees are excluded. Creation lets the Host select Invites to send with the normal Create confirmation. Editing offers immediate one-tap Invites based on the saved Interests and Place.
+Creation and editing show up to twenty suggested invitees. Candidates must be Active in the Host's Organisation and, for physical Meetups, based at the Place's Site. Hosts, current Participants and pending invitees are excluded. Creation lets the Host select Invites to send with the normal Create confirmation. Editing offers immediate one-tap Invites based on the saved Interests and Place. Confirmation rechecks the candidate's eligibility if their profile or the Place has changed.
 
 The pure ranker gives compatible Member Interest overlap two points and Seeks with Seeks one point. Each overlap with a saved relevant Interest adds two points regardless of Stance. Invitee ties prefer a Member without a recorded Connection, then a different known Department, then an order seeded for that Meetup. Home uses the same Interest weights, then fewer Connections with Participants, then the soonest start. Connection counts are zero until issue #12 supplies Attendance data. Queries compute Suggestions each time; only the confirmed relevant Interests and Invites are saved.
 
@@ -175,7 +175,7 @@ Application tests cross the interface as a specific actor and assert on what tha
 
 Wiring smoke tests cover the production OIDC adapter against a stub issuer, a Telegram webhook through the application and reply, and heartbeat and digest jobs through the real queue. Telegram and SMTP adapter tests use local protocol servers and send no real messages.
 
-The browser smoke test signs in two Members, declares their Interests, creates a Meetup and joins it from Suggestions. It also checks that manual relevant Interests survive automatic extraction and personal Stances stay unchanged. The test starts the production web build on port 3011 with a disposable database, fake identity and memory delivery adapters. Install Chromium once, then build and run it:
+The browser smoke test signs in two Members, declares their Interests, creates a Meetup and joins it from Suggestions. It checks manual Interest preservation, a saved automatic proposal, independent editing, and sending and renewing an Invite from Suggestions. Personal Stances stay unchanged. The test starts the production web build on port 3011 with a disposable database, fake identity and memory delivery adapters. Install Chromium once, then build and run it:
 
 ```sh
 pnpm exec playwright install chromium

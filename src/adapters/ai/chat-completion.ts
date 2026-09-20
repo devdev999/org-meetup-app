@@ -46,24 +46,25 @@ const instructions = [
 export class ChatCompletionAi implements AiPort {
   constructor(private readonly config: ChatCompletionConfig) {}
 
-  async resolveInterest(input: AiInterestRequest): Promise<AiInterestResolution> {
+  async resolveInterest(input: AiInterestRequest, signal?: AbortSignal): Promise<AiInterestResolution> {
     return resolutionSchema.parse(await this.complete(this.config.model, instructions, {
       phrase: input.phrase,
       shortlist: input.shortlist.map(({ name, kind, count }) => ({ name, kind, count })),
-    }));
+    }, signal));
   }
 
-  async extractInterests(input: AiExtractionRequest): Promise<AiExtractedInterest[]> {
+  async extractInterests(input: AiExtractionRequest, signal?: AbortSignal): Promise<AiExtractedInterest[]> {
     const result = await this.complete(this.config.extractionModel ?? this.config.model, extractionInstructions, {
       activity: input.activity, description: input.description,
-    });
+    }, signal);
     return extractionSchema.parse(result).interests;
   }
 
-  private async complete(model: string, instructions: string, input: unknown): Promise<unknown> {
+  private async complete(model: string, instructions: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
+    const timeout = AbortSignal.timeout(this.config.timeoutMs ?? 5_000);
     const response = await fetch(`${this.config.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
-      signal: AbortSignal.timeout(this.config.timeoutMs ?? 5_000),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${this.config.apiKey}`,
@@ -81,7 +82,10 @@ export class ChatCompletionAi implements AiPort {
         stream: false,
       }),
     });
-    if (!response.ok) throw new Error(`AI endpoint returned HTTP ${response.status}`);
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new Error(`AI endpoint returned HTTP ${response.status}`);
+    }
     const completion = completionSchema.parse(await response.json());
     return JSON.parse(completion.choices[0]!.message.content);
   }

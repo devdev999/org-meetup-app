@@ -61,7 +61,7 @@ export function rankInvitees(input: {
       }
       if (input.relevantInterests.some((entry) => entry.interestId === interest.interestId)) {
         score += 2;
-        reasons.push(`Interested in ${interest.name}, a relevant Interest for this Meetup.`);
+        reasons.push(`They ${interest.stance === "shares" ? "Share" : "Seek"} ${interest.name}, a relevant Interest for this Meetup.`);
       }
     }
     const newFace = candidate.connectionCount === 0;
