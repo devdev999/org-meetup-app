@@ -59,7 +59,7 @@ export type { MemberProfile, MemberSearch } from "./lib/member-actor";
 export type { Interest, MemberInterest, InterestResolution, InterestSelection, InterestChoice, ConfirmInterestInput, Stance } from "./lib/interests";
 export type { InviteSuggestion, MeetupSuggestion, PreviewInviteSuggestionsInput } from "./lib/suggestions";
 export type { ExtractMeetupInterestsInput } from "./lib/meetup-interests";
-export type { Availability, AvailabilityBoard, AvailabilityMeetup, AvailabilityOverlap, AvailabilitySuggestion, PostAvailabilityInput } from "./lib/availability";
+export type { Availability, AvailabilityBoard, AvailabilityOverlap, AvailabilitySuggestion, PostAvailabilityInput } from "./lib/availability";
 
 /**
  * Recognises a `SignInError` by shape rather than class identity: the web

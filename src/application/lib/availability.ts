@@ -35,7 +35,6 @@ export interface AvailabilityBoard {
 
 export const availabilityOverlapSchema = z.object({ ownAvailabilityId: z.uuid(), otherAvailabilityId: z.uuid() });
 export type AvailabilityOverlap = z.infer<typeof availabilityOverlapSchema>;
-export interface AvailabilityMeetup extends AvailabilitySuggestion { meetupStartsAt: Date }
 
 function invalid(message: string): never {
   throw new InvalidInputError("invalid-availability", message);
@@ -140,14 +139,9 @@ export async function findAvailabilityOverlap(db: Queryable, actor: Actor, input
   return own && other ? overlap(own, other) : undefined;
 }
 
-export async function availabilityMeetup(deps: Deps, actor: Actor, input: AvailabilityOverlap): Promise<AvailabilityMeetup | undefined> {
+export async function availabilityMeetup(deps: Deps, actor: Actor, input: AvailabilityOverlap): Promise<AvailabilitySuggestion | undefined> {
   await requireActiveMember(deps.db, actor);
-  const now = deps.clock.now();
-  const suggestion = await findAvailabilityOverlap(deps.db, actor, input, now);
-  if (!suggestion) return;
-  const meetupStartsAt = new Date(Math.max(suggestion.startsAt.getTime(), Math.ceil((now.getTime() + 1) / 60_000) * 60_000));
-  if (meetupStartsAt >= suggestion.endsAt) return;
-  return { ...suggestion, meetupStartsAt };
+  return findAvailabilityOverlap(deps.db, actor, input, deps.clock.now());
 }
 
 async function recordOverlaps(db: Queryable, organisationId: string, now: Date): Promise<void> {

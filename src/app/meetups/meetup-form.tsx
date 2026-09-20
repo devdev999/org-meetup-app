@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import type { AvailabilityMeetup, Interest, InterestChoice, MemberActions, MeetupDetail } from "../../application/index";
+import type { AvailabilitySuggestion, Interest, InterestChoice, MemberActions, MeetupDetail } from "../../application/index";
 import { saveMeetup, type MeetupActionState } from "./actions";
 import { MeetupInterests } from "./meetup-interests";
 import { DraftInviteSuggestions } from "./invite-suggestions";
@@ -17,15 +17,20 @@ export function MeetupForm({
   meetup?: MeetupDetail;
   interests: Interest[];
   suggestionSeed?: string;
-  availability?: AvailabilityMeetup;
+  availability?: AvailabilitySuggestion;
 }) {
   const [placeKind, setPlaceKind] = useState(meetup?.place.kind ?? availability?.place.kind ?? "physical");
   const [audience, setAudience] = useState("default");
   const [activityId, setActivityId] = useState(meetup?.activity.id ?? availability?.activity.id ?? "");
   const [description, setDescription] = useState(meetup?.description ?? "");
   const [siteId, setSiteId] = useState(meetup?.place.kind === "physical" ? meetup.place.siteId : availability?.place.kind === "physical" ? availability.place.siteId : choices.defaultSiteId ?? "");
+  const [spot, setSpot] = useState(meetup?.place.kind === "physical" ? meetup.place.spot : "");
+  const [url, setUrl] = useState(meetup?.place.kind === "virtual" ? meetup.place.url : "");
+  const [durationMinutes, setDurationMinutes] = useState(String(meetup?.durationMinutes ?? 60));
+  const [capacity, setCapacity] = useState(String(meetup?.capacity ?? 6));
+  const [audienceSiteId, setAudienceSiteId] = useState(choices.defaultSiteId ?? "");
   const [relevantInterests, setRelevantInterests] = useState<InterestChoice[]>([]);
-  const [startsAt, setStartsAt] = useState(meetup ? new Date(meetup.startsAt).toISOString().slice(0, 16) : availability ? new Date(availability.meetupStartsAt).toISOString().slice(0, 16) : "");
+  const [startsAt, setStartsAt] = useState(meetup ? new Date(meetup.startsAt).toISOString().slice(0, 16) : availability ? new Date(availability.startsAt).toISOString().slice(0, 19) : "");
   useEffect(() => {
     if (!meetup && !availability) setStartsAt(new Date(Date.now() + 30 * 60 * 1000).toISOString().slice(0, 16));
   }, [meetup, availability]);
@@ -49,7 +54,7 @@ export function MeetupForm({
         <input type="hidden" name="ownAvailabilityId" value={availability.ownAvailabilityId} />
         <input type="hidden" name="otherAvailabilityId" value={availability.otherAvailabilityId} />
         <p className="notice">Creating this Meetup will invite {availability.member.name}. Supply the Place and review the fields before confirming.</p>
-        <p className="muted">Your overlap is {availability.startsAt.toISOString().slice(11, 16)} to {availability.endsAt.toISOString().slice(11, 16)} UTC. The start is set to the next minute so it is still in the future.</p>
+        <p className="muted">Your overlap is {availability.startsAt.toISOString().slice(11, 19)} to {availability.endsAt.toISOString().slice(11, 19)} UTC. The overlap start is filled in. Choose a future start within this window before confirming.</p>
       </>}
       {!meetup && (
         <label>
@@ -62,12 +67,12 @@ export function MeetupForm({
       )}
       <label>
         Start time in UTC
-        <input type="datetime-local" name="startsAt" required value={startsAt} onChange={(change) => setStartsAt(change.target.value)} />
+        <input type="datetime-local" name="startsAt" required step={availability ? 1 : 60} value={startsAt} onChange={(change) => setStartsAt(change.target.value)} />
       </label>
       <p className="muted">All Meetup times use UTC.</p>
       <label>
         Duration in minutes
-        <input type="number" name="durationMinutes" min="1" max="1440" step="1" required defaultValue={meetup?.durationMinutes ?? 60} />
+        <input type="number" name="durationMinutes" min="1" max="1440" step="1" required value={durationMinutes} onChange={(change) => setDurationMinutes(change.target.value)} />
       </label>
       <label>
         Place
@@ -88,18 +93,18 @@ export function MeetupForm({
           </label>
           <label>
             Spot at the Site
-            <input name="spot" required maxLength={300} placeholder="For example, the ground floor cafe" defaultValue={meetup?.place.kind === "physical" ? meetup.place.spot : ""} />
+            <input name="spot" required maxLength={300} placeholder="For example, the ground floor cafe" value={spot} onChange={(change) => setSpot(change.target.value)} />
           </label>
         </>
       ) : (
         <label>
           Virtual Place URL
-          <input type="url" name="url" required maxLength={2000} placeholder="https://" defaultValue={meetup?.place.kind === "virtual" ? meetup.place.url : ""} />
+          <input type="url" name="url" required maxLength={2000} placeholder="https://" value={url} onChange={(change) => setUrl(change.target.value)} />
         </label>
       )}
       <label>
         Capacity, including the Host
-        <input type="number" name="capacity" min="2" max="30" step="1" required defaultValue={meetup?.capacity ?? 6} />
+        <input type="number" name="capacity" min="2" max="30" step="1" required value={capacity} onChange={(change) => setCapacity(change.target.value)} />
       </label>
       {!meetup && (
         <>
@@ -118,7 +123,7 @@ export function MeetupForm({
           {audience === "site" && (
             <label>
               Audience Site
-              <select name="audienceSiteId" required defaultValue={choices.defaultSiteId ?? ""}>
+              <select name="audienceSiteId" required value={audienceSiteId} onChange={(change) => setAudienceSiteId(change.target.value)}>
                 <option value="" disabled>Choose a Site</option>
                 {choices.sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
               </select>

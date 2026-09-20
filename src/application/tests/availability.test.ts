@@ -125,11 +125,10 @@ test.each(["physical", "virtual"] as const)("a %s overlap only creates a Meetup 
   const inbox = await bo.inbox();
   const prefill = await ana.availabilityMeetup(availabilityOverlap);
   expect(prefill).toMatchObject({ ...availabilityOverlap, activity: first.activity, place: first.place, startsAt: input.startsAt });
-  expect(prefill!.meetupStartsAt).toEqual(new Date("2026-09-18T09:01:00Z"));
   expect(await ana.listMeetups()).toEqual([]);
   expect(await bo.inbox()).toEqual(inbox);
   const confirmation = {
-    activityId: prefill!.activity.id, startsAt: prefill!.meetupStartsAt, durationMinutes: 30, capacity: 4, availabilityOverlap,
+    activityId: prefill!.activity.id, startsAt: new Date("2026-09-18T09:01:00Z"), durationMinutes: 30, capacity: 4, availabilityOverlap,
     place: kind === "physical" ? { kind, siteId: choices.defaultSiteId!, spot: "" } : { kind, url: "" },
   };
   await expect(ana.createMeetup(confirmation)).rejects.toMatchObject({ code: "invalid-meetup" });
@@ -142,6 +141,29 @@ test.each(["physical", "virtual"] as const)("a %s overlap only creates a Meetup 
   expect(meetup.audience).toEqual(kind === "physical" ? { kind: "open", scope: "site", siteId: choices.defaultSiteId } : { kind: "open", scope: "organisation" });
   expect((await bo.viewMeetup(meetup.id))?.invite).toMatchObject({ state: "pending", member: { memberId: (await bo.profile()).memberId } });
   expect((await bo.inbox()).filter((notice) => notice.kind === "invite-received")).toHaveLength(1);
+});
+
+test("an open overlap keeps its original start available for planning until it expires", async () => {
+  const { ana, bo, input, choices } = await setup();
+  const window = { ...input, endsAt: new Date("2026-09-18T09:01:00Z") };
+  const first = await ana.postAvailability(window);
+  const second = await bo.postAvailability(window);
+  const availabilityOverlap = { ownAvailabilityId: first.id, otherAvailabilityId: second.id };
+  h.clock.set(new Date("2026-09-18T09:00:20Z"));
+  expect(await ana.availabilityMeetup(availabilityOverlap)).toMatchObject({
+    startsAt: new Date("2026-09-18T09:00:00Z"), endsAt: new Date("2026-09-18T09:01:00Z"),
+  });
+  const confirmation = {
+    activityId: input.activityId, startsAt: input.startsAt, durationMinutes: 10, capacity: 2, availabilityOverlap,
+    place: { kind: "physical" as const, siteId: choices.defaultSiteId!, spot: "Cafe" },
+  };
+  await expect(ana.createMeetup(confirmation)).rejects.toMatchObject({ code: "invalid-meetup" });
+  expect(await ana.listMeetups()).toEqual([]);
+  expect((await bo.inbox()).map((notice) => notice.kind)).toEqual(["availability-overlap"]);
+  const meetup = await ana.createMeetup({ ...confirmation, startsAt: new Date("2026-09-18T09:00:30Z") });
+  expect((await bo.viewMeetup(meetup.id))?.invite?.state).toBe("pending");
+  h.clock.set(window.endsAt);
+  expect(await ana.availabilityMeetup(availabilityOverlap)).toBeUndefined();
 });
 
 test("conversion rejects expired, foreign, unrelated and stale Site overlaps without saving", async () => {

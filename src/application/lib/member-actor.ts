@@ -14,7 +14,7 @@ import { beginTelegramLink, unlinkTelegram, type TelegramLink } from "./telegram
 import { deliverSoon, notificationSettings, setNoticePreference, type NotificationSettings, type NoticePreference } from "./notifications";
 import { inviteSuggestions, meetupSuggestions, previewInviteSuggestions, type InviteSuggestion, type MeetupSuggestion, type PreviewInviteSuggestionsInput } from "./suggestions";
 import { extractMeetupInterests, type ExtractMeetupInterestsInput } from "./meetup-interests";
-import { availability, availabilityMeetup, postAvailability, type Availability, type AvailabilityBoard, type AvailabilityMeetup, type AvailabilityOverlap, type PostAvailabilityInput } from "./availability";
+import { availability, availabilityMeetup, postAvailability, type Availability, type AvailabilityBoard, type AvailabilitySuggestion, type AvailabilityOverlap, type PostAvailabilityInput } from "./availability";
 
 export type MemberStatus = (typeof members.status.enumValues)[number];
 
@@ -71,7 +71,7 @@ export interface MemberSearch {
 export interface MemberActions {
   postAvailability(input: PostAvailabilityInput): Promise<Availability>;
   availability(): Promise<AvailabilityBoard>;
-  availabilityMeetup(input: AvailabilityOverlap): Promise<AvailabilityMeetup | undefined>;
+  availabilityMeetup(input: AvailabilityOverlap): Promise<AvailabilitySuggestion | undefined>;
   beginTelegramLink(): Promise<TelegramLink>;
   unlinkTelegram(): Promise<void>;
   notificationSettings(): Promise<NotificationSettings>;

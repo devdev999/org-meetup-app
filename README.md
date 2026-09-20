@@ -100,7 +100,7 @@ Open **Availability** from home, your profile or Meetups to post an Activity and
 
 Matching Activities with intersecting windows at the same Site, or both virtual, produce Suggestions for both Members. Each pair receives one overlap notice per UTC day, even across multiple posts or Activities. The inbox always receives it. Enabled Telegram and email notices send immediately through the existing delivery queue and retry policy. The worker checks newly open windows and expires ended windows every minute.
 
-**Plan a Meetup** opens the ordinary creation form with the Activity and Site or virtual setting filled in. It displays the overlap window and chooses the next whole minute as the start, because ordinary Meetups must start in the future. Supply the physical spot or virtual URL and review duration, capacity and audience. Only confirmation saves a Meetup and sends the other Member an Invite. Confirmation rechecks the overlap, Activity, Site and start time in the same transaction as creation.
+**Plan a Meetup** opens the ordinary creation form with the Activity, overlap start and Site or virtual setting filled in. Choose a future start within the overlap window, supply the physical spot or virtual URL, and review duration, capacity and audience. Only confirmation saves a Meetup and sends the other Member an Invite. Confirmation rechecks the overlap, Activity, Site and start time in the same transaction as creation.
 
 After linking Telegram, send `/available`. Tap an Activity, then a 30- or 60-minute window at your Site or virtually. Window choices expire after ten minutes, and windows end by midnight UTC. Repeating the same choice preserves the existing post.
 
