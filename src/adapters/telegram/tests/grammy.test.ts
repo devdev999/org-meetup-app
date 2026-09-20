@@ -34,6 +34,11 @@ test("the Telegram adapter sends a plain notice with a join button and answers c
         { text: "Decline", callback_data: "decline:7fe9a1aa-2ef9-4d8d-9d8c-8c412c134975" },
       ]] },
     } });
+    await telegram.sendMessage({ chatId: "101", text: "Choose an Activity.", buttons: [[{ text: "coffee", data: "av-activity:opaque-id" }], [{ text: "lunch", data: "av-activity:another-id" }]] });
+    expect(requests.at(-1)).toEqual({ path: "/bot123:test/sendMessage", body: {
+      chat_id: "101", text: "Choose an Activity.", link_preview_options: { is_disabled: true },
+      reply_markup: { inline_keyboard: [[{ text: "coffee", callback_data: "av-activity:opaque-id" }], [{ text: "lunch", callback_data: "av-activity:another-id" }]] },
+    } });
     reject = true;
     await expect(telegram.sendMessage({ chatId: "101", text: "Retry later" })).rejects.toThrow("Too many requests");
   } finally {

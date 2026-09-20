@@ -10,7 +10,7 @@ import { gatherings, invites, members, noticeDeliveries, noticePreferences, noti
 
 export interface NoticePreference { kind: NoticeKind; telegram: boolean; email: boolean }
 
-const URGENT_KINDS: NoticeKind[] = ["meetup-joined", "meetup-promoted", "meetup-cancelled", "meetup-edited", "invite-received", "invite-accepted"];
+const URGENT_KINDS: NoticeKind[] = ["meetup-joined", "meetup-promoted", "meetup-cancelled", "meetup-edited", "invite-received", "invite-accepted", "availability-overlap"];
 
 const DIGEST_HOUR_UTC = 9;
 const BATCH = 100;
@@ -157,7 +157,7 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
     if (!delivery) return null;
     const [row] = await db.select({ notice: notices, member: members, meetup: gatherings }).from(notices)
       .innerJoin(members, and(eq(members.organisationId, notices.organisationId), eq(members.id, notices.memberId)))
-      .innerJoin(gatherings, and(eq(gatherings.organisationId, notices.organisationId), eq(gatherings.id, notices.gatheringId)))
+      .leftJoin(gatherings, and(eq(gatherings.organisationId, notices.organisationId), eq(gatherings.id, notices.gatheringId)))
       .where(and(eq(notices.organisationId, delivery.organisationId), eq(notices.id, delivery.noticeId)));
     const [preference] = row ? await db.select().from(noticePreferences).where(and(
       eq(noticePreferences.organisationId, delivery.organisationId), eq(noticePreferences.memberId, row.member.id), eq(noticePreferences.kind, row.notice.kind),
@@ -166,10 +166,10 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
     if (row && delivery.channel === "telegram") {
       [link] = await db.select().from(telegramLinks).where(and(eq(telegramLinks.organisationId, delivery.organisationId), eq(telegramLinks.memberId, row.member.id)));
     }
-    const [invite] = row?.notice.kind === "invite-received" && delivery.channel === "telegram" ? await db.select({ id: invites.id }).from(invites)
+    const [invite] = row?.meetup && row.notice.kind === "invite-received" && delivery.channel === "telegram" ? await db.select({ id: invites.id }).from(invites)
       .where(and(eq(invites.organisationId, row.notice.organisationId), eq(invites.gatheringId, row.meetup.id),
         eq(invites.memberId, row.member.id), eq(invites.state, "pending"))) : [];
-    const canAnswer = row?.meetup.status === "scheduled" && row.meetup.startsAt > now;
+    const canAnswer = row?.meetup?.status === "scheduled" && row.meetup.startsAt > now;
     const owned = await claimLease(db, where, now);
     const send = async () => {
       if (!row || !VISIBLE_MEMBER_STATUSES.includes(row.member.status) || !channelEnabled(preference, delivery.channel)) return;
@@ -179,7 +179,7 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
         await deps.telegram.sendMessage({
           chatId: link.chatId, text: row.notice.externalMessage,
           ...(canAnswer && invite ? { inviteId: invite.id }
-            : canAnswer && row.meetup.audienceKind === "open" && !row.notice.kind.startsWith("invite-") ? { joinMeetupId: row.meetup.id } : {}),
+            : canAnswer && row.meetup?.audienceKind === "open" && !row.notice.kind.startsWith("invite-") ? { joinMeetupId: row.meetup.id } : {}),
         });
       }
     };
@@ -187,7 +187,7 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
   });
 }
 
-export async function deliverNotices(deps: Deps, scope?: { organisationId?: string; gatheringId?: string }): Promise<void> {
+export async function deliverNotices(deps: Deps, scope?: { organisationId?: string; gatheringId?: string; kind?: NoticeKind }): Promise<void> {
   const now = deps.clock.now();
   const candidates = await deps.db
     .select({ organisationId: noticeDeliveries.organisationId, noticeId: noticeDeliveries.noticeId, channel: noticeDeliveries.channel })
@@ -196,6 +196,7 @@ export async function deliverNotices(deps: Deps, scope?: { organisationId?: stri
       duePredicate("immediate", now),
       scope?.organisationId ? eq(noticeDeliveries.organisationId, scope.organisationId) : undefined,
       scope?.gatheringId ? eq(notices.gatheringId, scope.gatheringId) : undefined,
+      scope?.kind ? eq(notices.kind, scope.kind) : undefined,
     ))
     .orderBy(noticeDeliveries.availableAt, noticeDeliveries.noticeId).limit(BATCH);
   for (const candidate of candidates) {
@@ -204,7 +205,7 @@ export async function deliverNotices(deps: Deps, scope?: { organisationId?: stri
   }
 }
 
-export async function deliverSoon(deps: Deps, scope: { organisationId: string; gatheringId: string }): Promise<void> {
+export async function deliverSoon(deps: Deps, scope: { organisationId: string; gatheringId?: string; kind?: NoticeKind }): Promise<void> {
   await deliverNotices(deps, scope).catch(() => console.error("notices: immediate delivery deferred to the worker"));
 }
 

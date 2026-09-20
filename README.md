@@ -78,6 +78,16 @@ Notices and pending deliveries are saved with the Meetup change. Sending runs af
 
 Telegram messages contain first names, Activity, UTC time and the physical Place name. Virtual Places appear as "Online" on Telegram so room URLs cannot disclose personal information, while email carries the meeting URL so an email-only Member can join. Telegram buttons contain an action and an opaque Meetup or Invite identifier. Profiles, Interests, Departments and descriptions are not added to messages.
 
+## Availability
+
+Open **Availability** from home, your profile or Meetups to post an Activity and a window today. Physical posts use your current Site. Virtual posts are visible across your Organisation. Only open windows from Active Members appear. A changed or retired Site hides its physical posts, and retired Activities disappear. The page refreshes while open and removes posts when their windows end.
+
+Matching Activities with intersecting windows at the same Site, or both virtual, produce Suggestions for both Members. Each pair receives one overlap notice per UTC day, even across multiple posts or Activities. The inbox always receives it. Enabled Telegram and email notices send immediately through the existing delivery queue and retry policy. The worker checks newly open windows and expires ended windows every minute.
+
+**Plan a Meetup** opens the ordinary creation form with the Activity and Site or virtual setting filled in. It displays the overlap window and chooses the next whole minute as the start, because ordinary Meetups must start in the future. Supply the physical spot or virtual URL and review duration, capacity and audience. Only confirmation saves a Meetup and sends the other Member an Invite. Confirmation rechecks the overlap, Activity, Site and start time in the same transaction as creation.
+
+After linking Telegram, send `/available`. Tap an Activity, then a 30- or 60-minute window at your Site or virtually. Window choices expire after ten minutes, and windows end by midnight UTC. Repeating the same choice preserves the existing post.
+
 ### Channel configuration
 
 `TELEGRAM_PROVIDER=memory` and `EMAIL_PROVIDER=memory` are the defaults. The memory adapters make no outbound requests. Supply production settings to both the web process and the worker.

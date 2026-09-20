@@ -9,6 +9,7 @@ export default async function MeetupsPage() {
     <main>
       <nav className="member-nav" aria-label="Member navigation">
         <Link href="/profile">Profile</Link>
+        <Link href="/availability">Availability</Link>
         <Link href="/inbox">Inbox</Link>
       </nav>
       <h1>Upcoming Meetups</h1>

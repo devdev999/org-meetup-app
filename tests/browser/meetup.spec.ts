@@ -79,3 +79,45 @@ test("Members sign in, declare Interests, create a Meetup and join from Suggesti
   await expect(page.getByRole("combobox", { name: "Stance for SQL" })).toHaveValue("seeks");
   await expect(page.getByRole("combobox", { name: "Stance for Python" })).toHaveCount(0);
 });
+
+test("Availability only creates a Meetup and Invite after the prefilled form is confirmed", async ({ page, browser, baseURL }) => {
+  await signIn(page, "Cy Member", "cy@ministry-a.example", "Finance");
+  const second = await browser.newContext({ baseURL });
+  try {
+    const di = await second.newPage();
+    await signIn(di, "Di Member", "di@ministry-a.example", "Legal");
+    for (const actor of [page, di]) {
+      await actor.goto("/availability");
+      await actor.getByRole("combobox", { name: "Activity", exact: true }).selectOption({ label: "walk" });
+      await actor.getByRole("button", { name: "Post Availability", exact: true }).click();
+      await expect(actor.getByText("Availability posted for walk,", { exact: false })).toBeVisible();
+    }
+    await page.reload();
+    await page.getByRole("link", { name: "Plan a Meetup with Di Member" }).click();
+    await expect(page.getByRole("combobox", { name: "Activity", exact: true })).toHaveValue(await page.getByRole("option", { name: "walk", exact: true }).getAttribute("value") ?? "");
+    await expect(page.getByLabel("Spot at the Site")).toHaveValue("");
+    await expect(page.getByRole("combobox", { name: "Site", exact: true }).locator("option:checked")).toHaveText("Harbour House");
+    await expect(page.getByRole("combobox", { name: "Audience", exact: true })).toHaveValue("default");
+    const prefilledUrl = page.url();
+    await page.getByRole("link", { name: "Back to Meetups" }).click();
+    await expect(page.getByRole("link", { name: "walk", exact: true })).toHaveCount(0);
+    await di.goto("/inbox");
+    await expect(di.getByRole("link", { name: "View Meetup", exact: true })).toHaveCount(0);
+    await expect(di.getByRole("link", { name: "View Availability", exact: true })).toHaveCount(1);
+    await page.goto(prefilledUrl);
+    await page.getByRole("button", { name: "Create Meetup", exact: true }).click();
+    await expect(page).toHaveURL(prefilledUrl);
+    await page.getByLabel("Spot at the Site").fill("Harbour House entrance");
+    await page.getByLabel("Start time in UTC").fill(new Date(Date.now() + 5 * 60_000).toISOString().slice(0, 16));
+    await page.getByLabel("Duration in minutes").fill("20");
+    await page.getByLabel("Capacity, including the Host").fill("3");
+    await page.getByRole("button", { name: "Create Meetup", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Manage Meetup" })).toBeVisible();
+    const meetupUrl = page.url();
+    await di.goto(meetupUrl);
+    await expect(di.getByText("Your Invite is pending.", { exact: true })).toBeVisible();
+    await expect(di.getByText("Harbour House, Harbour House entrance", { exact: true })).toBeVisible();
+  } finally {
+    await second.close();
+  }
+});

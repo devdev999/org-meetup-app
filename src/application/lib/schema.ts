@@ -234,6 +234,34 @@ export const memberInterests = pgTable("member_interests", {
   }),
 ]);
 
+export const availabilities = pgTable("availabilities", {
+  id: uuid().primaryKey().defaultRandom(),
+  organisationId: uuid().notNull().references(() => organisations.id),
+  memberId: uuid().notNull(),
+  activityId: uuid().notNull(),
+  siteId: uuid(),
+  startsAt: timestamptz().notNull(),
+  endsAt: timestamptz().notNull(),
+  expiredAt: timestamptz(),
+  createdAt: timestamptz().notNull(),
+}, (table) => [
+  index("availabilities_open_idx").on(table.organisationId, table.endsAt).where(sql`${table.expiredAt} is null`),
+  foreignKey({ columns: [table.organisationId, table.memberId], foreignColumns: [members.organisationId, members.id] }),
+  foreignKey({ columns: [table.organisationId, table.activityId], foreignColumns: [activities.organisationId, activities.id] }),
+  foreignKey({ columns: [table.organisationId, table.siteId], foreignColumns: [sites.organisationId, sites.id] }),
+]);
+
+export const availabilityNoticePairs = pgTable("availability_notice_pairs", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  firstMemberId: uuid().notNull(),
+  secondMemberId: uuid().notNull(),
+  day: text().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.firstMemberId, table.secondMemberId, table.day] }),
+  foreignKey({ columns: [table.organisationId, table.firstMemberId], foreignColumns: [members.organisationId, members.id] }),
+  foreignKey({ columns: [table.organisationId, table.secondMemberId], foreignColumns: [members.organisationId, members.id] }),
+]);
+
 export const gatheringKind = pgEnum("gathering_kind", ["meetup", "event"]);
 export const gatheringStatus = pgEnum("gathering_status", ["scheduled", "cancelled", "completed", "proposed", "rejected"]);
 
@@ -303,7 +331,7 @@ export const notices = pgTable("notices", {
   id: uuid().primaryKey().defaultRandom(),
   organisationId: uuid().notNull().references(() => organisations.id),
   memberId: uuid().notNull(),
-  gatheringId: uuid().notNull(),
+  gatheringId: uuid(),
   kind: text().$type<NoticeKind>().notNull(),
   message: text().notNull(),
   externalMessage: text().notNull().default(""),

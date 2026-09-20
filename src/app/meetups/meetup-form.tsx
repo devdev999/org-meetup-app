@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import type { Interest, InterestChoice, MemberActions, MeetupDetail } from "../../application/index";
+import type { AvailabilityMeetup, Interest, InterestChoice, MemberActions, MeetupDetail } from "../../application/index";
 import { saveMeetup, type MeetupActionState } from "./actions";
 import { MeetupInterests } from "./meetup-interests";
 import { DraftInviteSuggestions } from "./invite-suggestions";
@@ -11,22 +11,24 @@ export function MeetupForm({
   meetup,
   interests,
   suggestionSeed,
+  availability,
 }: {
   choices: Awaited<ReturnType<MemberActions["meetupChoices"]>>;
   meetup?: MeetupDetail;
   interests: Interest[];
   suggestionSeed?: string;
+  availability?: AvailabilityMeetup;
 }) {
-  const [placeKind, setPlaceKind] = useState(meetup?.place.kind ?? "physical");
+  const [placeKind, setPlaceKind] = useState(meetup?.place.kind ?? availability?.place.kind ?? "physical");
   const [audience, setAudience] = useState("default");
-  const [activityId, setActivityId] = useState(meetup?.activity.id ?? "");
+  const [activityId, setActivityId] = useState(meetup?.activity.id ?? availability?.activity.id ?? "");
   const [description, setDescription] = useState(meetup?.description ?? "");
-  const [siteId, setSiteId] = useState(meetup?.place.kind === "physical" ? meetup.place.siteId : choices.defaultSiteId ?? "");
+  const [siteId, setSiteId] = useState(meetup?.place.kind === "physical" ? meetup.place.siteId : availability?.place.kind === "physical" ? availability.place.siteId : choices.defaultSiteId ?? "");
   const [relevantInterests, setRelevantInterests] = useState<InterestChoice[]>([]);
-  const [startsAt, setStartsAt] = useState(meetup ? new Date(meetup.startsAt).toISOString().slice(0, 16) : "");
+  const [startsAt, setStartsAt] = useState(meetup ? new Date(meetup.startsAt).toISOString().slice(0, 16) : availability ? new Date(availability.meetupStartsAt).toISOString().slice(0, 16) : "");
   useEffect(() => {
-    if (!meetup) setStartsAt(new Date(Date.now() + 30 * 60 * 1000).toISOString().slice(0, 16));
-  }, [meetup]);
+    if (!meetup && !availability) setStartsAt(new Date(Date.now() + 30 * 60 * 1000).toISOString().slice(0, 16));
+  }, [meetup, availability]);
   const [state, action, pending] = useActionState<MeetupActionState, FormData>(
     (_previous, form) => {
       const start = new Date(`${String(form.get("startsAt"))}Z`);
@@ -43,6 +45,12 @@ export function MeetupForm({
 
   return (
     <form action={action}>
+      {availability && <>
+        <input type="hidden" name="ownAvailabilityId" value={availability.ownAvailabilityId} />
+        <input type="hidden" name="otherAvailabilityId" value={availability.otherAvailabilityId} />
+        <p className="notice">Creating this Meetup will invite {availability.member.name}. Supply the Place and review the fields before confirming.</p>
+        <p className="muted">Your overlap is {availability.startsAt.toISOString().slice(11, 16)} to {availability.endsAt.toISOString().slice(11, 16)} UTC. The start is set to the next minute so it is still in the future.</p>
+      </>}
       {!meetup && (
         <label>
           Activity

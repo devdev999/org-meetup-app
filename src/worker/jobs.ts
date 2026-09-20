@@ -13,6 +13,7 @@ export const HEARTBEAT_QUEUE = "heartbeat";
 export const NOTICE_QUEUE = "notice-delivery";
 export const DIGEST_QUEUE = "notice-digests";
 export const INVITE_EXPIRY_QUEUE = "invite-expiry";
+export const AVAILABILITY_QUEUE = "availability";
 
 /** Once a minute, so a running worker is visible in the logs. */
 export const HEARTBEAT_CRON = "* * * * *";
@@ -41,6 +42,7 @@ export async function registerJobs(boss: PgBoss, options: JobOptions = {}): Prom
       [NOTICE_QUEUE, () => application.deliverNotices()],
       [DIGEST_QUEUE, () => application.sendDailyDigests()],
       [INVITE_EXPIRY_QUEUE, () => application.expireInvites()],
+      [AVAILABILITY_QUEUE, () => application.processAvailability()],
     ] as const) {
       await boss.createQueue(queue);
       await boss.schedule(queue, "* * * * *");

@@ -81,6 +81,7 @@ export interface TelegramMessage {
   text: string;
   joinMeetupId?: string;
   inviteId?: string;
+  buttons?: Array<Array<{ text: string; data: string }>>;
 }
 
 export interface TelegramPort {
