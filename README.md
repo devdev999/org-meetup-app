@@ -84,7 +84,7 @@ The pure ranker gives compatible Member Interest overlap two points and Seeks wi
 
 ## Attendance and Connections
 
-After a Meetup or Event ends, the worker prompts its current Host to record Attendance. The prompt appears in the inbox and on enabled Telegram and email channels. The Host ticks who came, including themselves only if they came. A Host without a seat can still record Attendance. Telegram's "Everyone came, including me" button confirms the whole checklist. Use the app to record a subset or amend a confirmation.
+After a Meetup or Event ends, the worker prompts its current Host to record Attendance. The prompt appears in the inbox and on enabled Telegram and email channels. The Host ticks who came, including themselves only if they came. A Host without a seat can still record Attendance. Reassigned Hosts stay in the checklist and count as present only when ticked. Telegram's "Everyone came, including me" button confirms the whole checklist. Use the app to record a subset or amend a confirmation.
 
 Confirmation and amendments close seven days after the occurrence ends. A changed Host receives a new prompt while Attendance remains unconfirmed. Older Telegram buttons cannot overwrite a confirmation, amendment or newer Host prompt. Unchanged repeated confirmations send no duplicate notices. Participants receive a generic notice when Attendance is recorded or amended; it includes no individual outcome.
 

@@ -30,6 +30,10 @@ export interface Attendance {
 
 export type AttendanceHistoryEntry = ConnectionOccurrence & { outcome: Attendance["outcome"] };
 
+function attendanceOutcome(confirmedAt: Date | null | undefined, present: boolean, going: boolean): Attendance["outcome"] {
+  return !confirmedAt ? "unknown" : present ? "attended" : going ? "no-show" : "not-recorded";
+}
+
 export async function attendanceHistory(deps: Deps, actor: Actor): Promise<AttendanceHistoryEntry[]> {
   await requireActiveMember(deps.db, actor);
   return readAttendanceHistory(deps.db, actor, deps.clock.now());
@@ -54,7 +58,7 @@ export async function readAttendanceHistory(db: Queryable, actor: Actor, now: Da
     place: gathering.placeKind === "physical"
       ? { kind: "physical", siteId: gathering.placeSiteId!, siteName: siteName!, spot: gathering.placeSpot! }
       : { kind: "virtual", url: gathering.placeUrl! },
-    outcome: !confirmedAt ? "unknown" : present ? "attended" : membership === "participant" && (!gathering.recurrenceId || answer === "going") ? "no-show" : "not-recorded",
+    outcome: attendanceOutcome(confirmedAt, Boolean(present), membership === "participant" && (!gathering.recurrenceId || answer === "going")),
   }));
 }
 
@@ -94,7 +98,7 @@ export async function attendance(deps: Deps, actor: Actor, id: string): Promise<
       endsAt, closesAt, confirmedAt: record?.confirmedAt ?? null,
       canRate: own?.status === "participant" && deps.clock.now() >= endsAt && !rating, hasRated: !!rating,
       canConfirm: isHost && deps.clock.now() >= endsAt && deps.clock.now() < closesAt,
-      outcome: !record?.confirmedAt ? "unknown" : came ? "attended" : going ? "no-show" : "not-recorded",
+      outcome: attendanceOutcome(record?.confirmedAt, came, going),
       participants: checklist ? [...checklist.values()].map(({ memberId, name }) => ({ memberId, name, attended: present.some((person) => person.memberId === memberId) }))
         .sort((a, b) => a.name.localeCompare(b.name) || a.memberId.localeCompare(b.memberId)) : null,
     };
@@ -103,6 +107,11 @@ export async function attendance(deps: Deps, actor: Actor, id: string): Promise<
 
 export async function confirmAttendance(deps: Deps, actor: Actor, id: string, memberIds: string[]): Promise<void> {
   await withActiveMember(deps, actor, (db) => saveAttendance(db, actor, id, memberIds, deps.clock.now()));
+}
+
+export async function retainHostForAttendance(db: Queryable, organisationId: string, gatheringId: string, memberId: string): Promise<void> {
+  await db.insert(attendanceRecords).values({ organisationId, gatheringId }).onConflictDoNothing();
+  await db.insert(attendanceMembers).values({ organisationId, gatheringId, memberId, attended: false }).onConflictDoNothing();
 }
 
 async function saveAttendance(db: Queryable, actor: Actor, id: string, memberIds: string[], now: Date): Promise<void> {
@@ -157,7 +166,9 @@ export async function confirmAttendancePrompt(deps: Deps, actor: Actor, noticeId
     if (record?.confirmedAt) throw new InvalidInputError("invalid-attendance", "Attendance is already recorded. Amend it in the app.");
     const participants = await db.select({ memberId: gatheringMembers.memberId }).from(gatheringMembers)
       .where(and(eq(gatheringMembers.organisationId, actor.organisationId), eq(gatheringMembers.gatheringId, id), eq(gatheringMembers.status, "participant")));
-    await saveAttendance(db, actor, id, [actor.memberId, ...participants.map((person) => person.memberId)], deps.clock.now());
+    const retained = await db.select({ memberId: attendanceMembers.memberId }).from(attendanceMembers)
+      .where(and(eq(attendanceMembers.organisationId, actor.organisationId), eq(attendanceMembers.gatheringId, id)));
+    await saveAttendance(db, actor, id, [actor.memberId, ...participants.map((person) => person.memberId), ...retained.map((person) => person.memberId)], deps.clock.now());
     return id;
   });
 }

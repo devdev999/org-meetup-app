@@ -232,3 +232,35 @@ test("an unseated Event Host must be ticked and retains private occurrence histo
   await ana.confirmAttendance(occurrence.id, [boId, cyId]);
   expect((await cy.connections())[0]!.occurrences[0]!.id).toBe(occurrence.id);
 });
+
+test.each(["web", "telegram"] as const)("a former unseated Event Host remains on the first Attendance checklist for %s confirmation", async (channel) => {
+  const { ana, input } = await setup();
+  const bo = await member("Bo");
+  const cy = await member("Cy");
+  const adminClaims = { sub: "admin", email: "admin@example.test", name: "Admin" };
+  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminClaims });
+  const admin = await (await signInAndAcknowledgeAs(h, "ministry-a", adminClaims)).organisationAdmin();
+  const occurrence = await createMeetupOrEvent(h, ana, { ...input, capacity: 2, audience: { kind: "invite-only" } }, "event");
+  const anaId = (await ana.profile()).memberId;
+  const boId = (await bo.profile()).memberId;
+  const cyId = (await cy.profile()).memberId;
+  await bo.answerInvite((await ana.inviteToEvent(occurrence.id, boId)).id, "accept");
+  await admin.reassignEventHost(occurrence.id, cyId);
+  h.clock.set(new Date("2026-09-18T11:00:00Z"));
+  await h.app.processAttendance();
+  await admin.reassignEventHost(occurrence.id, anaId);
+  expect((await ana.attendance(occurrence.id))!.participants).toContainEqual({ memberId: cyId, name: "Cy", attended: false });
+  expect(await cy.viewEvent(occurrence.id)).toBeUndefined();
+  expect(await cy.connections()).toEqual([]);
+  if (channel === "web") await ana.confirmAttendance(occurrence.id, [anaId, boId, cyId]);
+  else {
+    const link = await ana.beginTelegramLink();
+    await h.app.handleTelegram({ kind: "link", chatId: "101", code: new URL(link.url).searchParams.get("start")! });
+    await h.app.processAttendance();
+    const notice = (await ana.inbox()).find((entry) => entry.kind === "attendance-prompt")!;
+    await h.app.handleTelegram({ kind: "confirm-attendance", chatId: "101", callbackId: "first-confirmation", noticeId: notice.id });
+  }
+  expect(await cy.attendance(occurrence.id)).toMatchObject({ outcome: "attended", canConfirm: false, canRate: false });
+  expect((await cy.connections()).map((connection) => connection.member.name)).toEqual(["Ana", "Bo"]);
+  expect(await cy.viewEvent(occurrence.id)).toMatchObject({ id: occurrence.id, participantCount: 2 });
+});
