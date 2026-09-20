@@ -29,6 +29,7 @@ import { deliverNotices, sendDailyDigests } from "./lib/notifications";
 import { expireInvites } from "./lib/meetups";
 import { processAvailability } from "./lib/availability";
 import { processRecurrences } from "./lib/recurring-meetups";
+import { processAttendance } from "./lib/attendance";
 
 export type { TelegramCommand, TelegramLink } from "./lib/telegram";
 export type { NotificationSettings, NoticePreference } from "./lib/notifications";
@@ -66,6 +67,7 @@ export type { RsvpAnswer } from "./lib/meetups";
 export type { RecurringMeetup, RecurringEvent } from "./lib/recurring-meetups";
 export type { CreateEventInput, EditEventInput, EventDetail, EventSummary } from "./lib/meetups";
 export type { EventProposal } from "./lib/events";
+export type { ActivityRating, Attendance, AttendanceHistoryEntry, Connection, ConnectionOccurrence } from "./lib/attendance";
 
 /**
  * Recognises a `SignInError` by shape rather than class identity: the web
@@ -104,6 +106,7 @@ export interface ApplicationDependencies {
  * Organisation the application derives itself, never from input.
  */
 export interface Application {
+  processAttendance(): Promise<void>;
   processRecurrences(): Promise<void>;
   processAvailability(): Promise<void>;
   expireInvites(): Promise<void>;
@@ -133,6 +136,7 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
   };
   return {
     processRecurrences: () => processRecurrences(deps),
+    processAttendance: () => processAttendance(deps),
     processAvailability: () => processAvailability(deps),
     expireInvites: () => expireInvites(deps),
     deliverNotices: () => deliverNotices(deps),

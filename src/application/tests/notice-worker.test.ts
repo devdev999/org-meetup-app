@@ -1,10 +1,30 @@
 import { PgBoss } from "pg-boss";
 import { expect, test } from "vitest";
-import { AVAILABILITY_QUEUE, DIGEST_QUEUE, INVITE_EXPIRY_QUEUE, RECURRENCE_QUEUE, registerJobs } from "../../worker/jobs";
+import { ATTENDANCE_QUEUE, AVAILABILITY_QUEUE, DIGEST_QUEUE, INVITE_EXPIRY_QUEUE, RECURRENCE_QUEUE, registerJobs } from "../../worker/jobs";
 import { ministryA, signInAndAcknowledgeAs } from "./fixtures";
 import { harness } from "./harness";
 
 const h = harness();
+
+test("the worker prompts for Attendance through the real queue after an occurrence ends", async () => {
+  await h.app.bootstrap(ministryA);
+  const ana = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });
+  const occurrence = await ana.createMeetup({
+    activityId: (await ana.meetupChoices()).activities[0]!.id, startsAt: new Date("2026-09-18T10:00:00Z"), durationMinutes: 60,
+    place: { kind: "virtual", url: "https://meet.example/coffee" }, capacity: 2,
+  });
+  h.clock.set(new Date("2026-09-18T11:00:00Z"));
+  const boss = new PgBoss({ connectionString: h.connectionString });
+  await boss.start();
+  try {
+    await registerJobs(boss, { application: h.app, clock: h.clock, log: () => {} });
+    await boss.send(ATTENDANCE_QUEUE, {});
+    await expect.poll(async () => (await ana.inbox()).filter((notice) => notice.kind === "attendance-prompt"), { timeout: 15_000 })
+      .toEqual([expect.objectContaining({ meetupId: occurrence.id })]);
+  } finally {
+    await boss.stop({ graceful: true });
+  }
+});
 
 test("the worker generates recurring Meetups and RSVP prompts through the real queue", async () => {
   await h.app.bootstrap(ministryA);

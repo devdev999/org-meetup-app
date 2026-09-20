@@ -9,7 +9,7 @@ import { isUuid } from "./input";
 import { interestChoiceSchema, type Interest, type InterestChoice } from "./interests";
 import { relevantInterests, saveRelevantInterests } from "./meetup-interests";
 import { gatheringNoticeText, recordNotices, supersedeDeliveries } from "./notifications";
-import { activities, departments, eventProposals, gatheringMembers, gatheringRsvps, gatherings, invites, members, notices, organisations, recurrenceInterests, recurrenceMembers, recurrences, sites } from "./schema";
+import { activities, attendanceMembers, departments, eventProposals, gatheringMembers, gatheringRsvps, gatherings, invites, members, notices, organisations, recurrenceInterests, recurrenceMembers, recurrences, sites } from "./schema";
 import { availabilityOverlapSchema, findAvailabilityOverlap, type AvailabilityOverlap } from "./availability";
 import { readRecurrences, recurrenceSchema, saveRsvp, type Recurrence, type RecurrenceInput } from "./recurrence-records";
 
@@ -250,6 +250,7 @@ export function visibleGatherings(actor: Actor, siteId: string | null, kind?: Ga
     inArray(gatherings.status, ["scheduled", "cancelled", "completed"]),
     or(
       eq(gatherings.hostMemberId, actor.memberId),
+      sql`exists (select 1 from ${attendanceMembers} where ${attendanceMembers.organisationId} = ${gatherings.organisationId} and ${attendanceMembers.gatheringId} = ${gatherings.id} and ${attendanceMembers.memberId} = ${actor.memberId} and ${attendanceMembers.attended} = true)`,
       sql`exists (select 1 from ${recurrenceMembers} where ${recurrenceMembers.organisationId} = ${gatherings.organisationId} and ${recurrenceMembers.recurrenceId} = ${gatherings.recurrenceId} and ${recurrenceMembers.memberId} = ${actor.memberId})`,
       sql`exists (select 1 from ${gatheringRsvps} where ${gatheringRsvps.organisationId} = ${gatherings.organisationId} and ${gatheringRsvps.gatheringId} = ${gatherings.id} and ${gatheringRsvps.memberId} = ${actor.memberId})`,
       sql`exists (select 1 from ${invites} where ${invites.organisationId} = ${gatherings.organisationId} and ${invites.gatheringId} = ${gatherings.id} and ${invites.memberId} = ${actor.memberId})`,

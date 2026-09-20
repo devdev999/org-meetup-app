@@ -7,5 +7,5 @@ export default async function MeetupPage({ params }: { params: Promise<{ id: str
   const { id } = await params;
   const meetup = await member.viewMeetup(id);
   if (!meetup) notFound();
-  return <OccurrenceDetail meetup={meetup} />;
+  return <OccurrenceDetail meetup={meetup} attendance={await member.attendance(id)} />;
 }

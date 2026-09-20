@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull, lte, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lte, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { requireActiveMember, VISIBLE_MEMBER_STATUSES, withActiveMember, type Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
 import { NOTICE_KINDS, type NoticeKind } from "./notice-kinds";
-import { activities, gatheringRsvps, gatherings, invites, members, noticeDeliveries, noticePreferences, notices, recurrenceMembers, sites, telegramLinks } from "./schema";
+import { activities, attendanceRecords, gatheringRsvps, gatherings, invites, members, noticeDeliveries, noticePreferences, notices, recurrenceMembers, sites, telegramLinks } from "./schema";
 
 export interface NoticePreference { kind: NoticeKind; telegram: boolean; email: boolean }
 
@@ -16,7 +16,7 @@ export function gatheringNoticeText(input: { message: string; activity: string; 
   return { message: line(input.place), externalMessage: line(input.externalPlace), messagePrefix: input.message };
 }
 
-const URGENT_KINDS: NoticeKind[] = ["meetup-joined", "meetup-promoted", "meetup-cancelled", "meetup-edited", "invite-received", "invite-accepted", "availability-overlap", "rsvp-prompt"];
+const URGENT_KINDS: NoticeKind[] = ["meetup-joined", "meetup-promoted", "meetup-cancelled", "meetup-edited", "invite-received", "invite-accepted", "availability-overlap", "rsvp-prompt", "attendance-prompt"];
 
 const DIGEST_HOUR_UTC = 9;
 const BATCH = 100;
@@ -182,6 +182,18 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
       .innerJoin(recurrenceMembers, and(eq(recurrenceMembers.organisationId, gatheringRsvps.organisationId), eq(recurrenceMembers.memberId, gatheringRsvps.memberId), eq(recurrenceMembers.recurrenceId, row.gathering.recurrenceId!)))
       .where(and(eq(gatheringRsvps.organisationId, row.notice.organisationId), eq(gatheringRsvps.gatheringId, row.gathering.id), eq(gatheringRsvps.memberId, row.member.id), eq(gatheringRsvps.promptedAt, row.notice.createdAt))) : [];
     const owned = await claimLease(db, where, now);
+    let canConfirmAttendance = false;
+    if (row?.notice.kind === "attendance-prompt" && row.gathering) {
+      const [record] = await db.select({ confirmedAt: attendanceRecords.confirmedAt }).from(attendanceRecords)
+        .where(and(eq(attendanceRecords.organisationId, row.notice.organisationId), eq(attendanceRecords.gatheringId, row.gathering.id)));
+      const [latest] = await db.select({ id: notices.id }).from(notices)
+        .where(and(eq(notices.organisationId, row.notice.organisationId), eq(notices.gatheringId, row.gathering.id), eq(notices.kind, "attendance-prompt")))
+        .orderBy(desc(notices.position)).limit(1);
+      const endsAt = row.gathering.startsAt.getTime() + row.gathering.durationMinutes * 60_000;
+      canConfirmAttendance = row.member.status === "active" && row.gathering.hostMemberId === row.member.id
+        && (row.gathering.status === "scheduled" || row.gathering.status === "completed")
+        && latest?.id === row.notice.id && !record?.confirmedAt && now.getTime() >= endsAt && now.getTime() < endsAt + 7 * 86_400_000;
+    }
     const content = row?.notice.kind === "invite-received" && row.gathering && row.activityName && row.notice.messagePrefix
       ? gatheringNoticeText({
         message: row.notice.messagePrefix,
@@ -192,11 +204,13 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
     const send = async () => {
       if (!row || !VISIBLE_MEMBER_STATUSES.includes(row.member.status) || !channelEnabled(preference, delivery.channel)) return;
       if (row.notice.kind === "rsvp-prompt" && (!canAnswer || !rsvp)) return;
+      if (row.notice.kind === "attendance-prompt" && !canConfirmAttendance) return;
       if (delivery.channel === "email") {
         await deps.email.sendMessage({ id: row.notice.id, to: row.member.email, subject: row.notice.kind === "availability-overlap" ? "Availability overlap" : row.gathering?.kind === "event" ? "Event notice" : "Meetup notice", text: content!.message });
       } else if (link) {
         await deps.telegram.sendMessage({
           chatId: link.chatId, text: content!.externalMessage,
+          ...(canConfirmAttendance ? { confirmAttendanceNoticeId: row.notice.id } : {}),
           ...(canAnswer && row.notice.kind === "rsvp-prompt" ? row.gathering!.kind === "event" ? { rsvpEventId: row.gathering!.id } : { rsvpMeetupId: row.gathering!.id }
             : canAnswer && invite ? { inviteId: invite.id }
             : canAnswer && row.gathering?.audienceKind === "open" && !row.notice.kind.startsWith("invite-") ? row.gathering.kind === "event" ? { joinEventId: row.gathering.id } : { joinMeetupId: row.gathering.id } : {}),

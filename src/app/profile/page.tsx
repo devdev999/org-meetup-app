@@ -14,6 +14,8 @@ export default async function ProfilePage() {
         <Link href="/members">Find Members</Link>
         <Link href="/meetups">Meetups</Link>
         <Link href="/events">Events</Link>
+        <Link href="/attendance">Your Attendance history</Link>
+        <Link href="/connections">Your Connections</Link>
         <Link href="/availability">Availability</Link>
         <Link href="/inbox">Inbox</Link>
         <Link href="/notifications">Notification settings</Link>

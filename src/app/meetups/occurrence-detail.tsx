@@ -1,12 +1,13 @@
 import Link from "next/link";
-import type { EventDetail, MeetupDetail } from "../../application";
+import type { Attendance, EventDetail, MeetupDetail } from "../../application";
+import { AttendancePanel } from "../attendance/panel";
 import { MeetupTime } from "./meetup-time";
 import { MeetupAction } from "./meetup-action";
 import { InviteAnswerForm } from "./invite-form";
 import { RecurrenceDetails } from "./recurrence";
 import { RsvpForm } from "./rsvp-form";
 
-export function OccurrenceDetail({ meetup }: { meetup: MeetupDetail | EventDetail }) {
+export function OccurrenceDetail({ meetup, attendance }: { meetup: MeetupDetail | EventDetail; attendance?: Attendance }) {
   const kind = meetup.kind;
   const label = kind === "meetup" ? "Meetup" : "Event";
   const path = kind === "meetup" ? "meetups" : "events";
@@ -25,6 +26,7 @@ export function OccurrenceDetail({ meetup }: { meetup: MeetupDetail | EventDetai
       </nav>
       <p className="muted">{label}</p>
       <h1>{meetup.activity.name}</h1>
+      <AttendancePanel id={meetup.id} attendance={attendance} />
       {meetup.status === "cancelled" && <p className="notice" role="status">This {label} has been cancelled.</p>}
       {meetup.status === "completed" && <p className="notice">This {label} has ended.</p>}
       <dl>

@@ -15,6 +15,7 @@ export const DIGEST_QUEUE = "notice-digests";
 export const INVITE_EXPIRY_QUEUE = "invite-expiry";
 export const AVAILABILITY_QUEUE = "availability";
 export const RECURRENCE_QUEUE = "recurrences";
+export const ATTENDANCE_QUEUE = "attendance";
 
 /** Once a minute, so a running worker is visible in the logs. */
 export const HEARTBEAT_CRON = "* * * * *";
@@ -45,6 +46,7 @@ export async function registerJobs(boss: PgBoss, options: JobOptions = {}): Prom
       [INVITE_EXPIRY_QUEUE, () => application.expireInvites()],
       [AVAILABILITY_QUEUE, () => application.processAvailability()],
       [RECURRENCE_QUEUE, () => application.processRecurrences()],
+      [ATTENDANCE_QUEUE, () => application.processAttendance()],
     ] as const) {
       await boss.createQueue(queue);
       await boss.schedule(queue, "* * * * *");

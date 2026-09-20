@@ -9,6 +9,7 @@ import { relevantInterests, relevantInterestsFor } from "./meetup-interests";
 import { readGatherings, validSite, visibleGatherings, type EventSummary, type GatheringKind, type GatheringSummary, type InviteChoices, type MeetupSummary } from "./meetups";
 import { departments, gatheringMembers, gatherings, invites, members, sites } from "./schema";
 import { rankInvitees, rankMeetups } from "./suggestion-ranking";
+import { connectedMemberIds } from "./attendance";
 
 export interface InviteSuggestion {
   member: InviteChoices["members"][number];
@@ -69,15 +70,21 @@ async function gatheringSuggestions(deps: Deps, actor: Actor, kind: GatheringKin
       gt(gatherings.startsAt, now), lte(gatherings.startsAt, until), ne(gatherings.hostMemberId, actor.memberId),
       sql`not exists (select 1 from ${gatheringMembers} where ${gatheringMembers.organisationId} = ${gatherings.organisationId} and ${gatheringMembers.gatheringId} = ${gatherings.id} and ${gatheringMembers.memberId} = ${actor.memberId})`));
   if (!gatheringRows.length) return [];
-  const [declarations, savedInterests, hostInterests] = await Promise.all([
+  const [declarations, savedInterests, hostInterests, connections] = await Promise.all([
     memberInterestList(deps, actor),
     relevantInterestsFor(deps.db, actor.organisationId, gatheringRows.map((gathering) => gathering.id)),
     memberInterestsFor(deps.db, actor.organisationId, [...new Set(gatheringRows.map((gathering) => gathering.hostMemberId))]),
+    connectedMemberIds(deps.db, actor),
   ]);
+  const counts = connections.size ? await deps.db.select({ gatheringId: gatheringMembers.gatheringId, count: sql<number>`count(*)::integer` }).from(gatheringMembers)
+    .where(and(eq(gatheringMembers.organisationId, actor.organisationId), inArray(gatheringMembers.gatheringId, gatheringRows.map((gathering) => gathering.id)),
+      eq(gatheringMembers.status, "participant"), inArray(gatheringMembers.memberId, [...connections])))
+    .groupBy(gatheringMembers.gatheringId) : [];
+  const connectionCounts = new Map(counts.map((row) => [row.gatheringId, row.count]));
   const interestsByGathering = Map.groupBy(savedInterests, (interest) => interest.meetupId);
   const interestsByHost = Map.groupBy(hostInterests, (interest) => interest.memberId);
   const ranked = rankMeetups(declarations, gatheringRows.map((gathering) => ({
-    meetupId: gathering.id, startsAt: gathering.startsAt, connectionCount: 0,
+    meetupId: gathering.id, startsAt: gathering.startsAt, connectionCount: connectionCounts.get(gathering.id) ?? 0,
     interests: interestsByGathering.get(gathering.id) ?? [], hostInterests: interestsByHost.get(gathering.hostMemberId) ?? [],
   })), kind).slice(0, 20);
   const details = new Map((await readGatherings(deps.db, actor, ranked.map((entry) => entry.meetupId), current.siteId, now)).map((gathering) => [gathering.id, gathering]));
@@ -120,16 +127,17 @@ async function candidateSuggestions(deps: Deps, actor: Actor, input: {
       or(isNull(invites.id), ne(invites.state, "pending")),
       input.meetupId ? sql`not exists (select 1 from ${gatheringMembers} where ${gatheringMembers.organisationId} = ${members.organisationId} and ${gatheringMembers.gatheringId} = ${input.meetupId} and ${gatheringMembers.memberId} = ${members.id} and ${gatheringMembers.status} = 'participant')` : undefined));
   if (!candidates.length) return [];
-  const [declarations, hostInterests] = await Promise.all([
+  const [declarations, hostInterests, connections] = await Promise.all([
     memberInterestsFor(deps.db, actor.organisationId, candidates.map((candidate) => candidate.memberId)),
     memberInterestList(deps, actor),
+    connectedMemberIds(deps.db, actor),
   ]);
   const byId = new Map(candidates.map((candidate) => [candidate.memberId, candidate]));
   const interestsByMember = Map.groupBy(declarations, (interest) => interest.memberId);
   return rankInvitees({
     seed: input.seed, kind: input.kind, hostDepartmentId: input.hostDepartmentId, hostInterests, relevantInterests: input.relevantInterests,
     candidates: candidates.map((candidate) => ({
-      memberId: candidate.memberId, departmentId: candidate.departmentId, connectionCount: 0,
+      memberId: candidate.memberId, departmentId: candidate.departmentId, connectionCount: connections.has(candidate.memberId) ? 1 : 0,
       interests: interestsByMember.get(candidate.memberId) ?? [],
     })),
   }).slice(0, 20).map(({ memberId, reasons }) => {

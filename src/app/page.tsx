@@ -12,6 +12,8 @@ export default async function HomePage() {
         <Link href="/interests">Your Interests</Link>
         <Link href="/meetups">All Meetups</Link>
         <Link href="/events">All Events</Link>
+        <Link href="/attendance">Your Attendance history</Link>
+        <Link href="/connections">Your Connections</Link>
         <Link href="/availability">Availability</Link>
         <Link href="/inbox">Inbox</Link>
       </nav>
