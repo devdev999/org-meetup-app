@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, lte, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
-import { alias } from "drizzle-orm/pg-core";
 import { requireActiveMember, VISIBLE_MEMBER_STATUSES, withActiveMember, type Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
@@ -14,7 +13,7 @@ export interface NoticePreference { kind: NoticeKind; telegram: boolean; email: 
 export function gatheringNoticeText(input: { message: string; activity: string; startsAt: Date; place: string; externalPlace: string }) {
   const time = `${input.startsAt.toISOString().slice(0, 16).replace("T", " ")} UTC`;
   const line = (place: string) => `${input.message} ${input.activity}, ${time}, ${place}.`;
-  return { message: line(input.place), externalMessage: line(input.externalPlace) };
+  return { message: line(input.place), externalMessage: line(input.externalPlace), messagePrefix: input.message };
 }
 
 const URGENT_KINDS: NoticeKind[] = ["meetup-joined", "meetup-promoted", "meetup-cancelled", "meetup-edited", "invite-received", "invite-accepted", "availability-overlap", "rsvp-prompt"];
@@ -70,7 +69,7 @@ export async function setNoticePreference(deps: Deps, actor: Actor, input: Notic
 }
 
 export async function recordNotices(db: Queryable, organisationId: string, recipients: string[],
-  input: Pick<typeof notices.$inferInsert, "gatheringId" | "kind" | "message" | "externalMessage">, now: Date): Promise<void> {
+  input: Pick<typeof notices.$inferInsert, "gatheringId" | "kind" | "message" | "externalMessage" | "messagePrefix">, now: Date): Promise<void> {
   if (!recipients.length) return;
   const memberIds = [...new Set(recipients)];
   const created = await db.insert(notices).values(memberIds.map((memberId) => ({ ...input, organisationId, memberId, createdAt: now }))).returning();
@@ -113,8 +112,6 @@ function duePredicate(mode: (typeof noticeDeliveries.$inferSelect)["mode"], now:
 const digestNoticeJoin = and(eq(notices.organisationId, noticeDeliveries.organisationId), eq(notices.id, noticeDeliveries.noticeId));
 
 interface DeliveryJob { where: SQL | undefined; send: () => Promise<void> }
-
-const hosts = alias(members, "notice_hosts");
 
 async function claimLease(db: Queryable, where: SQL | undefined, now: Date) {
   const claimToken = randomUUID();
@@ -164,12 +161,11 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
     const where = deliveryWhere(candidate);
     const [delivery] = await db.select().from(noticeDeliveries).where(and(where, duePredicate("immediate", now))).for("update", { skipLocked: true });
     if (!delivery) return null;
-    const [row] = await db.select({ notice: notices, member: members, meetup: gatherings, activityName: activities.name, siteName: sites.name, hostName: hosts.name }).from(notices)
+    const [row] = await db.select({ notice: notices, member: members, meetup: gatherings, activityName: activities.name, siteName: sites.name }).from(notices)
       .innerJoin(members, and(eq(members.organisationId, notices.organisationId), eq(members.id, notices.memberId)))
       .leftJoin(gatherings, and(eq(gatherings.organisationId, notices.organisationId), eq(gatherings.id, notices.gatheringId)))
       .leftJoin(activities, and(eq(activities.organisationId, gatherings.organisationId), eq(activities.id, gatherings.activityId)))
       .leftJoin(sites, and(eq(sites.organisationId, gatherings.organisationId), eq(sites.id, gatherings.placeSiteId)))
-      .leftJoin(hosts, and(eq(hosts.organisationId, gatherings.organisationId), eq(hosts.id, gatherings.hostMemberId)))
       .where(and(eq(notices.organisationId, delivery.organisationId), eq(notices.id, delivery.noticeId)));
     const [preference] = row ? await db.select().from(noticePreferences).where(and(
       eq(noticePreferences.organisationId, delivery.organisationId), eq(noticePreferences.memberId, row.member.id), eq(noticePreferences.kind, row.notice.kind),
@@ -186,9 +182,9 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
       .innerJoin(recurrenceMembers, and(eq(recurrenceMembers.organisationId, gatheringRsvps.organisationId), eq(recurrenceMembers.memberId, gatheringRsvps.memberId), eq(recurrenceMembers.recurrenceId, row.meetup.recurrenceId!)))
       .where(and(eq(gatheringRsvps.organisationId, row.notice.organisationId), eq(gatheringRsvps.gatheringId, row.meetup.id), eq(gatheringRsvps.memberId, row.member.id), eq(gatheringRsvps.promptedAt, row.notice.createdAt))) : [];
     const owned = await claimLease(db, where, now);
-    const content = row?.notice.kind === "invite-received" && row.meetup && row.activityName && row.hostName
+    const content = row?.notice.kind === "invite-received" && row.meetup && row.activityName && row.notice.messagePrefix
       ? gatheringNoticeText({
-        message: `${row.hostName.split(/\s+/)[0]} invited you to ${row.meetup.kind === "event" ? "an Event" : "a Meetup"}.`,
+        message: row.notice.messagePrefix,
         activity: row.activityName, startsAt: row.meetup.startsAt,
         place: row.meetup.placeKind === "physical" ? `${row.meetup.placeSpot}, ${row.siteName}` : row.meetup.placeUrl!,
         externalPlace: row.meetup.placeKind === "physical" ? `${row.meetup.placeSpot}, ${row.siteName}` : "Online",

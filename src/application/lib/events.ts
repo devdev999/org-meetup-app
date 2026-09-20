@@ -5,7 +5,7 @@ import type { Deps } from "./deps";
 import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
 import { relevantInterestsFor } from "./meetup-interests";
-import { createGathering, listGatherings, noticeRecipients, notify, publishGathering, readMeetup, readMeetupDetail, type CreateEventInput, type EventDetail, type EventSummary, type MeetupPerson } from "./meetups";
+import { createGathering, listGatherings, noticeRecipients, notify, publishGathering, readGathering, readGatheringDetail, type CreateEventInput, type EventDetail, type EventSummary, type MeetupPerson } from "./meetups";
 import type { RecurrenceInput } from "./recurrence-records";
 import { activities, eventProposals, gatherings, members, sites } from "./schema";
 
@@ -40,7 +40,7 @@ export async function proposeEvent(deps: Deps, actor: Actor, input: CreateEventI
 export async function createEvent(db: Queryable, actor: Actor, input: CreateEventInput, now: Date): Promise<EventDetail> {
   const current = await requireActiveMember(db, actor);
   const id = await createGathering(db, actor, input, "event", now);
-  const event = await readMeetupDetail(db, actor, id, current.siteId, now);
+  const event = await readGatheringDetail(db, actor, id, current.siteId, now);
   if (event?.kind !== "event") throw new Error("Event creation returned no Event");
   return event;
 }
@@ -103,7 +103,7 @@ export async function rejectEvent(db: Queryable, actor: Actor, id: string, note:
 export async function viewEvent(deps: Deps, actor: Actor, id: string): Promise<EventDetail | undefined> {
   const current = await requireActiveMember(deps.db, actor);
   if (!isUuid(id)) return undefined;
-  const event = await readMeetupDetail(deps.db, actor, id, current.siteId, deps.clock.now());
+  const event = await readGatheringDetail(deps.db, actor, id, current.siteId, deps.clock.now());
   return event?.kind === "event" ? event : undefined;
 }
 
@@ -119,7 +119,7 @@ export async function reassignEventHost(db: Queryable, actor: Actor, id: string,
     .where(and(eq(members.organisationId, actor.organisationId), eq(members.id, memberId), eq(members.status, "active")));
   if (!nextHost) throw new InvalidInputError("invalid-event", "Choose an Active Member in your Organisation as Host.");
   if (row.hostMemberId === memberId) return;
-  const event = (await readMeetup(db, { organisationId: actor.organisationId, memberId: row.hostMemberId }, id, null, now))!;
+  const event = (await readGathering(db, { organisationId: actor.organisationId, memberId: row.hostMemberId }, id, null, now))!;
   await db.update(gatherings).set({ hostMemberId: memberId }).where(and(eq(gatherings.organisationId, actor.organisationId), eq(gatherings.id, id)));
   await notify(db, actor.organisationId, event, [...await noticeRecipients(db, actor.organisationId, id), row.hostMemberId, memberId], "meetup-handed-over", `${nextHost.name.split(/\s+/)[0]} is now Host of this Event.`, now);
 }

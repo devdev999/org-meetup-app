@@ -164,7 +164,7 @@ function placeColumns(place: MeetupPlace) {
 export async function createMeetup(deps: Deps, actor: Actor, input: CreateMeetupInput): Promise<MeetupDetail> {
   return withActiveMember(deps, actor, async (db, current) => {
     const id = await createGathering(db, actor, input, "meetup", deps.clock.now());
-    const meetup = await readMeetupDetail(db, actor, id, current.siteId, deps.clock.now());
+    const meetup = await readGatheringDetail(db, actor, id, current.siteId, deps.clock.now());
     if (meetup?.kind !== "meetup") throw new Error("Meetup creation returned no Meetup");
     return meetup;
   });
@@ -231,7 +231,7 @@ export async function publishGathering(db: Queryable, actor: Actor, row: typeof 
     capacity: row.capacity, description: row.description, audienceKind: row.audienceKind, audienceScope: row.audienceScope,
     audienceSiteId: row.audienceSiteId, createdAt: now, ...recurrence,
   }).returning() : [];
-  await db.update(gatherings).set({ status: "scheduled", recurrenceId: series?.id, scheduledStartsAt: series ? row.startsAt : undefined }).where(meetupWhere(actor.organisationId, row.id));
+  await db.update(gatherings).set({ status: "scheduled", recurrenceId: series?.id, scheduledStartsAt: series ? row.startsAt : undefined }).where(gatheringWhere(actor.organisationId, row.id));
   await db.insert(gatheringMembers).values({ organisationId: actor.organisationId, gatheringId: row.id, memberId: actor.memberId, status: "participant" });
   if (series) {
     await db.insert(recurrenceMembers).values({ organisationId: actor.organisationId, recurrenceId: series.id, memberId: actor.memberId });
@@ -240,11 +240,11 @@ export async function publishGathering(db: Queryable, actor: Actor, row: typeof 
     if (interests.length) await db.insert(recurrenceInterests).values(interests.map(({ interestId }) => ({ organisationId: actor.organisationId, recurrenceId: series.id, interestId })));
   }
   if (!invitedMemberIds.length) return;
-  const meetup = (await readMeetup(db, actor, row.id, host.siteId, now))!;
+  const meetup = (await readGathering(db, actor, row.id, host.siteId, now))!;
   for (const memberId of invitedMemberIds) await saveInvite(db, actor, meetup, memberId, host.name, now, { fromSuggestion: true });
 }
 
-export function visibleMeetups(actor: Actor, siteId: string | null, kind?: GatheringKind) {
+export function visibleGatherings(actor: Actor, siteId: string | null, kind?: GatheringKind) {
   return and(
     eq(gatherings.organisationId, actor.organisationId), kind ? eq(gatherings.kind, kind) : undefined,
     inArray(gatherings.status, ["scheduled", "cancelled", "completed"]),
@@ -262,18 +262,18 @@ export function visibleMeetups(actor: Actor, siteId: string | null, kind?: Gathe
   );
 }
 
-export async function readMeetup(db: Queryable, actor: Actor, id: string, siteId: string | null, now: Date): Promise<ReadGathering | undefined> {
-  return (await readMeetups(db, actor, [id], siteId, now))[0];
+export async function readGathering(db: Queryable, actor: Actor, id: string, siteId: string | null, now: Date): Promise<ReadGathering | undefined> {
+  return (await readGatherings(db, actor, [id], siteId, now))[0];
 }
 
-export async function readMeetups(db: Queryable, actor: Actor, ids: string[], siteId: string | null, now: Date): Promise<ReadGathering[]> {
+export async function readGatherings(db: Queryable, actor: Actor, ids: string[], siteId: string | null, now: Date): Promise<ReadGathering[]> {
   if (!ids.length) return [];
   const rows = await db.select({ meetup: gatherings, activityName: activities.name, hostName: members.name, siteName: sites.name })
     .from(gatherings)
     .innerJoin(activities, and(eq(activities.id, gatherings.activityId), eq(activities.organisationId, gatherings.organisationId)))
     .innerJoin(members, and(eq(members.id, gatherings.hostMemberId), eq(members.organisationId, gatherings.organisationId)))
     .leftJoin(sites, and(eq(sites.id, gatherings.placeSiteId), eq(sites.organisationId, gatherings.organisationId)))
-    .where(and(visibleMeetups(actor, siteId), inArray(gatherings.id, ids)))
+    .where(and(visibleGatherings(actor, siteId), inArray(gatherings.id, ids)))
     .orderBy(gatherings.startsAt, gatherings.id);
   if (!rows.length) return [];
   const allPeople = await db.select({ meetupId: gatheringMembers.gatheringId, memberId: members.id, name: members.name, status: gatheringMembers.status })
@@ -316,8 +316,8 @@ export async function readMeetups(db: Queryable, actor: Actor, ids: string[], si
   });
 }
 
-export async function readMeetupDetail(db: Queryable, actor: Actor, id: string, siteId: string | null, now: Date): Promise<GatheringDetail | undefined> {
-  const meetup = await readMeetup(db, actor, id, siteId, now);
+export async function readGatheringDetail(db: Queryable, actor: Actor, id: string, siteId: string | null, now: Date): Promise<GatheringDetail | undefined> {
+  const meetup = await readGathering(db, actor, id, siteId, now);
   if (!meetup) return undefined;
   const isHost = meetup.membership === "host";
   const rows = await db.select({ id: invites.id, member: { memberId: members.id, name: members.name }, state: invites.state })
@@ -331,7 +331,7 @@ export async function readMeetupDetail(db: Queryable, actor: Actor, id: string, 
 export async function viewMeetup(deps: Deps, actor: Actor, id: string): Promise<MeetupDetail | undefined> {
   const current = await requireActiveMember(deps.db, actor);
   if (!isUuid(id)) return undefined;
-  const meetup = await readMeetupDetail(deps.db, actor, id, current.siteId, deps.clock.now());
+  const meetup = await readGatheringDetail(deps.db, actor, id, current.siteId, deps.clock.now());
   return meetup?.kind === "meetup" ? meetup : undefined;
 }
 
@@ -342,15 +342,15 @@ export async function listMeetups(deps: Deps, actor: Actor): Promise<MeetupSumma
 export async function listGatherings(deps: Deps, actor: Actor, kind: GatheringKind): Promise<GatheringSummary[]> {
   const current = await requireActiveMember(deps.db, actor);
   const rows = await deps.db.select({ id: gatherings.id }).from(gatherings)
-    .where(and(visibleMeetups(actor, current.siteId, kind), gt(gatherings.startsAt, deps.clock.now())))
+    .where(and(visibleGatherings(actor, current.siteId, kind), gt(gatherings.startsAt, deps.clock.now())))
     .orderBy(gatherings.startsAt, gatherings.id);
-  const results = await readMeetups(deps.db, actor, rows.map((row) => row.id), current.siteId, deps.clock.now());
+  const results = await readGatherings(deps.db, actor, rows.map((row) => row.id), current.siteId, deps.clock.now());
   return results.map(({ participants, waitlist, rsvps, ...summary }) => summary);
 }
 
-export async function requireScheduledMeetup(db: Queryable, actor: Actor, id: string, siteId: string | null, now: Date, kind?: GatheringKind) {
+export async function requireScheduledGathering(db: Queryable, actor: Actor, id: string, siteId: string | null, now: Date, kind?: GatheringKind) {
   if (!isUuid(id)) throw new AccessDeniedError();
-  const meetup = await readMeetup(db, actor, id, siteId, now);
+  const meetup = await readGathering(db, actor, id, siteId, now);
   if (!meetup || kind && meetup.kind !== kind) throw new AccessDeniedError();
   if (!meetup.canChange) invalid(`This ${meetup.kind === "event" ? "Event" : "Meetup"} is no longer open for changes.`);
   return meetup;
@@ -401,7 +401,7 @@ function inviteTarget(meetup: { id: string; kind: GatheringKind }): InviteTarget
 
 export async function joinMeetup(deps: Deps, actor: Actor, id: string, kind: GatheringKind = "meetup"): Promise<"participant" | "waitlisted"> {
   return withActiveMember(deps, actor, async (db, current) => {
-    const meetup = await requireScheduledMeetup(db, actor, id, current.siteId, deps.clock.now(), kind);
+    const meetup = await requireScheduledGathering(db, actor, id, current.siteId, deps.clock.now(), kind);
     if (!meetup.membership && !meetup.recurrence?.isStanding && meetup.rsvp === null && meetup.audience.kind !== "open") throw new AccessDeniedError();
     const status = await takePlace(db, actor.organisationId, meetup, current, deps.clock.now());
     if (meetup.recurrence) await saveRsvp(db, actor, id, "going");
@@ -440,7 +440,7 @@ export async function promoteWaitlist(db: Queryable, organisationId: string, mee
 export async function leaveMeetup(deps: Deps, actor: Actor, id: string, kind: GatheringKind = "meetup"): Promise<void> {
   return withActiveMember(deps, actor, async (db, current) => {
     const now = deps.clock.now();
-    const meetup = await requireScheduledMeetup(db, actor, id, current.siteId, now, kind);
+    const meetup = await requireScheduledGathering(db, actor, id, current.siteId, now, kind);
     if (meetup.membership === "host") invalid(`Hand over or cancel your ${meetupOrEvent(meetup)} before leaving.`);
     if (!meetup.membership) return;
     await releasePlace(db, actor.organisationId, meetup, current, now);
@@ -459,7 +459,7 @@ interface InviteOptions { previousInviteId?: string; fromSuggestion?: boolean }
 export async function inviteMember(deps: Deps, actor: Actor, id: string, memberId: string, options: InviteOptions = {}, kind: GatheringKind = "meetup"): Promise<Invite> {
   return withActiveMember(deps, actor, async (db, current) => {
     const now = deps.clock.now();
-    const meetup = await requireScheduledMeetup(db, actor, id, current.siteId, now, kind);
+    const meetup = await requireScheduledGathering(db, actor, id, current.siteId, now, kind);
     requireHost(meetup, actor);
     return saveInvite(db, actor, meetup, memberId, current.name, now, options);
   });
@@ -497,7 +497,7 @@ export async function inviteChoices(deps: Deps, actor: Actor, id: string, input:
   if (!parsed.success) invalid("Enter a Member name of up to 200 characters and choose a valid page.");
   const pattern = `%${parsed.data.name.replace(/[\\%_]/g, "\\$&")}%`;
   const [meetup] = await deps.db.select({ id: gatherings.id }).from(gatherings)
-    .where(and(meetupWhere(actor.organisationId, id), eq(gatherings.kind, kind), eq(gatherings.hostMemberId, actor.memberId),
+    .where(and(gatheringWhere(actor.organisationId, id), eq(gatherings.kind, kind), eq(gatherings.hostMemberId, actor.memberId),
       eq(gatherings.status, "scheduled"), gt(gatherings.startsAt, deps.clock.now())));
   if (!meetup) throw new AccessDeniedError();
   const choices = await deps.db.select({ memberId: members.id, name: members.name, department: departments.name, site: sites.name }).from(members)
@@ -510,7 +510,7 @@ export async function inviteChoices(deps: Deps, actor: Actor, id: string, input:
   return { members: choices.slice(0, INVITE_PAGE_SIZE), hasMore: choices.length > INVITE_PAGE_SIZE };
 }
 
-function meetupWhere(organisationId: string, id: string) {
+function gatheringWhere(organisationId: string, id: string) {
   return and(eq(gatherings.organisationId, organisationId), eq(gatherings.id, id));
 }
 
@@ -522,7 +522,7 @@ export async function answerInvite(deps: Deps, actor: Actor, id: string, answer:
       .where(and(eq(invites.organisationId, actor.organisationId), eq(invites.id, id), eq(invites.memberId, actor.memberId)));
     if (!invite) throw new AccessDeniedError();
     const now = deps.clock.now();
-    const meetup = await requireScheduledMeetup(db, actor, invite.gatheringId, current.siteId, now);
+    const meetup = await requireScheduledGathering(db, actor, invite.gatheringId, current.siteId, now);
     const state = answer === "accept" ? "accepted" : "declined";
     let membership = meetup.membership === "host"
       ? meetup.participants.some((person) => person.memberId === actor.memberId) ? "participant" as const
@@ -568,7 +568,7 @@ export async function expireInvites(deps: Deps): Promise<void> {
 export async function editMeetup(deps: Deps, actor: Actor, id: string, input: EditMeetupInput | EditEventInput, kind: GatheringKind = "meetup"): Promise<void> {
   return withActiveMember(deps, actor, async (db, current) => {
     const now = deps.clock.now();
-    const meetup = await requireScheduledMeetup(db, actor, id, current.siteId, now, kind);
+    const meetup = await requireScheduledGathering(db, actor, id, current.siteId, now, kind);
     requireHost(meetup, actor);
     const parsed = (kind === "meetup" ? meetupSchema : eventSchema).omit({ activityId: true, audience: true, invitedMemberIds: true, availabilityOverlap: true, recurrence: true }).safeParse(input);
     if (!parsed.success) invalid(kind === "meetup" ? "Choose a valid start time and Place, a duration from 1 to 1440 minutes and capacity from 2 to 30." : "Choose a valid start time and Place, a duration from 1 to 1440 minutes and an optional positive capacity.");
@@ -583,13 +583,13 @@ export async function editMeetup(deps: Deps, actor: Actor, id: string, input: Ed
     const changed = timeOrPlaceChanged || data.durationMinutes !== meetup.durationMinutes;
     await db.update(gatherings).set({
       startsAt: data.startsAt, durationMinutes: data.durationMinutes, ...placeColumns(data.place), capacity: data.capacity, description: data.description,
-    }).where(meetupWhere(actor.organisationId, id));
+    }).where(gatheringWhere(actor.organisationId, id));
     if (meetup.recurrence && timeOrPlaceChanged) {
       await supersedeDeliveries(db, actor.organisationId, id, "rsvp-prompt", now);
       await db.update(gatheringRsvps).set({ promptedAt: null }).where(and(eq(gatheringRsvps.organisationId, actor.organisationId), eq(gatheringRsvps.gatheringId, id)));
     }
     if (data.relevantInterests) await saveRelevantInterests(db, actor.organisationId, id, data.relevantInterests, now);
-    const updated = (await readMeetup(db, actor, id, current.siteId, now))!;
+    const updated = (await readGathering(db, actor, id, current.siteId, now))!;
     if (changed) {
       await supersedeDeliveries(db, actor.organisationId, id, "meetup-edited", now);
       await notify(db, actor.organisationId, updated,
@@ -603,14 +603,14 @@ export async function editMeetup(deps: Deps, actor: Actor, id: string, input: Ed
 export async function handOverMeetup(deps: Deps, actor: Actor, id: string, participantMemberId: string, kind: GatheringKind = "meetup"): Promise<void> {
   return withActiveMember(deps, actor, async (db, current) => {
     const now = deps.clock.now();
-    const meetup = await requireScheduledMeetup(db, actor, id, current.siteId, now, kind);
+    const meetup = await requireScheduledGathering(db, actor, id, current.siteId, now, kind);
     requireHost(meetup, actor);
     const nextHost = meetup.participants.find((person) => person.memberId === participantMemberId && person.memberId !== actor.memberId);
     if (!nextHost) invalid("Choose another Participant as Host.");
     const [active] = await db.select({ id: members.id }).from(members)
       .where(and(eq(members.organisationId, actor.organisationId), eq(members.id, nextHost.memberId), eq(members.status, "active")));
     if (!active) invalid("Choose an Active Participant as Host.");
-    await db.update(gatherings).set({ hostMemberId: nextHost.memberId }).where(meetupWhere(actor.organisationId, id));
+    await db.update(gatherings).set({ hostMemberId: nextHost.memberId }).where(gatheringWhere(actor.organisationId, id));
     await notify(db, actor.organisationId, meetup, await noticeRecipients(db, actor.organisationId, meetup.id),
       "meetup-handed-over", `${firstName(nextHost.name)} is now Host of this ${meetupOrEvent(meetup)}.`, now);
   });
@@ -619,7 +619,7 @@ export async function handOverMeetup(deps: Deps, actor: Actor, id: string, parti
 export async function cancelMeetup(deps: Deps, actor: Actor, id: string, kind: GatheringKind = "meetup"): Promise<void> {
   return withActiveMember(deps, actor, async (db, current) => {
     const now = deps.clock.now();
-    const meetup = await requireScheduledMeetup(db, actor, id, current.siteId, now, kind);
+    const meetup = await requireScheduledGathering(db, actor, id, current.siteId, now, kind);
     requireHost(meetup, actor);
     await cancelOccurrence(db, actor.organisationId, meetup, now);
   });
@@ -627,7 +627,7 @@ export async function cancelMeetup(deps: Deps, actor: Actor, id: string, kind: G
 
 export async function cancelOccurrence(db: Queryable, organisationId: string, meetup: GatheringSummary, now: Date): Promise<void> {
   const recipients = await noticeRecipients(db, organisationId, meetup.id);
-  await db.update(gatherings).set({ status: "cancelled" }).where(meetupWhere(organisationId, meetup.id));
+  await db.update(gatherings).set({ status: "cancelled" }).where(gatheringWhere(organisationId, meetup.id));
   await db.update(invites).set({ state: "expired" }).where(and(eq(invites.organisationId, organisationId), eq(invites.gatheringId, meetup.id), eq(invites.state, "pending")));
   await notify(db, organisationId, meetup, recipients, "meetup-cancelled", `The Host cancelled this ${meetupOrEvent(meetup)}.`, now);
   await db.delete(gatheringMembers).where(and(membershipWhere(organisationId, meetup.id), eq(gatheringMembers.status, "waitlisted")));

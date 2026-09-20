@@ -13,7 +13,7 @@ async function signIn(page: Page, name: string, email: string) {
   await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
 }
 
-test("Members propose an Event with editable Interests and an admin publishes its recurring occurrences", async ({ page, browser, baseURL }) => {
+test("Members propose an Event with editable Interests and an Organisation Admin publishes its recurring occurrences", async ({ page, browser, baseURL }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await signIn(page, "Paige Proposer", "paige@ministry-a.example");
   await page.goto("/events/new");
@@ -55,7 +55,7 @@ test("Members propose an Event with editable Interests and an admin publishes it
   }
 });
 
-test("admins reject with a note, create an Event during extraction failure, invite a Member and reassign its Host", async ({ page, browser, baseURL }) => {
+test("Organisation Admins reject with a note, create an Event during extraction failure, invite a Member and reassign its Host", async ({ page, browser, baseURL }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await signIn(page, "Dan Proposer", "dan@ministry-a.example");
   await page.goto("/events/new");
@@ -74,7 +74,7 @@ test("admins reject with a note, create an Event during extraction failure, invi
     await expect(admin.getByText("Event rejected. The proposer can read your note.", { exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByText("State: rejected", { exact: true })).toBeVisible();
-    await expect(page.getByText("Admin note: Please choose a later date.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Organisation Admin note: Please choose a later date.", { exact: true })).toBeVisible();
     await admin.route("**/api/event-interests", (route) => route.fulfill({ status: 503, body: "Unavailable" }));
     await admin.goto("/admin/events/new");
     await admin.getByRole("combobox", { name: "Add a relevant Interest", exact: true }).selectOption({ label: "SQL" });

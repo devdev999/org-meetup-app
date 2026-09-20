@@ -41,7 +41,7 @@ test("an Event proposal stays private until an Organisation Admin publishes it w
   expect((await ana.eventProposals())[0]).toMatchObject({ state: "approved", note: "Room booking confirmed." });
 });
 
-test("admin Event management includes private and past published Events, excludes proposals and other Organisations, and records the view", async () => {
+test("Organisation Admin Event management includes private and past published Events, excludes proposals and other Organisations, and records the view", async () => {
   const { ana, admin, input } = await setup();
   const bo = await member("bo");
   const pending = await ana.proposeEvent(input);
@@ -123,7 +123,7 @@ test.each(["departed proposer", "retired Activity", "past start"] as const)("app
   expect(h.email.outbox).toEqual([]);
 });
 
-test("retained admin actors recheck authority for Event decisions and management", async () => {
+test("retained Organisation Admin actors recheck authority for Event decisions and management", async () => {
   const { ana, admin, input } = await setup();
   const proposal = await ana.proposeEvent(input);
   const rows = (await admin.roster()).filter((entry) => entry.email !== adminPerson.email);
@@ -218,7 +218,7 @@ test("approval activates Event recurrence once, with shared standing membership,
   expect((await bo.inbox()).filter((notice) => notice.kind === "meetup-cancelled").every((notice) => notice.eventId && notice.message.startsWith("The Host cancelled this Event."))).toBe(true);
 });
 
-test("an admin can reassign an Event Host after it starts without changing past participation or the proposer", async () => {
+test("an Organisation Admin can reassign an Event Host after it starts without changing past participation or the proposer", async () => {
   const { ana, admin, input } = await setup();
   const bo = await member("bo");
   const cy = await member("cy");

@@ -60,7 +60,7 @@ Only the series Host can stop the series. This cancels its future occurrences an
 
 ## Events
 
-Open Events from your profile or home to propose one. A proposal stays private to its proposer and Organisation Admins until approval. The admin queue records approval or rejection, with a required rejection note and an optional approval note. The proposer sees the decision under Your Event proposals and becomes Host on approval. Approval rechecks the start time, Activity, Sites and proposer before publishing. It creates the first occurrence, standing membership and selected Invites together. Rejected proposals create none of these.
+Open Events from your profile or home to propose one. A proposal stays private to its proposer and Organisation Admins until approval. The Organisation Admin queue records approval or rejection, with a required rejection note and an optional approval note. The proposer sees the decision under Your Event proposals and becomes Host on approval. Approval rechecks the start time, Activity, Sites and proposer before publishing. It creates the first occurrence, standing membership and selected Invites together. Rejected proposals create none of these.
 
 Organisation Admins can create an Event directly or reassign the Host of any published occurrence, including past and cancelled Events. Reassignment changes that occurrence's Host without changing participation, the original proposer or the series Host. A new Host can explicitly join a future occurrence, subject to its capacity.
 
@@ -88,7 +88,7 @@ Invitees accept or decline in the app or through Telegram buttons. Accepting tak
 
 Pending invitees receive time, Place, handover and cancellation notices. Cancellation expires pending Invites immediately. The worker expires unanswered Invites at the current start time, checking every minute, and answers are refused from that time even before the worker runs. An Invite does not expire at an old start time after the Host reschedules. Accepted and declined Invites retain their states.
 
-Time, duration and Place edits supersede older pending edit deliveries. Invite retries keep their own delivery preferences and use the current Activity, time, Place and Host. Both Invite and edit notices keep Telegram Accept and Decline buttons for a pending Invite. Earlier inbox notices remain as history.
+Time, duration and Place edits supersede older pending edit deliveries. Invite retries keep their own delivery preferences and original sender while using the current Activity, time and Place. Both Invite and edit notices keep Telegram Accept and Decline buttons for a pending Invite. Earlier inbox notices remain as history.
 
 ### Delivery
 
@@ -262,7 +262,7 @@ Migrations `0011` and `0012` add Availability and allow notices without a Meetup
 
 Migrations `0013` and `0014` add recurring Meetups and RSVP. Upgrade the web and worker together with the same stop, migrate and restart sequence. Once series or RSVP prompts exist, rollback to earlier images is unsupported because they cannot manage recurrence or deliver the correct RSVP actions. Deploy a forward fix.
 
-Migration `0015` adds Event proposals and the unused sharing relationship, and makes occurrence and series capacity nullable for uncapped Events. Stop the web and worker, migrate, then restart both with this release. Existing Meetup capacities, participation, recurrence and notices are preserved. Once Events exist, earlier images cannot safely process them or display their actions, so deploy a forward fix instead of rolling back.
+Migration `0015` adds Event proposals and the unused sharing relationship, and makes occurrence and series capacity nullable for uncapped Events. Migration `0016` preserves the original Invite sender when retries refresh the meeting details, including existing Invites. Stop the web and worker, migrate, then restart both with this release. Existing Meetup capacities, participation, recurrence and notices are preserved. Once Events exist, earlier images cannot safely process them or display their actions, so deploy a forward fix instead of rolling back.
 
 For an existing local Compose stack, leave Postgres running and run these steps in order. Continue only when each command succeeds:
 

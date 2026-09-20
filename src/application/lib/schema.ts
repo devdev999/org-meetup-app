@@ -414,6 +414,7 @@ export const notices = pgTable("notices", {
   kind: text().$type<NoticeKind>().notNull(),
   message: text().notNull(),
   externalMessage: text().notNull().default(""),
+  messagePrefix: text(),
   createdAt: timestamptz().notNull(),
   position: serial().notNull(),
 }, (table) => [

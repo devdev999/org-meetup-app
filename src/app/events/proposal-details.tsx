@@ -14,6 +14,6 @@ export function ProposalDetails({ proposal }: { proposal: EventProposal }) {
     {proposal.description && <p className="meetup-description">{proposal.description}</p>}
     {proposal.relevantInterests.length > 0 && <p>Relevant Interests: {proposal.relevantInterests.map((interest) => interest.name).join(", ")}</p>}
     {proposal.invitedMemberIds.length > 0 && <p>{proposal.invitedMemberIds.length} selected invitees. Invites are sent on approval.</p>}
-    {proposal.note && <p className="notice">Admin note: {proposal.note}</p>}
+    {proposal.note && <p className="notice">Organisation Admin note: {proposal.note}</p>}
   </>;
 }

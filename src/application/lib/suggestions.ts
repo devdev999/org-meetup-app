@@ -6,7 +6,7 @@ import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
 import { interestChoiceSchema, listInterests, memberInterestList, memberInterestsFor, type Interest, type InterestChoice } from "./interests";
 import { relevantInterests, relevantInterestsFor } from "./meetup-interests";
-import { readMeetups, validSite, visibleMeetups, type EventSummary, type GatheringKind, type GatheringSummary, type InviteChoices, type MeetupSummary } from "./meetups";
+import { readGatherings, validSite, visibleGatherings, type EventSummary, type GatheringKind, type GatheringSummary, type InviteChoices, type MeetupSummary } from "./meetups";
 import { departments, gatheringMembers, gatherings, invites, members, sites } from "./schema";
 import { rankInvitees, rankMeetups } from "./suggestion-ranking";
 
@@ -65,7 +65,7 @@ async function gatheringSuggestions(deps: Deps, actor: Actor, kind: GatheringKin
   const now = deps.clock.now();
   const until = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
   const meetups = await deps.db.select({ id: gatherings.id, hostMemberId: gatherings.hostMemberId, startsAt: gatherings.startsAt }).from(gatherings)
-    .where(and(visibleMeetups(actor, current.siteId, kind), eq(gatherings.status, "scheduled"), eq(gatherings.audienceKind, "open"),
+    .where(and(visibleGatherings(actor, current.siteId, kind), eq(gatherings.status, "scheduled"), eq(gatherings.audienceKind, "open"),
       gt(gatherings.startsAt, now), lte(gatherings.startsAt, until), ne(gatherings.hostMemberId, actor.memberId),
       sql`not exists (select 1 from ${gatheringMembers} where ${gatheringMembers.organisationId} = ${gatherings.organisationId} and ${gatheringMembers.gatheringId} = ${gatherings.id} and ${gatheringMembers.memberId} = ${actor.memberId})`));
   if (!meetups.length) return [];
@@ -80,7 +80,7 @@ async function gatheringSuggestions(deps: Deps, actor: Actor, kind: GatheringKin
     meetupId: meetup.id, startsAt: meetup.startsAt, connectionCount: 0,
     interests: interestsByMeetup.get(meetup.id) ?? [], hostInterests: interestsByHost.get(meetup.hostMemberId) ?? [],
   })), kind).slice(0, 20);
-  const details = new Map((await readMeetups(deps.db, actor, ranked.map((entry) => entry.meetupId), current.siteId, now)).map((meetup) => [meetup.id, meetup]));
+  const details = new Map((await readGatherings(deps.db, actor, ranked.map((entry) => entry.meetupId), current.siteId, now)).map((meetup) => [meetup.id, meetup]));
   const results = ranked.map(({ meetupId, reasons }) => {
     const detail = details.get(meetupId);
     if (!detail || detail.kind !== kind || detail.status !== "scheduled" || detail.audience.kind !== "open" || detail.membership !== null

@@ -71,6 +71,39 @@ test.each(["meetup", "event"] as const)("%s Invite retries retain their preferen
   expect(await bo.answerInvite(invite.id, "accept")).toMatchObject({ membership: "participant" });
 });
 
+test.each(["meetup", "event"] as const)("%s Invite retries preserve their sender after the Host changes", async (kind) => {
+  const host = participationFor(await setup(), kind);
+  const bo = await member("Bo");
+  const nextHost = participationFor(await member("Cy"), kind);
+  const meetup = await createMeetup(host, false, kind);
+  await nextHost.join(meetup.id);
+  const link = await bo.beginTelegramLink();
+  await h.app.handleTelegram({ kind: "link", chatId: "102", code: new URL(link.url).searchParams.get("start")! });
+  await bo.setNoticePreference({ kind: "meetup-edited", telegram: false, email: false });
+  await bo.setNoticePreference({ kind: "meetup-handed-over", telegram: false, email: false });
+  h.telegram.reset();
+  h.email.reset();
+  h.telegram.failure = new Error("Offline");
+  h.email.failure = new Error("Offline");
+  const invite = await host.invite(meetup.id, (await bo.profile()).memberId);
+  const original = (await bo.inbox())[0];
+  if (kind === "event") {
+    const adminMember = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "event-admin", email: "event-admin@example.test", name: "Event Admin" });
+    await (await adminMember.organisationAdmin()).reassignEventHost(meetup.id, (await nextHost.profile()).memberId);
+  } else await host.handOver(meetup.id, (await nextHost.profile()).memberId);
+  await nextHost.edit(meetup.id, { startsAt: new Date("2026-09-18T11:00:00Z"), durationMinutes: 60, capacity: 2, place: { kind: "virtual", url: "https://meet.example/new-room" } });
+  h.telegram.failure = undefined;
+  h.email.failure = undefined;
+  h.clock.set(new Date("2026-09-18T09:02:00Z"));
+  await h.app.deliverNotices();
+  const prefix = kind === "event" ? "Ana invited you to an Event." : "Ana invited you to a Meetup.";
+  expect(h.email.outbox.filter((notice) => notice.to === "bo@example.test")).toEqual([
+    expect.objectContaining({ text: `${prefix} coffee, 2026-09-18 11:00 UTC, https://meet.example/new-room.` }),
+  ]);
+  expect(h.telegram.outbox).toEqual([{ chatId: "102", inviteId: invite.id, text: `${prefix} coffee, 2026-09-18 11:00 UTC, Online.` }]);
+  expect(await bo.inbox()).toContainEqual(original);
+});
+
 test("Event Invite answers name the Event in Telegram notices", async () => {
   const host = participationFor(await setup(), "event");
   const bo = await member("Bo");
