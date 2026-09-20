@@ -378,9 +378,8 @@ export async function noticeRecipients(db: Queryable, organisationId: string, me
 
 export async function notify(db: Queryable, organisationId: string, gathering: GatheringSummary, recipients: string[], kind: Notice["kind"], message: string, now: Date) {
   const place = gathering.place.kind === "physical" ? `${gathering.place.spot}, ${gathering.place.siteName}` : gathering.place.url;
-  const externalPlace = gathering.place.kind === "physical" ? place : "Online";
   await recordNotices(db, organisationId, recipients, {
-    gatheringId: gathering.id, kind, ...gatheringNoticeText({ message, activity: gathering.activity.name, startsAt: gathering.startsAt, place, externalPlace }),
+    gatheringId: gathering.id, kind, ...gatheringNoticeText({ message, activity: gathering.activity.name, startsAt: gathering.startsAt, place, placeKind: gathering.place.kind }),
   }, now);
 }
 

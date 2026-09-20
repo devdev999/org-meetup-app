@@ -11,10 +11,10 @@ import { activities, gatheringRsvps, gatherings, invites, members, noticeDeliver
 
 export interface NoticePreference { kind: NoticeKind; telegram: boolean; email: boolean }
 
-export function gatheringNoticeText(input: { message: string; activity: string; startsAt: Date; place: string; externalPlace: string }) {
+export function gatheringNoticeText(input: { message: string; activity: string; startsAt: Date; place: string; placeKind: "physical" | "virtual" }) {
   const time = `${input.startsAt.toISOString().slice(0, 16).replace("T", " ")} UTC`;
   const line = (place: string) => `${input.message} ${input.activity}, ${time}, ${place}.`;
-  return { message: line(input.place), externalMessage: line(input.externalPlace), messagePrefix: input.message };
+  return { message: line(input.place), externalMessage: line(input.placeKind === "virtual" ? "Online" : input.place), messagePrefix: input.message };
 }
 
 const URGENT_KINDS: NoticeKind[] = ["meetup-joined", "meetup-promoted", "meetup-cancelled", "meetup-edited", "invite-received", "invite-accepted", "availability-overlap", "rsvp-prompt", "attendance-prompt"];
@@ -196,7 +196,7 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
         message: row.notice.messagePrefix,
         activity: row.activityName, startsAt: row.gathering.startsAt,
         place: row.gathering.placeKind === "physical" ? `${row.gathering.placeSpot}, ${row.siteName}` : row.gathering.placeUrl!,
-        externalPlace: row.gathering.placeKind === "physical" ? `${row.gathering.placeSpot}, ${row.siteName}` : "Online",
+        placeKind: row.gathering.placeKind,
       }) : row?.notice;
     const send = async () => {
       if (!row || !VISIBLE_MEMBER_STATUSES.includes(row.member.status) || !channelEnabled(preference, delivery.channel)) return;

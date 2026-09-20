@@ -64,7 +64,8 @@ export async function readAttendanceHistory(db: Queryable, actor: Actor, now: Da
 }
 
 export async function attendance(deps: Deps, actor: Actor, id: string): Promise<Attendance | undefined> {
-  return withActiveMember(deps, actor, async (db) => {
+  return deps.db.transaction(async (db) => {
+    await requireActiveMember(db, actor);
     if (!isUuid(id)) return undefined;
     const [row] = await db.select({ gathering: gatherings, hostName: members.name }).from(gatherings)
       .innerJoin(members, and(eq(members.organisationId, gatherings.organisationId), eq(members.id, gatherings.hostMemberId)))
@@ -105,14 +106,14 @@ export async function attendance(deps: Deps, actor: Actor, id: string): Promise<
       checklist: checklist ? [...checklist.values()].map(({ memberId, name }) => ({ memberId, name, attended: present.some((person) => person.memberId === memberId) }))
         .sort((a, b) => a.name.localeCompare(b.name) || a.memberId.localeCompare(b.memberId)) : null,
     };
-  });
+  }, { isolationLevel: "repeatable read", accessMode: "read only" });
 }
 
 export async function confirmAttendance(deps: Deps, actor: Actor, id: string, memberIds: string[]): Promise<void> {
-  await withActiveMember(deps, actor, (db) => saveAttendance(db, actor, id, memberIds, deps.clock.now()));
+  await withActiveMember(deps, actor, (db) => saveAttendance(db, actor, id, { memberIds }, deps.clock.now()));
 }
 
-async function saveAttendance(db: Queryable, actor: Actor, id: string, memberIds: string[], now: Date): Promise<void> {
+async function saveAttendance(db: Queryable, actor: Actor, id: string, selection: { memberIds: string[] } | { everyone: true }, now: Date): Promise<void> {
   if (!isUuid(id)) throw new AccessDeniedError();
   const [entry] = await db.select({ gathering: gatherings, activityName: activities.name, siteName: sites.name }).from(gatherings)
     .innerJoin(activities, and(eq(activities.organisationId, gatherings.organisationId), eq(activities.id, gatherings.activityId)))
@@ -124,14 +125,14 @@ async function saveAttendance(db: Queryable, actor: Actor, id: string, memberIds
   if (gathering.status !== "scheduled" && gathering.status !== "completed" || now < endsAt || now >= closesAt) {
     throw new InvalidInputError("invalid-attendance", "Confirm Attendance after the end and within seven days.");
   }
-  const parsed = z.array(z.uuid()).safeParse(memberIds);
+  const parsed = z.array(z.uuid()).safeParse("memberIds" in selection ? selection.memberIds : []);
   if (!parsed.success) throw new InvalidInputError("invalid-attendance", "Choose who came from the Attendance checklist.");
-  const selected = [...new Set(parsed.data)];
   const participants = await db.select({ memberId: gatheringMembers.memberId }).from(gatheringMembers)
     .where(and(eq(gatheringMembers.organisationId, actor.organisationId), eq(gatheringMembers.gatheringId, id), eq(gatheringMembers.status, "participant")));
   const previous = await db.select({ memberId: attendanceMembers.memberId, attended: attendanceMembers.attended }).from(attendanceMembers)
     .where(and(eq(attendanceMembers.organisationId, actor.organisationId), eq(attendanceMembers.gatheringId, id)));
   const eligible = new Set([gathering.hostMemberId, ...participants.map((person) => person.memberId), ...previous.map((person) => person.memberId)]);
+  const selected = "everyone" in selection ? [...eligible] : [...new Set(parsed.data)];
   if (selected.some((memberId) => !eligible.has(memberId))) throw new InvalidInputError("invalid-attendance", "Choose who came from the Attendance checklist.");
   const [record] = await db.select({ confirmedAt: attendanceRecords.confirmedAt }).from(attendanceRecords)
     .where(and(eq(attendanceRecords.organisationId, actor.organisationId), eq(attendanceRecords.gatheringId, id)));
@@ -145,7 +146,7 @@ async function saveAttendance(db: Queryable, actor: Actor, id: string, memberIds
   await recordNotices(db, actor.organisationId, [gathering.hostMemberId, ...participants.map((person) => person.memberId), ...selected], {
     gatheringId: id, kind: "attendance-confirmed",
     ...gatheringNoticeText({ message: `The Host ${record?.confirmedAt ? "amended" : "recorded"} Attendance for this ${meetupOrEvent(gathering)}.`,
-      activity: entry.activityName, startsAt: gathering.startsAt, place, externalPlace: gathering.placeKind === "physical" ? place : "Online" }),
+      activity: entry.activityName, startsAt: gathering.startsAt, place, placeKind: gathering.placeKind }),
   }, now);
 }
 
@@ -159,11 +160,7 @@ export async function confirmAttendancePrompt(deps: Deps, actor: Actor, noticeId
     const prompt = await attendancePromptState(db, actor.organisationId, id);
     if (prompt.latestNoticeId !== noticeId) throw new AccessDeniedError();
     if (prompt.confirmedAt) throw new InvalidInputError("invalid-attendance", "Attendance is already recorded. Amend it in the app.");
-    const participants = await db.select({ memberId: gatheringMembers.memberId }).from(gatheringMembers)
-      .where(and(eq(gatheringMembers.organisationId, actor.organisationId), eq(gatheringMembers.gatheringId, id), eq(gatheringMembers.status, "participant")));
-    const retained = await db.select({ memberId: attendanceMembers.memberId }).from(attendanceMembers)
-      .where(and(eq(attendanceMembers.organisationId, actor.organisationId), eq(attendanceMembers.gatheringId, id)));
-    await saveAttendance(db, actor, id, [actor.memberId, ...participants.map((person) => person.memberId), ...retained.map((person) => person.memberId)], deps.clock.now());
+    await saveAttendance(db, actor, id, { everyone: true }, deps.clock.now());
     return id;
   });
 }
@@ -195,7 +192,7 @@ export async function processAttendance(deps: Deps): Promise<void> {
         await recordNotices(db, organisationId, [gathering.hostMemberId], {
           gatheringId: gathering.id, kind: "attendance-prompt",
           ...gatheringNoticeText({ message: `Confirm who came to this ${meetupOrEvent(gathering)}.`, activity: activityName,
-            startsAt: gathering.startsAt, place, externalPlace: gathering.placeKind === "physical" ? place : "Online" }),
+            startsAt: gathering.startsAt, place, placeKind: gathering.placeKind }),
         }, now);
         await db.insert(attendanceRecords).values({ organisationId, gatheringId: gathering.id, promptedHostMemberId: gathering.hostMemberId })
           .onConflictDoUpdate({ target: [attendanceRecords.organisationId, attendanceRecords.gatheringId], set: { promptedHostMemberId: gathering.hostMemberId } });

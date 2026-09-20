@@ -70,6 +70,24 @@ test.each(["meetup", "event"] as const)("amending %s Attendance corrects no-show
   expect(await bo.attendance(second.id)).toMatchObject({ outcome: "no-show" });
 });
 
+test("concurrent Attendance reads see a consistent confirmation and checklist", async () => {
+  const { ana, input } = await setup();
+  const bo = await member("Bo");
+  const occurrence = await ana.createMeetup(input);
+  await bo.joinMeetup(occurrence.id);
+  const memberIds = [(await ana.profile()).memberId, (await bo.profile()).memberId];
+  h.clock.set(new Date("2026-09-18T11:00:00Z"));
+  const reads = Array.from({ length: 8 }, () => ana.attendance(occurrence.id));
+  await ana.confirmAttendance(occurrence.id, memberIds);
+  for (const snapshot of await Promise.all(reads)) {
+    expect(snapshot).toBeDefined();
+    expect(snapshot!.outcome).toBe(snapshot!.confirmedAt ? "attended" : "unknown");
+    expect(snapshot!.checklist).toHaveLength(2);
+    expect(snapshot!.checklist!.every((person) => person.attended === Boolean(snapshot!.confirmedAt))).toBe(true);
+  }
+  expect(await ana.attendance(occurrence.id)).toMatchObject({ outcome: "attended" });
+});
+
 test.each(["meetup", "event"] as const)("only seated Going Participants can be no-shows in a recurring %s", async (kind) => {
   const { ana, input } = await setup();
   const bo = await member("Bo");
