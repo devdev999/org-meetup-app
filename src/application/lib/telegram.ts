@@ -78,7 +78,7 @@ export async function handleTelegram(deps: Deps, command: TelegramCommand): Prom
         } else if (command.kind === "answer-rsvp") {
           const status = await answerRsvp(deps, actor, command.meetupId, command.answer);
           gatheringId = command.meetupId;
-          text = status === null ? "Not going recorded. Your standing place is kept."
+          text = status === null ? "Not going recorded for this occurrence."
             : status === "waitlisted" ? "Going recorded. You are on the waitlist." : "Going recorded. You have a place.";
         } else {
           const result = await answerInvite(deps, actor, command.inviteId, command.answer);
