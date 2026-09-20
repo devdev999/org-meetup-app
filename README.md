@@ -232,6 +232,19 @@ pnpm db:generate     # writes drizzle/NNNN_name.sql; commit it
 pnpm db:setup        # applies it locally
 ```
 
-Apply migrations before deploying the code that needs them: both the web and worker processes query the columns a migration adds, so new code on the old schema fails every worker tick. The migrations are additive, so rolling back to the previous code leaves the new columns unused rather than broken.
+Apply migrations before starting the web and worker code that needs them. Check each migration's compatibility before upgrading or reverting an image.
+
+Migrations `0011` and `0012` add Availability and allow notices without a Meetup. Earlier web and worker versions cannot read these notices safely. Stop every old web and worker instance before applying these migrations, then start both at the new version. Do not run mixed versions.
+
+For an existing local Compose stack, leave Postgres running and run these steps in order. Continue only when each command succeeds:
+
+```sh
+docker compose build web setup
+docker compose stop web worker
+docker compose run --rm --no-deps setup
+docker compose up -d --no-deps web worker
+```
+
+If setup fails, keep the web and worker stopped until it is resolved. Compose's setup dependency does not stop already-running processes during an upgrade. Once Availability notices exist, rollback to earlier images is unsupported; deploy a forward fix. Restoring a pre-upgrade database backup would lose changes made after that backup.
 
 Every table except platform configuration carries `organisation_id`. The application derives the Organisation from the actor, never from input.

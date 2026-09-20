@@ -174,7 +174,7 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
     const send = async () => {
       if (!row || !VISIBLE_MEMBER_STATUSES.includes(row.member.status) || !channelEnabled(preference, delivery.channel)) return;
       if (delivery.channel === "email") {
-        await deps.email.sendMessage({ id: row.notice.id, to: row.member.email, subject: "Meetup notice", text: row.notice.message });
+        await deps.email.sendMessage({ id: row.notice.id, to: row.member.email, subject: row.notice.kind === "availability-overlap" ? "Availability overlap" : "Meetup notice", text: row.notice.message });
       } else if (link) {
         await deps.telegram.sendMessage({
           chatId: link.chatId, text: row.notice.externalMessage,
