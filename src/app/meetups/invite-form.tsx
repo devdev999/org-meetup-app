@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { respondToInvite, sendInvite, type MeetupActionState } from "./actions";
+import { answerInvite, sendInvite, type MeetupActionState } from "./actions";
 
 export function InviteForm({ meetupId, members }: { meetupId: string; members: { memberId: string; name: string }[] }) {
   const [state, action, pending] = useActionState<MeetupActionState, FormData>(
@@ -23,9 +23,9 @@ export function InviteForm({ meetupId, members }: { meetupId: string; members: {
   );
 }
 
-export function InviteResponse({ inviteId }: { inviteId: string }) {
+export function InviteAnswerForm({ inviteId }: { inviteId: string }) {
   const [state, action, pending] = useActionState<MeetupActionState, FormData>(
-    (_previous, form) => respondToInvite(inviteId, form), {},
+    (_previous, form) => answerInvite(inviteId, form), {},
   );
   return (
     <form action={action}>

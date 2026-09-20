@@ -85,4 +85,10 @@ test("Telegram Invite buttons accept or decline only for the linked invitee and 
     "Bo accepted your Invite. coffee, 2026-09-18 10:00 UTC, Online.",
     "Cy declined your Invite. coffee, 2026-09-18 10:00 UTC, Online.",
   ]);
+  await bo.leaveMeetup(meetup.id);
+  await webhook(callback(102, "accept", invite.id));
+  expect(h.telegram.answers.at(-1)).toEqual({
+    callbackId: "102-accept", text: "Your Invite was accepted, but you no longer have a place in this Meetup.",
+  });
+  expect((await bo.viewMeetup(meetup.id))?.membership).toBeNull();
 });

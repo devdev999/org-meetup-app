@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireMemberPastWelcome } from "../../../web/session";
 import { MeetupTime } from "../meetup-time";
 import { MeetupAction } from "../meetup-action";
-import { InviteForm, InviteResponse } from "../invite-form";
+import { InviteAnswerForm } from "../invite-form";
 
 export default async function MeetupPage({ params }: { params: Promise<{ id: string }> }) {
   const { member } = await requireMemberPastWelcome();
@@ -12,7 +12,6 @@ export default async function MeetupPage({ params }: { params: Promise<{ id: str
   if (!meetup) notFound();
   const isHost = meetup.membership === "host";
   const otherParticipants = meetup.participants.filter((participant) => participant.memberId !== meetup.host.memberId);
-  const invitees = isHost && meetup.canChange ? await member.inviteChoices(meetup.id) : [];
   return (
     <main>
       <nav className="member-nav" aria-label="Member navigation">
@@ -42,7 +41,8 @@ export default async function MeetupPage({ params }: { params: Promise<{ id: str
         <section>
           <h2>Your Invite</h2>
           <p>Your Invite is {meetup.invite.state}.</p>
-          {meetup.canChange && meetup.invite.state === "pending" && <InviteResponse inviteId={meetup.invite.id} />}
+          {meetup.invite.state === "accepted" && !meetup.membership && <p>You no longer have a place in this Meetup.</p>}
+          {meetup.canChange && meetup.invite.state === "pending" && <InviteAnswerForm inviteId={meetup.invite.id} />}
         </section>
       )}
       {meetup.canChange && !meetup.membership && meetup.audience.kind === "open" && meetup.invite?.state !== "pending" && (
@@ -68,8 +68,7 @@ export default async function MeetupPage({ params }: { params: Promise<{ id: str
       {isHost && meetup.canChange && (
         <section>
           <h2>Manage Meetup</h2>
-          <h3>Invite a Member</h3>
-          <InviteForm meetupId={meetup.id} members={invitees} />
+          <p><Link href={`/meetups/${meetup.id}/invite`}>Invite a Member</Link></p>
           <p><Link href={`/meetups/${meetup.id}/edit`}>Edit Meetup</Link></p>
           {otherParticipants.length > 0 && (
             <>

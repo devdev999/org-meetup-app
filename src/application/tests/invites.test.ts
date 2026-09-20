@@ -62,6 +62,54 @@ test("only the invitee can answer, accepting seats them and declining records th
   await cy.answerInvite(declined.id, "decline");
   expect((await cy.viewMeetup(meetup.id))?.membership).toBeNull();
   expect((await host.inbox()).map((notice) => notice.kind)).toEqual(["invite-declined", "invite-accepted"]);
+  const inbox = await cy.inbox();
+  expect(await host.inviteMember(meetup.id, (await cy.profile()).memberId)).toMatchObject({ id: declined.id, state: "declined" });
+  expect(await cy.inbox()).toEqual(inbox);
+});
+
+test("an invited Participant can become Host and retry their answer while pending invitees hear about the handover", async () => {
+  const host = await setup();
+  const bo = await member("Bo");
+  const cy = await member("Cy");
+  const meetup = await createMeetup(host);
+  const boId = (await bo.profile()).memberId;
+  const accepted = await host.inviteMember(meetup.id, boId);
+  await bo.answerInvite(accepted.id, "accept");
+  const pending = await host.inviteMember(meetup.id, (await cy.profile()).memberId);
+  await host.handOverMeetup(meetup.id, boId);
+  expect(await bo.answerInvite(accepted.id, "accept")).toMatchObject({ state: "accepted", membership: "participant" });
+  expect(await bo.viewMeetup(meetup.id)).toMatchObject({ membership: "host", invite: { id: accepted.id } });
+  expect((await bo.viewMeetup(meetup.id))?.invites).toHaveLength(2);
+  expect((await host.viewMeetup(meetup.id))?.invites).toBeNull();
+  expect((await cy.inbox())[0]?.kind).toBe("meetup-handed-over");
+  await cy.answerInvite(pending.id, "accept");
+  expect((await bo.inbox()).filter((notice) => notice.kind === "invite-accepted")).toHaveLength(1);
+  expect((await host.inbox()).filter((notice) => notice.kind === "invite-accepted")).toHaveLength(1);
+});
+
+test.each([["accept", "accepted"], ["decline", "declined"]] as const)("answering %s keeps an independently joined place", async (answer, state) => {
+  const host = await setup();
+  const bo = await member("Bo");
+  const meetup = await createMeetup(host, false);
+  const invite = await host.inviteMember(meetup.id, (await bo.profile()).memberId);
+  await bo.joinMeetup(meetup.id);
+  expect(await bo.answerInvite(invite.id, answer)).toMatchObject({ state, membership: "participant" });
+  expect((await host.viewMeetup(meetup.id))?.participantCount).toBe(2);
+  if (answer === "decline") expect((await host.inbox())[0]?.message).toContain("They remain a Participant.");
+});
+
+test("declining an Invite keeps an independent waitlist entry and tells the Host that the Member is still waiting", async () => {
+  const host = await setup();
+  const bo = await member("Bo");
+  const cy = await member("Cy");
+  const meetup = await createMeetup(host, false);
+  await bo.joinMeetup(meetup.id);
+  await cy.joinMeetup(meetup.id);
+  const invite = await host.inviteMember(meetup.id, (await cy.profile()).memberId);
+  expect(await cy.answerInvite(invite.id, "decline")).toMatchObject({ state: "declined", membership: "waitlisted" });
+  expect((await host.inbox())[0]?.message).toContain("They remain on the waitlist.");
+  await bo.leaveMeetup(meetup.id);
+  expect((await cy.viewMeetup(meetup.id))?.membership).toBe("participant");
 });
 
 test("accepting moves an invitee to the front of a full Meetup's waitlist, including an existing joiner", async () => {
@@ -169,13 +217,13 @@ test("only the Host can list Invite choices, including Provisioned and waitliste
   await bo.joinMeetup(meetup.id);
   await cy.joinMeetup(meetup.id);
   await host.inviteMember(meetup.id, (await di.profile()).memberId);
-  expect(await host.inviteChoices(meetup.id)).toEqual([
+  expect((await host.inviteChoices(meetup.id)).members).toEqual([
     { memberId: (await cy.profile()).memberId, name: "Cy Member" },
     { memberId: (await host.searchMembers()).find((candidate) => candidate.name === "Pat Platform")!.memberId, name: "Pat Platform" },
   ]);
   await expect(bo.inviteChoices(meetup.id)).rejects.toMatchObject({ name: "AccessDeniedError" });
   await host.inviteMember(meetup.id, (await cy.profile()).memberId);
-  expect((await host.inviteChoices(meetup.id)).map((candidate) => candidate.name)).toEqual(["Pat Platform"]);
+  expect((await host.inviteChoices(meetup.id)).members.map((candidate) => candidate.name)).toEqual(["Pat Platform"]);
 });
 
 test("an Organisation Admin's Invite choices record access in the audit log", async () => {
@@ -185,8 +233,35 @@ test("an Organisation Admin's Invite choices record access in the audit log", as
   const meetup = await createMeetup(host);
   await host.inviteChoices(meetup.id);
   expect(await (await host.organisationAdmin()).auditLog()).toContainEqual(expect.objectContaining({
-    actorMemberId: (await host.profile()).memberId, action: "meetup-invite-choices", filter: { meetupId: meetup.id },
+    actorMemberId: (await host.profile()).memberId, action: "meetup-invite-choices", filter: { meetupId: meetup.id, name: "", page: "0" },
   }));
+});
+
+test("a Host can narrow Invite choices by a case-insensitive literal name", async () => {
+  const host = await setup();
+  const bo = await member("Bo");
+  await member("Cy");
+  const meetup = await createMeetup(host);
+  expect(await host.inviteChoices(meetup.id, { name: " BO " })).toEqual({
+    members: [{ memberId: (await bo.profile()).memberId, name: "Bo Member" }], hasMore: false,
+  });
+  expect(await host.inviteChoices(meetup.id, { name: "%" })).toEqual({ members: [], hasMore: false });
+});
+
+test("Invite choices use stable pages of twenty Members without losing later matches", async () => {
+  const host = await setup();
+  for (let index = 1; index <= 21; index++) await member(`Candidate${String(index).padStart(2, "0")}`);
+  const meetup = await createMeetup(host);
+  const first = await host.inviteChoices(meetup.id, { name: "Candidate" });
+  expect(first.members).toHaveLength(20);
+  expect(first.members[0]?.name).toBe("Candidate01 Member");
+  expect(first.members.at(-1)?.name).toBe("Candidate20 Member");
+  expect(first.hasMore).toBe(true);
+  const second = await host.inviteChoices(meetup.id, { name: "Candidate", page: 1 });
+  expect(second.members.map((candidate) => candidate.name)).toEqual(["Candidate21 Member"]);
+  expect(second.hasMore).toBe(false);
+  expect(await host.inviteChoices(meetup.id, { name: "Candidate", page: 0 })).toEqual(first);
+  await expect(host.inviteChoices(meetup.id, { page: -1 })).rejects.toMatchObject({ code: "invalid-meetup" });
 });
 
 test("concurrent Invite answers and ordinary joins cannot exceed capacity or duplicate answers", async () => {

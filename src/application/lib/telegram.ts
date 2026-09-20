@@ -68,6 +68,7 @@ export async function handleTelegram(deps: Deps, command: TelegramCommand): Prom
           const result = await answerInvite(deps, actor, command.inviteId, command.answer);
           gatheringId = result.meetupId;
           text = result.state === "declined" ? "Invite declined."
+            : result.membership === null ? "Your Invite was accepted, but you no longer have a place in this Meetup."
             : result.membership === "waitlisted" ? "Invite accepted. You are on the waitlist." : "Invite accepted.";
         }
       } catch (error) {
