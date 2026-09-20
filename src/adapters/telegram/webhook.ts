@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import type { Application } from "../../application/index";
+import { parseAvailabilityCallback } from "./availability-callback";
 
 const sender = z.object({ id: z.number().int().positive(), is_bot: z.boolean() });
 const chat = z.object({ id: z.number().int(), type: z.string() });
@@ -26,8 +27,13 @@ export function createTelegramWebhook(application: Application, secret: string |
     if (message?.from && !message.from.is_bot && message.chat.type === "private" && message.chat.id === message.from.id) {
       const code = message.text?.match(/^\/start(?:@[A-Za-z0-9_]+)?\s+([A-Za-z0-9_-]{1,64})$/)?.[1];
       if (code) await application.handleTelegram({ kind: "link", chatId: String(message.chat.id), code });
+      if (message.text?.match(/^\/available(?:@[A-Za-z0-9_]+)?$/)) {
+        await application.handleTelegram({ kind: "availability-menu", chatId: String(message.chat.id) });
+      }
     }
     if (callback?.message && !callback.from.is_bot && callback.message.chat.type === "private" && callback.message.chat.id === callback.from.id) {
+      const availability = callback.data ? parseAvailabilityCallback(callback.data) : undefined;
+      if (availability) await application.handleTelegram({ ...availability, chatId: String(callback.from.id), callbackId: callback.id });
       const meetupId = callback.data?.startsWith("join:") ? callback.data.slice(5) : undefined;
       if (meetupId) await application.handleTelegram({ kind: "join", chatId: String(callback.from.id), callbackId: callback.id, meetupId });
       const inviteAnswer = callback.data?.match(/^(accept|decline):(.+)$/);

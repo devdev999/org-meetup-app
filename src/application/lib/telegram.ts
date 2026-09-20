@@ -1,16 +1,21 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt } from "drizzle-orm";
+import { z } from "zod";
 import { requireActiveMember, withActiveMember, type Actor } from "./actor";
 import type { Deps } from "./deps";
 import { AccessDeniedError, AdminVisibilityNoticeRequiredError, InvalidInputError } from "./errors";
-import { answerInvite, joinMeetup } from "./meetups";
+import { answerInvite, joinMeetup, meetupChoices } from "./meetups";
 import { deliverSoon } from "./notifications";
 import { organisations, telegramLinkCodes, telegramLinks } from "./schema";
+import { postAvailability } from "./availability";
+import type { TelegramAvailabilityAction, TelegramMessage } from "../ports";
 
 export interface TelegramLink { url: string; expiresAt: Date }
 export type TelegramCommand = { kind: "link"; chatId: string; code: string }
   | { kind: "join"; chatId: string; callbackId: string; meetupId: string }
-  | { kind: "answer-invite"; chatId: string; callbackId: string; inviteId: string; answer: "accept" | "decline" };
+  | { kind: "answer-invite"; chatId: string; callbackId: string; inviteId: string; answer: "accept" | "decline" }
+  | { kind: "availability-menu"; chatId: string }
+  | (TelegramAvailabilityAction & { chatId: string; callbackId: string });
 
 function hash(code: string): string {
   return createHash("sha256").update(code).digest("hex");
@@ -54,6 +59,10 @@ async function linkTelegram(deps: Deps, code: string, chatId: string): Promise<b
 }
 
 export async function handleTelegram(deps: Deps, command: TelegramCommand): Promise<void> {
+  if (command.kind === "availability-menu" || command.kind === "availability-activity" || command.kind === "availability-post") {
+    await handleAvailabilityTelegram(deps, command);
+    return;
+  }
   if (command.kind !== "link") {
     const [actor] = await deps.db.select().from(telegramLinks).where(eq(telegramLinks.chatId, command.chatId));
     let text = "Link Telegram from notification settings in the app first.";
@@ -99,4 +108,64 @@ export async function handleTelegram(deps: Deps, command: TelegramCommand): Prom
   } catch {
     console.error("telegram: sending the link confirmation failed");
   }
+}
+
+async function handleAvailabilityTelegram(deps: Deps, command: Extract<TelegramCommand, { kind: "availability-menu" | "availability-activity" | "availability-post" }>): Promise<void> {
+  const [actor] = await deps.db.select().from(telegramLinks).where(eq(telegramLinks.chatId, command.chatId));
+  let text = "Link Telegram from notification settings in the app first.";
+  let message: TelegramMessage | undefined;
+  let posted = false;
+  if (actor) {
+    try {
+      const choices = await meetupChoices(deps, actor);
+      if (command.kind === "availability-menu") {
+        message = {
+          chatId: command.chatId, text: choices.activities.length ? "What are you free for? Choose an Activity." : "No Activities are available. Open the app to check with your Organisation Admin.",
+          buttons: choices.activities.map((activity) => [{ text: activity.name, action: { kind: "availability-activity", activityId: activity.id } }]),
+        };
+      } else if (command.kind === "availability-activity") {
+        const activity = choices.activities.find((entry) => entry.id === command.activityId);
+        if (!activity) throw new InvalidInputError("invalid-availability", "Activity unavailable.");
+        const issuedAt = new Date(Math.floor(deps.clock.now().getTime() / 1000) * 1000);
+        const kinds = choices.sites.some((site) => site.id === choices.defaultSiteId) ? ["physical", "virtual"] as const : ["virtual"] as const;
+        message = {
+          chatId: command.chatId, text: `${activity.name}: choose a window. Windows end by midnight UTC.`,
+          buttons: kinds.flatMap((kind) => [30, 60].map((minutes) => [{
+            text: `Now for ${minutes} minutes ${kind === "physical" ? "at my Site" : "virtually"}`,
+            action: { kind: "availability-post" as const, activityId: activity.id, issuedAt, minutes, placeKind: kind },
+          }])),
+        };
+        text = "Choose a window.";
+      } else {
+        const selected = z.object({ activityId: z.uuid(), issuedAt: z.date(), minutes: z.union([z.literal(30), z.literal(60)]), placeKind: z.enum(["physical", "virtual"]) }).safeParse(command);
+        const now = deps.clock.now();
+        const issued = selected.success ? selected.data.issuedAt.getTime() : NaN;
+        if (!selected.success || issued > now.getTime() || now.getTime() - issued >= 10 * 60_000) {
+          throw new InvalidInputError("invalid-availability", "Window unavailable.");
+        }
+        const endOfDay = new Date(issued);
+        endOfDay.setUTCHours(24, 0, 0, 0);
+        await postAvailability(deps, actor, {
+          activityId: selected.data.activityId, startsAt: selected.data.issuedAt, kind: selected.data.placeKind,
+          endsAt: new Date(Math.min(issued + selected.data.minutes * 60_000, endOfDay.getTime())),
+        });
+        posted = true;
+        text = "Availability posted.";
+      }
+    } catch (error) {
+      if (!(error instanceof AccessDeniedError || error instanceof AdminVisibilityNoticeRequiredError || error instanceof InvalidInputError)) throw error;
+      text = "This Availability choice is unavailable. Send /available to choose again.";
+    }
+  }
+  if (command.kind !== "availability-menu") {
+    try { await deps.telegram.answerCallback({ callbackId: command.callbackId, text }); }
+    catch { console.error("telegram: answering the Availability callback failed"); }
+  }
+  try {
+    if (message) await deps.telegram.sendMessage(message);
+    else if (command.kind === "availability-menu") await deps.telegram.sendMessage({ chatId: command.chatId, text });
+  } catch {
+    console.error("telegram: sending the Availability response failed");
+  }
+  if (actor && posted) await deliverSoon(deps, { organisationId: actor.organisationId, kind: "availability-overlap" });
 }

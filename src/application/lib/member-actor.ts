@@ -14,6 +14,7 @@ import { beginTelegramLink, unlinkTelegram, type TelegramLink } from "./telegram
 import { deliverSoon, notificationSettings, setNoticePreference, type NotificationSettings, type NoticePreference } from "./notifications";
 import { inviteSuggestions, meetupSuggestions, previewInviteSuggestions, type InviteSuggestion, type MeetupSuggestion, type PreviewInviteSuggestionsInput } from "./suggestions";
 import { extractMeetupInterests, type ExtractMeetupInterestsInput } from "./meetup-interests";
+import { availability, availabilityMeetup, postAvailability, type Availability, type AvailabilityBoard, type AvailabilitySuggestion, type AvailabilityOverlap, type PostAvailabilityInput } from "./availability";
 
 export type MemberStatus = (typeof members.status.enumValues)[number];
 
@@ -68,6 +69,9 @@ export interface MemberSearch {
  * to it, so nothing a page passes in can reach another Organisation.
  */
 export interface MemberActions {
+  postAvailability(input: PostAvailabilityInput): Promise<Availability>;
+  availability(): Promise<AvailabilityBoard>;
+  availabilityMeetup(input: AvailabilityOverlap): Promise<AvailabilitySuggestion | undefined>;
   beginTelegramLink(): Promise<TelegramLink>;
   unlinkTelegram(): Promise<void>;
   notificationSettings(): Promise<NotificationSettings>;
@@ -136,6 +140,13 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
   }
 
   return {
+    postAvailability: async (input) => {
+      const posted = await postAvailability(deps, actor, input);
+      await deliverSoon(deps, { organisationId: actor.organisationId, kind: "availability-overlap" });
+      return posted;
+    },
+    availability: () => afterNotice(() => availability(deps, actor), { action: "availability", filter: {} }),
+    availabilityMeetup: (input) => afterNotice(() => availabilityMeetup(deps, actor, input), { action: "availability-meetup", filter: { ownAvailabilityId: input?.ownAvailabilityId, otherAvailabilityId: input?.otherAvailabilityId } }),
     beginTelegramLink: () => beginTelegramLink(deps, actor),
     unlinkTelegram: () => unlinkTelegram(deps, actor),
     notificationSettings: () => notificationSettings(deps, actor),

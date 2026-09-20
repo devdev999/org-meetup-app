@@ -10,6 +10,7 @@ import { interestChoiceSchema, type Interest, type InterestChoice } from "./inte
 import { relevantInterests, saveRelevantInterests } from "./meetup-interests";
 import { recordNotices, supersedeInviteDeliveries } from "./notifications";
 import { activities, departments, gatheringMembers, gatherings, invites, members, notices, organisations, sites } from "./schema";
+import { availabilityOverlapSchema, findAvailabilityOverlap, type AvailabilityOverlap } from "./availability";
 
 export type MeetupPlace = { kind: "physical"; siteId: string; spot: string } | { kind: "virtual"; url: string };
 export type MeetupAudience =
@@ -27,6 +28,7 @@ export interface CreateMeetupInput {
   description?: string;
   relevantInterests?: InterestChoice[];
   invitedMemberIds?: string[];
+  availabilityOverlap?: AvailabilityOverlap;
 }
 
 export type EditMeetupInput = Pick<CreateMeetupInput, "startsAt" | "durationMinutes" | "place" | "capacity" | "description" | "relevantInterests">;
@@ -84,7 +86,7 @@ export interface MeetupChoices {
 export interface Notice {
   id: string;
   kind: typeof notices.$inferSelect.kind;
-  meetupId: string;
+  meetupId: string | null;
   message: string;
   createdAt: Date;
 }
@@ -102,6 +104,7 @@ const meetupSchema = z.object({
   description: z.string().trim().max(5000).optional().default(""),
   relevantInterests: z.array(interestChoiceSchema).max(20).optional(),
   invitedMemberIds: z.array(z.uuid()).max(20).optional().default([]),
+  availabilityOverlap: availabilityOverlapSchema.optional(),
   audience: z.union([
     z.object({ kind: z.literal("invite-only") }),
     z.object({ kind: z.literal("open"), scope: z.literal("organisation") }),
@@ -145,6 +148,14 @@ export async function createMeetup(deps: Deps, actor: Actor, input: CreateMeetup
     if (!parsed.success) invalid("Choose an Activity, a valid start time and Place, a duration from 1 to 1440 minutes and capacity from 2 to 30.");
     const data = parsed.data;
     if (data.startsAt <= deps.clock.now()) invalid("Choose a future start time.");
+    const overlap = data.availabilityOverlap ? await findAvailabilityOverlap(db, actor, data.availabilityOverlap, deps.clock.now(), true) : undefined;
+    if (data.availabilityOverlap && (!overlap || data.activityId !== overlap.activity.id
+      || data.place.kind !== overlap.place.kind
+      || data.place.kind === "physical" && overlap.place.kind === "physical" && data.place.siteId !== overlap.place.siteId
+      || data.startsAt < overlap.startsAt || data.startsAt >= overlap.endsAt)) {
+      throw new InvalidInputError("invalid-availability", "This overlap is no longer available, or the Meetup no longer matches it. Open Availability to choose again.");
+    }
+    const host = overlap ? await requireActiveMember(db, actor) : current;
     const [activity] = await db.select({ id: activities.id }).from(activities)
       .where(and(eq(activities.organisationId, actor.organisationId), eq(activities.id, data.activityId), eq(activities.retired, false)));
     if (!activity) invalid("Choose a current Activity in your Organisation.");
@@ -153,8 +164,8 @@ export async function createMeetup(deps: Deps, actor: Actor, input: CreateMeetup
     if (!audience) {
       if (data.place.kind === "virtual") audience = { kind: "open", scope: "organisation" };
       else {
-        if (!current.siteId) invalid("Set your Site in your profile or choose an audience.");
-        audience = { kind: "open", scope: "site", siteId: current.siteId };
+        if (!host.siteId) invalid("Set your Site in your profile or choose an audience.");
+        audience = { kind: "open", scope: "site", siteId: host.siteId };
       }
     }
     if (audience.kind === "open" && audience.scope === "site") await validSite(db, actor.organisationId, audience.siteId);
@@ -169,10 +180,10 @@ export async function createMeetup(deps: Deps, actor: Actor, input: CreateMeetup
     if (!created) throw new Error("Meetup creation returned no row");
     await db.insert(gatheringMembers).values({ organisationId: actor.organisationId, gatheringId: created.id, memberId: actor.memberId, status: "participant" });
     await saveRelevantInterests(db, actor.organisationId, created.id, data.relevantInterests ?? [], deps.clock.now());
-    const meetup = (await readMeetup(db, actor, created.id, current.siteId, deps.clock.now()))!;
-    const selectedIds = [...new Set(data.invitedMemberIds)];
+    const meetup = (await readMeetup(db, actor, created.id, host.siteId, deps.clock.now()))!;
+    const selectedIds = [...new Set([...data.invitedMemberIds, ...(overlap ? [overlap.member.memberId] : [])])];
     const sent: Invite[] = [];
-    for (const memberId of selectedIds) sent.push(await saveInvite(db, actor, meetup, memberId, current.name, deps.clock.now(), { fromSuggestion: true }));
+    for (const memberId of selectedIds) sent.push(await saveInvite(db, actor, meetup, memberId, host.name, deps.clock.now(), { fromSuggestion: true }));
     return { ...meetup, relevantInterests: await relevantInterests(db, actor.organisationId, created.id), invite: null, invites: sent };
   });
 }

@@ -19,7 +19,7 @@ export default async function InboxPage() {
             <li key={notice.id}>
               <p>{notice.message}</p>
               <p className="muted"><MeetupTime value={notice.createdAt.toISOString()} /></p>
-              <Link href={`/meetups/${notice.meetupId}`}>View Meetup</Link>
+              {notice.meetupId ? <Link href={`/meetups/${notice.meetupId}`}>View Meetup</Link> : <Link href="/availability">View Availability</Link>}
             </li>
           ))}
         </ul>

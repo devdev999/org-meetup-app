@@ -165,8 +165,8 @@ test("cancelled Meetups stay visible to former waitlisted Members after a Site c
   expect(await host.viewMeetup(meetup.id)).toMatchObject({ status: "cancelled", waitlist: [], participantCount: 2 });
   for (const actor of [cy, di]) {
     const notice = (await actor.inbox()).find((entry) => entry.kind === "meetup-cancelled");
-    expect(notice).toBeDefined();
-    expect(await actor.viewMeetup(notice!.meetupId)).toMatchObject({ status: "cancelled", membership: null, canChange: false, participants: [], waitlist: null });
+    expect(notice?.meetupId).toBe(meetup.id);
+    expect(await actor.viewMeetup(meetup.id)).toMatchObject({ status: "cancelled", membership: null, canChange: false, participants: [], waitlist: null });
     expect((await actor.listMeetups()).map((entry) => entry.id)).toContain(meetup.id);
     await expect(actor.joinMeetup(meetup.id)).rejects.toMatchObject({ code: "invalid-meetup" });
   }

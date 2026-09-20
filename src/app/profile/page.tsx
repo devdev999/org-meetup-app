@@ -13,6 +13,7 @@ export default async function ProfilePage() {
         <Link href="/interests">Your Interests</Link>
         <Link href="/members">Find Members</Link>
         <Link href="/meetups">Meetups</Link>
+        <Link href="/availability">Availability</Link>
         <Link href="/inbox">Inbox</Link>
         <Link href="/notifications">Notification settings</Link>
       </nav>

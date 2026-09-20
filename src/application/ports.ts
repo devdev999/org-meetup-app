@@ -76,11 +76,15 @@ export interface AiPort {
   extractInterests(input: AiExtractionRequest, signal?: AbortSignal): Promise<AiExtractedInterest[]>;
 }
 
+export type TelegramAvailabilityAction = { kind: "availability-activity"; activityId: string }
+  | { kind: "availability-post"; activityId: string; issuedAt: Date; minutes: number; placeKind: "physical" | "virtual" };
+
 export interface TelegramMessage {
   chatId: string;
   text: string;
   joinMeetupId?: string;
   inviteId?: string;
+  buttons?: Array<Array<{ text: string; action: TelegramAvailabilityAction }>>;
 }
 
 export interface TelegramPort {

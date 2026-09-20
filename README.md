@@ -94,6 +94,16 @@ Telegram messages contain first names, Activity, UTC time and the physical Place
 
 Register the public HTTPS URL `<APP_URL>/api/telegram` with Telegram's [setWebhook method](https://core.telegram.org/bots/api#setwebhook). Set `secret_token` to `TELEGRAM_WEBHOOK_SECRET` and `allowed_updates` to `["message", "callback_query"]`. The endpoint checks the secret header before processing an update. Group chats and messages whose sender differs from the private chat are ignored.
 
+## Availability
+
+Open **Availability** from home, your profile or Meetups to post an Activity and a window today. Physical posts use your current Site. Virtual posts are visible across your Organisation. Only open windows from Active Members appear. A changed or retired Site hides its physical posts, and retired Activities disappear. The page refreshes while open and removes posts when their windows end.
+
+Matching Activities with intersecting windows at the same Site, or both virtual, produce Suggestions for both Members. Each pair receives one overlap notice per UTC day, even across multiple posts or Activities. The inbox always receives it. Enabled Telegram and email notices send immediately through the existing delivery queue and retry policy. The worker checks newly open windows and expires ended windows every minute.
+
+**Plan a Meetup** opens the ordinary creation form with the Activity, overlap start and Site or virtual setting filled in. Choose a future start within the overlap window, supply the physical spot or virtual URL, and review duration, capacity and audience. Only confirmation saves a Meetup and sends the other Member an Invite. Confirmation rechecks the overlap, Activity, Site and start time in the same transaction as creation.
+
+After linking Telegram, send `/available`. Tap an Activity, then a 30- or 60-minute window at your Site or virtually. Window choices expire after ten minutes, and windows end by midnight UTC. Repeating the same choice preserves the existing post.
+
 ## Interests and finding Members
 
 Open **Your Interests** from your profile. Enter a phrase, choose Skill or Hobby, and choose Shares or Seeks. The preview shows the proposed canonical Interest. Confirm it, choose another shortlisted Interest, or keep your phrase. Saving retains the original phrase as an Alias and replaces any previous Stance for that Interest.
@@ -222,6 +232,19 @@ pnpm db:generate     # writes drizzle/NNNN_name.sql; commit it
 pnpm db:setup        # applies it locally
 ```
 
-Apply migrations before deploying the code that needs them: both the web and worker processes query the columns a migration adds, so new code on the old schema fails every worker tick. The migrations are additive, so rolling back to the previous code leaves the new columns unused rather than broken.
+Apply migrations before starting the web and worker code that needs them. Check each migration's compatibility before upgrading or reverting an image.
+
+Migrations `0011` and `0012` add Availability and allow notices without a Meetup. Earlier web and worker versions cannot read these notices safely. Stop every old web and worker instance before applying these migrations, then start both at the new version. Do not run mixed versions.
+
+For an existing local Compose stack, leave Postgres running and run these steps in order. Continue only when each command succeeds:
+
+```sh
+docker compose build web setup
+docker compose stop web worker
+docker compose run --rm --no-deps setup
+docker compose up -d --no-deps web worker
+```
+
+If setup fails, keep the web and worker stopped until it is resolved. Compose's setup dependency does not stop already-running processes during an upgrade. Once Availability notices exist, rollback to earlier images is unsupported; deploy a forward fix. Restoring a pre-upgrade database backup would lose changes made after that backup.
 
 Every table except platform configuration carries `organisation_id`. The application derives the Organisation from the actor, never from input.

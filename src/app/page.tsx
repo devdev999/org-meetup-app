@@ -11,6 +11,7 @@ export default async function HomePage() {
         <Link href="/profile">Your profile</Link>
         <Link href="/interests">Your Interests</Link>
         <Link href="/meetups">All Meetups</Link>
+        <Link href="/availability">Availability</Link>
         <Link href="/inbox">Inbox</Link>
       </nav>
       <h1>Suggested Meetups</h1>

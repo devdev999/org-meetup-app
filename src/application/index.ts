@@ -27,6 +27,7 @@ import type { AiPort, Clock, EmailPort, IdentityPort, TelegramPort } from "./por
 import { handleTelegram, type TelegramCommand } from "./lib/telegram";
 import { deliverNotices, sendDailyDigests } from "./lib/notifications";
 import { expireInvites } from "./lib/meetups";
+import { processAvailability } from "./lib/availability";
 
 export type { TelegramCommand, TelegramLink } from "./lib/telegram";
 export type { NotificationSettings, NoticePreference } from "./lib/notifications";
@@ -58,6 +59,7 @@ export type { MemberProfile, MemberSearch } from "./lib/member-actor";
 export type { Interest, MemberInterest, InterestResolution, InterestSelection, InterestChoice, ConfirmInterestInput, Stance } from "./lib/interests";
 export type { InviteSuggestion, MeetupSuggestion, PreviewInviteSuggestionsInput } from "./lib/suggestions";
 export type { ExtractMeetupInterestsInput } from "./lib/meetup-interests";
+export type { Availability, AvailabilityBoard, AvailabilityOverlap, AvailabilitySuggestion, PostAvailabilityInput } from "./lib/availability";
 
 /**
  * Recognises a `SignInError` by shape rather than class identity: the web
@@ -96,6 +98,7 @@ export interface ApplicationDependencies {
  * Organisation the application derives itself, never from input.
  */
 export interface Application {
+  processAvailability(): Promise<void>;
   expireInvites(): Promise<void>;
   deliverNotices(): Promise<void>;
   sendDailyDigests(): Promise<void>;
@@ -122,6 +125,7 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     email: dependencies.email,
   };
   return {
+    processAvailability: () => processAvailability(deps),
     expireInvites: () => expireInvites(deps),
     deliverNotices: () => deliverNotices(deps),
     sendDailyDigests: () => sendDailyDigests(deps),

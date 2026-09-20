@@ -1,0 +1,1 @@
+ALTER TABLE "notices" ALTER COLUMN "gathering_id" DROP NOT NULL;

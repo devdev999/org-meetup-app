@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { createTelegramWebhook } from "../../adapters/telegram/webhook";
-import { ministryA, signInAndAcknowledgeAs } from "./fixtures";
+import { ministryA, signInAndAcknowledgeAs, withDepartmentAndSiteClaims } from "./fixtures";
 import { harness } from "./harness";
 
 const h = harness();
@@ -91,4 +91,44 @@ test("Telegram Invite buttons accept or decline only for the linked invitee and 
     callbackId: "102-accept", text: "Your Invite was accepted, but you no longer have a place in this Meetup.",
   });
   expect((await bo.viewMeetup(meetup.id))?.membership).toBeNull();
+});
+
+test("Telegram posts Availability in two taps after choosing an Activity and a window", async () => {
+  await h.app.bootstrap(withDepartmentAndSiteClaims(ministryA));
+  const ana = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test", building: "Harbour House" });
+  const bo = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", name: "Bo", email: "bo@example.test", building: "Harbour House" });
+  const code = new URL((await ana.beginTelegramLink()).url).searchParams.get("start")!;
+  await h.app.handleTelegram({ kind: "link", chatId: "101", code });
+  h.telegram.reset();
+  const webhook = createTelegramWebhook(h.app, secret);
+  const callback = (data: string, id: string) => request({
+    update_id: 10, callback_query: { id, from: { id: 101, is_bot: false }, message: { chat: { id: 101, type: "private" } }, data },
+  });
+  await webhook(request({ update_id: 9, message: { from: { id: 101, is_bot: false }, chat: { id: 101, type: "private" }, text: "/available" } }));
+  const activity = h.telegram.outbox.at(-1)!.buttons!.flat().find((entry) => entry.text === "coffee")!;
+  expect(activity.action.kind).toBe("availability-activity");
+  h.telegram.answerFailure = new Error("Callback acknowledgement unavailable");
+  await webhook(callback(`av-activity:${activity.action.activityId}`, "choose-activity"));
+  h.telegram.answerFailure = undefined;
+  expect((await bo.availability()).open).toEqual([]);
+  const presets = h.telegram.outbox.at(-1)!.buttons!.flat();
+  const window = presets.find((entry) => entry.text === "Now for 30 minutes at my Site")!;
+  expect(window.action).toEqual({ kind: "availability-post", activityId: activity.action.activityId, issuedAt: new Date("2026-09-18T09:00:00Z"), minutes: 30, placeKind: "physical" });
+  const windowData = `av-post:${activity.action.activityId}:tljyc0:p:30`;
+  expect((await webhook(callback(windowData, "choose-window"))).status).toBe(200);
+  expect((await bo.availability()).open).toEqual([expect.objectContaining({
+    activity: { id: expect.any(String), name: "coffee" }, startsAt: new Date("2026-09-18T09:00:00Z"),
+    endsAt: new Date("2026-09-18T09:30:00Z"), place: { kind: "physical", siteId: expect.any(String), siteName: "Harbour House" },
+  })]);
+  await webhook(callback(windowData, "choose-window"));
+  expect((await bo.availability()).open).toHaveLength(1);
+  expect(h.telegram.answers.at(-1)?.text).toBe("Availability posted.");
+  const virtual = presets.find((entry) => entry.text === "Now for 60 minutes virtually")!;
+  expect(virtual.action).toMatchObject({ kind: "availability-post", minutes: 60, placeKind: "virtual" });
+  await webhook(callback(`av-post:${activity.action.activityId}:tljyc0:v:60`, "choose-virtual"));
+  expect((await bo.availability()).open).toHaveLength(2);
+  h.clock.set(new Date("2026-09-18T10:00:00Z"));
+  await webhook(callback(windowData, "expired-window"));
+  expect(h.telegram.answers.at(-1)).toEqual({ callbackId: "expired-window", text: "This Availability choice is unavailable. Send /available to choose again." });
+  expect((await bo.availability()).open).toEqual([]);
 });

@@ -67,6 +67,10 @@ export async function saveMeetup(meetupId: string | null, form: FormData): Promi
         activityId: formText(form.get("activityId")) ?? "",
         audience: audienceInput(form),
         invitedMemberIds: form.getAll("invitedMemberId").map((value) => formText(value) ?? ""),
+        availabilityOverlap: form.has("ownAvailabilityId") || form.has("otherAvailabilityId") ? {
+          ownAvailabilityId: formText(form.get("ownAvailabilityId")) ?? "",
+          otherAvailabilityId: formText(form.get("otherAvailabilityId")) ?? "",
+        } : undefined,
       });
       savedId = meetup.id;
     }
