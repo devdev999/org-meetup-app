@@ -3,8 +3,8 @@
 import { useActionState } from "react";
 import { answerRsvp, type MeetupActionState } from "./actions";
 
-export function RsvpForm({ meetupId }: { meetupId: string }) {
-  const [state, action, pending] = useActionState<MeetupActionState, FormData>((_previous, form) => answerRsvp(meetupId, form), {});
+export function RsvpForm({ meetupId, kind = "meetup" }: { meetupId: string; kind?: "meetup" | "event" }) {
+  const [state, action, pending] = useActionState<MeetupActionState, FormData>((_previous, form) => answerRsvp(meetupId, form, kind), {});
   return <form action={action}>
     <div className="form-actions">
       <button type="submit" name="answer" value="going" disabled={pending}>Going</button>

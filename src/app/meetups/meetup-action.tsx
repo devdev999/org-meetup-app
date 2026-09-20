@@ -8,14 +8,16 @@ export function MeetupAction({
   operation,
   label,
   participants,
+  kind = "meetup",
 }: {
   meetupId: string;
   operation: Parameters<typeof changeMeetup>[1];
   label: string;
   participants?: { memberId: string; name: string }[];
+  kind?: "meetup" | "event";
 }) {
   const [state, action, pending] = useActionState<MeetupActionState, FormData>(
-    (_previous, form) => changeMeetup(meetupId, operation, form),
+    (_previous, form) => changeMeetup(meetupId, operation, form, kind),
     {},
   );
   return (

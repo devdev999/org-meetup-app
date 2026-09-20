@@ -2,36 +2,37 @@ import { expect, test } from "vitest";
 import { createTelegramWebhook } from "../../adapters/telegram/webhook";
 import { ministryA, signInAndAcknowledgeAs, withDepartmentAndSiteClaims } from "./fixtures";
 import { harness } from "./harness";
+import { createMeetupOrEvent, participationFor } from "./meetup-or-event";
 
 const h = harness();
 const secret = "test-webhook-secret";
 
-test("the Telegram webhook records recurring RSVP answers only for an authorized private sender", async () => {
+test.each(["meetup", "event"] as const)("the Telegram webhook records %s RSVP answers only for an authorized private sender", async (kind) => {
   await h.app.bootstrap(ministryA);
   const ana = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });
-  const bo = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", name: "Bo", email: "bo@example.test" });
+  const bo = participationFor(await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", name: "Bo", email: "bo@example.test" }), kind);
   const link = await bo.beginTelegramLink();
   await h.app.handleTelegram({ kind: "link", chatId: "102", code: new URL(link.url).searchParams.get("start")! });
-  const meetup = await ana.createMeetup({
+  const meetup = await createMeetupOrEvent(h, ana, {
     activityId: (await ana.meetupChoices()).activities[0]!.id, startsAt: new Date("2026-09-18T10:00:00Z"), durationMinutes: 30,
     place: { kind: "virtual", url: "https://meet.example/walk" }, capacity: 2, recurrence: { frequency: "weekly" },
-  });
+  }, kind);
   await bo.joinSeries(meetup.recurrence!.id);
   const webhook = createTelegramWebhook(h.app, secret);
   const callback = (answer: string, chat = { id: 102, type: "private" }) => ({ update_id: 20, callback_query: {
-    id: answer, from: { id: 102, is_bot: false }, message: { chat }, data: `${answer}:${meetup.id}`,
+    id: answer, from: { id: 102, is_bot: false }, message: { chat }, data: `${answer}${kind === "event" ? "-event" : ""}:${meetup.id}`,
   } });
   await webhook(request(callback("not-going"), "wrong"));
   await webhook(request(callback("not-going", { id: -102, type: "group" })));
   await webhook(request(callback("not-going", { id: 999, type: "private" })));
-  expect((await bo.viewMeetup(meetup.id))?.rsvp).toBeNull();
+  expect((await bo.view(meetup.id))?.rsvp).toBeNull();
   expect((await webhook(request(callback("not-going")))).status).toBe(200);
-  expect(await bo.viewMeetup(meetup.id)).toMatchObject({ rsvp: "not-going", membership: null });
+  expect(await bo.view(meetup.id)).toMatchObject({ rsvp: "not-going", membership: null });
   await webhook(request(callback("going")));
-  expect(await bo.viewMeetup(meetup.id)).toMatchObject({ rsvp: "going", membership: "participant" });
+  expect(await bo.view(meetup.id)).toMatchObject({ rsvp: "going", membership: "participant" });
   await bo.leaveSeries(meetup.recurrence!.id);
   await webhook(request(callback("going")));
-  expect((await bo.viewMeetup(meetup.id))?.membership).toBeNull();
+  expect((await bo.view(meetup.id))?.membership).toBeNull();
   expect(h.telegram.answers.at(-1)?.text).toContain("unavailable");
 });
 

@@ -34,18 +34,22 @@ export function createTelegramWebhook(application: Application, secret: string |
     if (callback?.message && !callback.from.is_bot && callback.message.chat.type === "private" && callback.message.chat.id === callback.from.id) {
       const availability = callback.data ? parseAvailabilityCallback(callback.data) : undefined;
       if (availability) await application.handleTelegram({ ...availability, chatId: String(callback.from.id), callbackId: callback.id });
-      const meetupId = callback.data?.startsWith("join:") ? callback.data.slice(5) : undefined;
-      if (meetupId) await application.handleTelegram({ kind: "join", chatId: String(callback.from.id), callbackId: callback.id, meetupId });
+      const join = callback.data?.match(/^(join|join-event):(.+)$/);
+      if (join) await application.handleTelegram(join[1] === "join-event"
+        ? { kind: "join-event", chatId: String(callback.from.id), callbackId: callback.id, eventId: join[2]! }
+        : { kind: "join", chatId: String(callback.from.id), callbackId: callback.id, meetupId: join[2]! });
       const inviteAnswer = callback.data?.match(/^(accept|decline):(.+)$/);
       if (inviteAnswer) await application.handleTelegram({
         kind: "answer-invite", chatId: String(callback.from.id), callbackId: callback.id,
         inviteId: inviteAnswer[2]!, answer: inviteAnswer[1] === "accept" ? "accept" : "decline",
       });
-      const rsvpAnswer = callback.data?.match(/^(going|not-going):(.+)$/);
-      if (rsvpAnswer) await application.handleTelegram({
-        kind: "answer-rsvp", chatId: String(callback.from.id), callbackId: callback.id,
-        meetupId: rsvpAnswer[2]!, answer: rsvpAnswer[1] === "going" ? "going" : "not-going",
-      });
+      const rsvpAnswer = callback.data?.match(/^(going|not-going)(-event)?:(.+)$/);
+      if (rsvpAnswer) {
+        const reply = { chatId: String(callback.from.id), callbackId: callback.id, answer: rsvpAnswer[1] === "going" ? "going" as const : "not-going" as const };
+        await application.handleTelegram(rsvpAnswer[2]
+          ? { ...reply, kind: "answer-event-rsvp", eventId: rsvpAnswer[3]! }
+          : { ...reply, kind: "answer-rsvp", meetupId: rsvpAnswer[3]! });
+      }
     }
     return Response.json({ ok: true });
   };

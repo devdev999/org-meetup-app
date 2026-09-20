@@ -6,12 +6,12 @@ import type { NoticeKind, NoticePreference } from "../../application/index";
 import { changeTelegram, saveNoticePreference, type NotificationActionState } from "./actions";
 
 const labels: Record<NoticeKind, string> = {
-  "meetup-joined": "Meetup joins",
-  "meetup-left": "Meetup departures",
+  "meetup-joined": "Meetup and Event joins",
+  "meetup-left": "Meetup and Event departures",
   "meetup-promoted": "Waitlist promotions",
   "meetup-edited": "Time or Place changes",
-  "meetup-cancelled": "Meetup cancellations",
-  "meetup-handed-over": "Host handovers",
+  "meetup-cancelled": "Meetup and Event cancellations",
+  "meetup-handed-over": "Host changes",
   "invite-received": "Invites",
   "invite-accepted": "Accepted Invites",
   "invite-declined": "Declined Invites",

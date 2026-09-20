@@ -6,6 +6,7 @@ import {
   isAccessDeniedError,
   isInvalidInputError,
   type EditMeetupInput,
+  type CreateMeetupInput,
   type MeetupAudience,
 } from "../../application/index";
 import { formText } from "../../web/forms";
@@ -41,30 +42,32 @@ function audienceInput(form: FormData): MeetupAudience | undefined {
 function actionError(error: unknown): MeetupActionState {
   if (error instanceof SyntaxError) return { error: "Choose valid relevant Interests." };
   if (isInvalidInputError(error)) return { error: error.message };
-  if (isAccessDeniedError(error)) return { error: "This Meetup is unavailable, or you cannot make this change." };
+  if (isAccessDeniedError(error)) return { error: "This action is unavailable, or you cannot make this change." };
   throw error;
 }
 
-function refreshMeetups(meetupId: string) {
+function refreshMeetups(meetupId: string, kind: "meetups" | "events" = "meetups") {
   revalidatePath("/");
-  revalidatePath("/meetups");
-  revalidatePath(`/meetups/${meetupId}`);
-  revalidatePath(`/meetups/${meetupId}/invite`);
-  revalidatePath(`/meetups/${meetupId}/edit`);
+  revalidatePath(`/${kind}`);
+  revalidatePath(`/${kind}/${meetupId}`);
+  revalidatePath(`/${kind}/${meetupId}/invite`);
+  revalidatePath(`/${kind}/${meetupId}/edit`);
   revalidatePath("/inbox");
 }
 
-export async function saveMeetup(meetupId: string | null, form: FormData): Promise<MeetupActionState> {
+export async function saveMeetup(meetupId: string | null, form: FormData, mode: "meetup" | "event" | "event-direct" = "meetup"): Promise<MeetupActionState> {
   const { member } = await requireMemberPastWelcome();
   let savedId: string;
+  const eventInput = () => ({ ...meetupInput(form), capacity: formText(form.get("capacity")) ? Number(form.get("capacity")) : null });
   try {
     if (meetupId) {
-      await member.editMeetup(meetupId, meetupInput(form));
+      if (mode === "meetup") await member.editMeetup(meetupId, meetupInput(form));
+      else await member.editEvent(meetupId, eventInput());
       savedId = meetupId;
     } else {
       const frequency = form.get("frequency");
       if (frequency !== null && !["once", "weekly", "fortnightly", "monthly"].includes(String(frequency))) return { error: "Choose a valid repeat schedule." };
-      const meetup = await member.createMeetup({
+      const input: CreateMeetupInput = {
         ...meetupInput(form),
         activityId: formText(form.get("activityId")) ?? "",
         audience: audienceInput(form),
@@ -75,14 +78,19 @@ export async function saveMeetup(meetupId: string | null, form: FormData): Promi
           ownAvailabilityId: formText(form.get("ownAvailabilityId")) ?? "",
           otherAvailabilityId: formText(form.get("otherAvailabilityId")) ?? "",
         } : undefined,
-      });
+      };
+      const meetup = mode === "meetup" ? await member.createMeetup(input)
+        : mode === "event-direct" ? await (await member.organisationAdmin()).createEvent({ ...input, ...eventInput() })
+          : await member.proposeEvent({ ...input, ...eventInput() });
       savedId = meetup.id;
     }
   } catch (error) {
     return actionError(error);
   }
-  refreshMeetups(savedId);
-  redirect(`/meetups/${savedId}`);
+  refreshMeetups(savedId, mode === "meetup" ? "meetups" : "events");
+  revalidatePath("/events/proposals");
+  revalidatePath("/admin/events");
+  redirect(mode === "event" && !meetupId ? "/events/proposals" : `/${mode === "meetup" ? "meetups" : "events"}/${savedId}`);
 }
 
 export async function changeSeries(seriesId: string, operation: "join" | "leave" | "stop"): Promise<MeetupActionState> {
@@ -93,6 +101,7 @@ export async function changeSeries(seriesId: string, operation: "join" | "leave"
     else if (operation === "stop") await member.stopSeries(seriesId);
     else return { error: "Choose a series action." };
     revalidatePath("/meetups", "layout");
+    revalidatePath("/events", "layout");
     revalidatePath("/");
     revalidatePath("/inbox");
     return { message: operation === "join" ? "You joined the series. Check each occurrence for your place or waitlist position."
@@ -102,13 +111,13 @@ export async function changeSeries(seriesId: string, operation: "join" | "leave"
   }
 }
 
-export async function answerRsvp(meetupId: string, form: FormData): Promise<MeetupActionState> {
+export async function answerRsvp(meetupId: string, form: FormData, kind: "meetup" | "event" = "meetup"): Promise<MeetupActionState> {
   const { member } = await requireMemberPastWelcome();
   const answer = form.get("answer");
   if (answer !== "going" && answer !== "not-going") return { error: "Choose Going or Not going." };
   try {
     const membership = await member.answerRsvp(meetupId, answer);
-    refreshMeetups(meetupId);
+    refreshMeetups(meetupId, kind === "event" ? "events" : "meetups");
     return { message: membership === null ? "Not going recorded for this occurrence."
       : membership === "waitlisted" ? "Going recorded. You are on the waitlist." : "Going recorded. You have a place." };
   } catch (error) {
@@ -120,46 +129,48 @@ export async function changeMeetup(
   meetupId: string,
   operation: "join" | "leave" | "cancel" | "hand-over",
   form: FormData,
+  kind: "meetup" | "event" = "meetup",
 ): Promise<MeetupActionState> {
   const { member } = await requireMemberPastWelcome();
   let message: string;
+  const label = kind === "event" ? "Event" : "Meetup";
   try {
     switch (operation) {
       case "join": {
-        const membership = await member.joinMeetup(meetupId);
-        message = membership === "waitlisted" ? "You are on the waitlist." : "You joined this Meetup.";
+        const membership = await (kind === "event" ? member.joinEvent(meetupId) : member.joinMeetup(meetupId));
+        message = membership === "waitlisted" ? "You are on the waitlist." : `You joined this ${label}.`;
         break;
       }
       case "leave":
-        await member.leaveMeetup(meetupId);
-        message = "You left this Meetup.";
+        await (kind === "event" ? member.leaveEvent(meetupId) : member.leaveMeetup(meetupId));
+        message = `You left this ${label}.`;
         break;
       case "cancel":
-        await member.cancelMeetup(meetupId);
-        message = "Meetup cancelled. Members have been notified.";
+        await (kind === "event" ? member.cancelEvent(meetupId) : member.cancelMeetup(meetupId));
+        message = `${label} cancelled. Members have been notified.`;
         break;
       case "hand-over":
-        await member.handOverMeetup(meetupId, formText(form.get("participantMemberId")) ?? "");
+        await (kind === "event" ? member.handOverEvent : member.handOverMeetup)(meetupId, formText(form.get("participantMemberId")) ?? "");
         message = "The Participant is now the Host.";
         break;
       default:
-        return { error: "Choose a Meetup action." };
+        return { error: `Choose an action for this ${label}.` };
     }
   } catch (error) {
     return actionError(error);
   }
-  refreshMeetups(meetupId);
+  refreshMeetups(meetupId, kind === "event" ? "events" : "meetups");
   return { message };
 }
 
-export async function sendInvite(meetupId: string, form: FormData, source: "manual" | "suggestion" = "manual"): Promise<MeetupActionState> {
+export async function sendInvite(meetupId: string, form: FormData, source: "manual" | "suggestion" = "manual", kind: "meetup" | "event" = "meetup"): Promise<MeetupActionState> {
   const { member } = await requireMemberPastWelcome();
   try {
     const memberId = formText(form.get("memberId")) ?? "";
     const invite = source === "suggestion"
-      ? await member.inviteSuggestedMember(meetupId, memberId, formText(form.get("previousInviteId")) || undefined)
-      : await member.inviteMember(meetupId, memberId);
-    refreshMeetups(meetupId);
+      ? await (kind === "event" ? member.inviteSuggestedMemberToEvent : member.inviteSuggestedMember)(meetupId, memberId, formText(form.get("previousInviteId")) || undefined)
+      : await (kind === "event" ? member.inviteToEvent : member.inviteMember)(meetupId, memberId);
+    refreshMeetups(meetupId, kind === "event" ? "events" : "meetups");
     return { message: invite.state === "pending" ? "Invite sent." : `This Invite is already ${invite.state}.` };
   } catch (error) {
     return actionError(error);
@@ -172,9 +183,9 @@ export async function answerInvite(inviteId: string, form: FormData): Promise<Me
   if (answer !== "accept" && answer !== "decline") return { error: "Choose Accept or Decline." };
   try {
     const result = await member.answerInvite(inviteId, answer);
-    refreshMeetups(result.meetupId);
+    refreshMeetups(result.eventId ?? result.meetupId, result.eventId ? "events" : "meetups");
     return { message: result.state === "declined" ? "Invite declined."
-      : result.membership === null ? "Your Invite was accepted, but you no longer have a place in this Meetup."
+      : result.membership === null ? `Your Invite was accepted, but you no longer have a place in this ${result.eventId ? "Event" : "Meetup"}.`
       : result.membership === "waitlisted" ? "Invite accepted. You are on the waitlist." : "Invite accepted." };
   } catch (error) {
     return actionError(error);

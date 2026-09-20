@@ -9,6 +9,7 @@ export default async function InboxPage() {
     <main>
       <nav className="member-nav" aria-label="Member navigation">
         <Link href="/meetups">Meetups</Link>
+        <Link href="/events">Events</Link>
         <Link href="/profile">Profile</Link>
         <Link href="/notifications">Notification settings</Link>
       </nav>
@@ -19,7 +20,7 @@ export default async function InboxPage() {
             <li key={notice.id}>
               <p>{notice.message}</p>
               <p className="muted"><MeetupTime value={notice.createdAt.toISOString()} /></p>
-              {notice.meetupId ? <Link href={`/meetups/${notice.meetupId}`}>View Meetup</Link> : <Link href="/availability">View Availability</Link>}
+              {notice.eventId ? <Link href={`/events/${notice.eventId}`}>View Event</Link> : notice.meetupId ? <Link href={`/meetups/${notice.meetupId}`}>View Meetup</Link> : <Link href="/availability">View Availability</Link>}
             </li>
           ))}
         </ul>

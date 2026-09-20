@@ -53,6 +53,19 @@ test("the Telegram adapter sends a plain notice with a join button and answers c
         { text: "Not going", callback_data: "not-going:d9f1542a-5d3c-4bb2-83ec-a2c5ae0bc2a5" },
       ]] },
     } });
+    await telegram.sendMessage({ chatId: "101", text: "An Event is open.", joinEventId: "d9f1542a-5d3c-4bb2-83ec-a2c5ae0bc2a5" });
+    expect(requests.at(-1)).toEqual({ path: "/bot123:test/sendMessage", body: {
+      chat_id: "101", text: "An Event is open.", link_preview_options: { is_disabled: true },
+      reply_markup: { inline_keyboard: [[{ text: "Join Event", callback_data: "join-event:d9f1542a-5d3c-4bb2-83ec-a2c5ae0bc2a5" }]] },
+    } });
+    await telegram.sendMessage({ chatId: "101", text: "Are you going to this Event?", rsvpEventId: "d9f1542a-5d3c-4bb2-83ec-a2c5ae0bc2a5" });
+    expect(requests.at(-1)).toEqual({ path: "/bot123:test/sendMessage", body: {
+      chat_id: "101", text: "Are you going to this Event?", link_preview_options: { is_disabled: true },
+      reply_markup: { inline_keyboard: [[
+        { text: "Going", callback_data: "going-event:d9f1542a-5d3c-4bb2-83ec-a2c5ae0bc2a5" },
+        { text: "Not going", callback_data: "not-going-event:d9f1542a-5d3c-4bb2-83ec-a2c5ae0bc2a5" },
+      ]] },
+    } });
     reject = true;
     await expect(telegram.sendMessage({ chatId: "101", text: "Retry later" })).rejects.toThrow("Too many requests");
   } finally {

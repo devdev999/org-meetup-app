@@ -8,6 +8,7 @@ import { resolveInterests, saveCanonicalInterest, saveInterestChoice, type Inter
 import { activities, gatheringInterests, interests } from "./schema";
 
 export interface ExtractMeetupInterestsInput { activityId: string; description: string }
+export type ExtractEventInterestsInput = ExtractMeetupInterestsInput;
 
 export async function extractMeetupInterests(deps: Deps, actor: Actor, input: ExtractMeetupInterestsInput, signal?: AbortSignal): Promise<InterestResolution[]> {
   await requireActiveMember(deps.db, actor);

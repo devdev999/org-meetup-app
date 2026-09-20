@@ -6,7 +6,7 @@ import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
 import { interestChoiceSchema, listInterests, memberInterestList, memberInterestsFor, type Interest, type InterestChoice } from "./interests";
 import { relevantInterests, relevantInterestsFor } from "./meetup-interests";
-import { readMeetups, validSite, visibleMeetups, type InviteChoices, type MeetupSummary } from "./meetups";
+import { readMeetups, validSite, visibleMeetups, type EventSummary, type GatheringKind, type GatheringSummary, type InviteChoices, type MeetupSummary } from "./meetups";
 import { departments, gatheringMembers, gatherings, invites, members, sites } from "./schema";
 import { rankInvitees, rankMeetups } from "./suggestion-ranking";
 
@@ -20,8 +20,10 @@ export interface MeetupSuggestion {
   meetup: MeetupSummary;
   reasons: string[];
 }
+export interface EventSuggestion { event: EventSummary; reasons: string[] }
 
 export interface PreviewInviteSuggestionsInput {
+  kind?: GatheringKind;
   seed: string;
   place: { kind: "physical"; siteId: string } | { kind: "virtual" };
   relevantInterests: InterestChoice[];
@@ -30,6 +32,7 @@ export interface PreviewInviteSuggestionsInput {
 export async function previewInviteSuggestions(deps: Deps, actor: Actor, input: PreviewInviteSuggestionsInput): Promise<InviteSuggestion[]> {
   const host = await requireActiveMember(deps.db, actor);
   const parsed = z.object({
+    kind: z.enum(["meetup", "event"]).optional().default("meetup"),
     seed: z.string().min(1).max(100),
     place: z.discriminatedUnion("kind", [z.object({ kind: z.literal("physical"), siteId: z.uuid() }), z.object({ kind: z.literal("virtual") })]),
     relevantInterests: z.array(interestChoiceSchema).max(20),
@@ -46,15 +49,23 @@ export async function previewInviteSuggestions(deps: Deps, actor: Actor, input: 
     if ("interestId" in selection && !existing) throw new InvalidInputError("unknown-interest", "Choose an Interest from your Organisation.");
     if (existing) selected.push(existing);
   }
-  return candidateSuggestions(deps, actor, { seed: data.seed, siteId, relevantInterests: selected, hostDepartmentId: host.departmentId });
+  return candidateSuggestions(deps, actor, { seed: data.seed, kind: data.kind, siteId, relevantInterests: selected, hostDepartmentId: host.departmentId });
 }
 
 export async function meetupSuggestions(deps: Deps, actor: Actor): Promise<MeetupSuggestion[]> {
+  return (await gatheringSuggestions(deps, actor, "meetup")).flatMap(({ meetup, reasons }) => meetup.kind === "meetup" ? [{ meetup, reasons }] : []);
+}
+
+export async function eventSuggestions(deps: Deps, actor: Actor): Promise<EventSuggestion[]> {
+  return (await gatheringSuggestions(deps, actor, "event")).flatMap(({ meetup, reasons }) => meetup.kind === "event" ? [{ event: meetup, reasons }] : []);
+}
+
+async function gatheringSuggestions(deps: Deps, actor: Actor, kind: GatheringKind): Promise<{ meetup: GatheringSummary; reasons: string[] }[]> {
   const current = await requireActiveMember(deps.db, actor);
   const now = deps.clock.now();
   const until = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
   const meetups = await deps.db.select({ id: gatherings.id, hostMemberId: gatherings.hostMemberId, startsAt: gatherings.startsAt }).from(gatherings)
-    .where(and(visibleMeetups(actor, current.siteId), eq(gatherings.status, "scheduled"), eq(gatherings.audienceKind, "open"),
+    .where(and(visibleMeetups(actor, current.siteId, kind), eq(gatherings.status, "scheduled"), eq(gatherings.audienceKind, "open"),
       gt(gatherings.startsAt, now), lte(gatherings.startsAt, until), ne(gatherings.hostMemberId, actor.memberId),
       sql`not exists (select 1 from ${gatheringMembers} where ${gatheringMembers.organisationId} = ${gatherings.organisationId} and ${gatheringMembers.gatheringId} = ${gatherings.id} and ${gatheringMembers.memberId} = ${actor.memberId})`));
   if (!meetups.length) return [];
@@ -68,11 +79,11 @@ export async function meetupSuggestions(deps: Deps, actor: Actor): Promise<Meetu
   const ranked = rankMeetups(declarations, meetups.map((meetup) => ({
     meetupId: meetup.id, startsAt: meetup.startsAt, connectionCount: 0,
     interests: interestsByMeetup.get(meetup.id) ?? [], hostInterests: interestsByHost.get(meetup.hostMemberId) ?? [],
-  }))).slice(0, 20);
+  })), kind).slice(0, 20);
   const details = new Map((await readMeetups(deps.db, actor, ranked.map((entry) => entry.meetupId), current.siteId, now)).map((meetup) => [meetup.id, meetup]));
   const results = ranked.map(({ meetupId, reasons }) => {
     const detail = details.get(meetupId);
-    if (!detail || detail.status !== "scheduled" || detail.audience.kind !== "open" || detail.membership !== null
+    if (!detail || detail.kind !== kind || detail.status !== "scheduled" || detail.audience.kind !== "open" || detail.membership !== null
       || detail.startsAt <= now || detail.startsAt > until) return undefined;
     const { participants, waitlist, ...meetup } = detail;
     return { meetup, reasons };
@@ -80,22 +91,22 @@ export async function meetupSuggestions(deps: Deps, actor: Actor): Promise<Meetu
   return results.filter((suggestion) => suggestion !== undefined);
 }
 
-export async function inviteSuggestions(deps: Deps, actor: Actor, id: string): Promise<InviteSuggestion[]> {
+export async function inviteSuggestions(deps: Deps, actor: Actor, id: string, kind: GatheringKind = "meetup"): Promise<InviteSuggestion[]> {
   const host = await requireActiveMember(deps.db, actor);
   if (!isUuid(id)) throw new AccessDeniedError();
   const [meetup] = await deps.db.select().from(gatherings).where(and(
-    eq(gatherings.organisationId, actor.organisationId), eq(gatherings.id, id), eq(gatherings.kind, "meetup"),
+    eq(gatherings.organisationId, actor.organisationId), eq(gatherings.id, id), eq(gatherings.kind, kind),
     eq(gatherings.hostMemberId, actor.memberId), eq(gatherings.status, "scheduled"), gt(gatherings.startsAt, deps.clock.now()),
   ));
   if (!meetup) throw new AccessDeniedError();
   return candidateSuggestions(deps, actor, {
-    seed: id, meetupId: id, siteId: meetup.placeKind === "physical" ? meetup.placeSiteId! : undefined,
+    seed: id, kind, meetupId: id, siteId: meetup.placeKind === "physical" ? meetup.placeSiteId! : undefined,
     relevantInterests: await relevantInterests(deps.db, actor.organisationId, id), hostDepartmentId: host.departmentId,
   });
 }
 
 async function candidateSuggestions(deps: Deps, actor: Actor, input: {
-  seed: string; meetupId?: string; siteId?: string; relevantInterests: Interest[]; hostDepartmentId: string | null;
+  seed: string; kind: GatheringKind; meetupId?: string; siteId?: string; relevantInterests: Interest[]; hostDepartmentId: string | null;
 }): Promise<InviteSuggestion[]> {
   const candidates = await deps.db.select({
     memberId: members.id, name: members.name, departmentId: members.departmentId,
@@ -116,7 +127,7 @@ async function candidateSuggestions(deps: Deps, actor: Actor, input: {
   const byId = new Map(candidates.map((candidate) => [candidate.memberId, candidate]));
   const interestsByMember = Map.groupBy(declarations, (interest) => interest.memberId);
   return rankInvitees({
-    seed: input.seed, hostDepartmentId: input.hostDepartmentId, hostInterests, relevantInterests: input.relevantInterests,
+    seed: input.seed, kind: input.kind, hostDepartmentId: input.hostDepartmentId, hostInterests, relevantInterests: input.relevantInterests,
     candidates: candidates.map((candidate) => ({
       memberId: candidate.memberId, departmentId: candidate.departmentId, connectionCount: 0,
       interests: interestsByMember.get(candidate.memberId) ?? [],

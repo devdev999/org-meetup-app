@@ -13,11 +13,11 @@ function InviteSuggestionCard({ suggestion, children }: { suggestion: InviteSugg
   </li>;
 }
 
-export function InviteSuggestions({ meetupId, suggestions }: { meetupId: string; suggestions: InviteSuggestion[] }) {
+export function InviteSuggestions({ meetupId, suggestions, kind = "meetup" }: { meetupId: string; suggestions: InviteSuggestion[]; kind?: "meetup" | "event" }) {
   const [state, action, pending] = useActionState<MeetupActionState, FormData>(async (_previous, form) => {
     const suggestion = suggestions.find((entry) => entry.member.memberId === form.get("memberId"));
     if (suggestion?.previousInviteId) form.set("previousInviteId", suggestion.previousInviteId);
-    return sendInvite(meetupId, form, "suggestion");
+    return sendInvite(meetupId, form, "suggestion", kind);
   }, {});
   return (
     <section>
@@ -36,9 +36,12 @@ export function InviteSuggestions({ meetupId, suggestions }: { meetupId: string;
   );
 }
 
-export function DraftInviteSuggestions({ seed, placeKind, siteId, interests }: {
+export function DraftInviteSuggestions({ seed, placeKind, siteId, interests, mode = "meetup" }: {
   seed: string; placeKind: "physical" | "virtual"; siteId: string; interests: InterestChoice[];
+  mode?: "meetup" | "event" | "event-direct";
 }) {
+  const kind = mode === "meetup" ? "meetup" : "event";
+  const label = kind === "meetup" ? "Meetup" : "Event";
   const [suggestions, setSuggestions] = useState<InviteSuggestion[]>([]);
   const [selected, setSelected] = useState<InviteSuggestion["member"][]>([]);
   const [status, setStatus] = useState("");
@@ -51,7 +54,7 @@ export function DraftInviteSuggestions({ seed, placeKind, siteId, interests }: {
       try {
         const response = await fetch("/api/invite-suggestions", {
           method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
-          body: JSON.stringify({ seed, place: placeKind === "physical" ? { kind: "physical", siteId } : { kind: "virtual" }, relevantInterests: interests }),
+          body: JSON.stringify({ seed, kind, place: placeKind === "physical" ? { kind: "physical", siteId } : { kind: "virtual" }, relevantInterests: interests }),
         });
         const result: { suggestions?: InviteSuggestion[]; error?: string } = await response.json();
         if (!response.ok) throw new Error(result.error);
@@ -60,15 +63,15 @@ export function DraftInviteSuggestions({ seed, placeKind, siteId, interests }: {
         setSuggestions(next);
         setStatus(next.length ? "" : "No eligible Members to suggest.");
       } catch {
-        if (!controller.signal.aborted) setStatus("Suggestions are unavailable. You can create this Meetup and invite Members later.");
+        if (!controller.signal.aborted) setStatus(`Suggestions are unavailable. You can save this ${label} and invite Members after publication.`);
       }
     }, 300);
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [seed, placeKind, siteId, interests]);
+  }, [seed, placeKind, siteId, interests, kind, label]);
   return (
     <fieldset>
       <legend>Suggested invitees</legend>
-      <p>Choose Members to invite when you create this Meetup.</p>
+      <p>{mode === "event" ? "Choose Members to invite when an Organisation Admin approves this Event." : `Choose Members to invite when you create this ${label}.`}</p>
       {selected.length > 0 && <ul className="member-list">{selected.map((member) => (
         <li key={member.memberId} className="form-actions">
           <span>{member.name}, {member.department ?? "Department not set"}</span>
@@ -79,7 +82,7 @@ export function DraftInviteSuggestions({ seed, placeKind, siteId, interests }: {
       {status && <p className="muted" role="status">{status}</p>}
       <ul className="member-list">{suggestions.filter((suggestion) => !selected.some((member) => member.memberId === suggestion.member.memberId)).map((suggestion) => (
         <InviteSuggestionCard key={suggestion.member.memberId} suggestion={suggestion}>
-          <button type="button" disabled={selected.length >= 20} onClick={() => setSelected((current) => [...current, suggestion.member])}>Invite {suggestion.member.name} on creation</button>
+          <button type="button" disabled={selected.length >= 20} onClick={() => setSelected((current) => [...current, suggestion.member])}>Invite {suggestion.member.name} on {mode === "event" ? "approval" : "creation"}</button>
         </InviteSuggestionCard>
       ))}</ul>
     </fieldset>
