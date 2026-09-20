@@ -245,6 +245,34 @@ test("only the series Host can stop it, cancelling future occurrences and notify
   await expect(bo.answerRsvp(second.id, "going")).rejects.toBeInstanceOf(InvalidInputError);
 });
 
+test("stopping during a monthly gap tells standing Members once without changing past participation", async () => {
+  const { ana, input } = await setup();
+  const bo = await member("bo");
+  const first = await ana.createMeetup({ ...input, startsAt: new Date("2026-01-29T10:00:00Z"), recurrence: { frequency: "monthly", endsOn: "2026-04-30" } });
+  await bo.joinSeries(first.recurrence!.id);
+  await bo.answerRsvp(first.id, "going");
+  const link = await bo.beginTelegramLink();
+  await h.app.handleTelegram({ kind: "link", chatId: "102", code: new URL(link.url).searchParams.get("start")! });
+  h.clock.set(new Date("2026-01-30T10:00:00Z"));
+  await h.app.processRecurrences();
+  expect(await ana.listMeetups()).toEqual([]);
+  h.email.reset();
+  h.telegram.reset();
+  await ana.stopSeries(first.recurrence!.id);
+  await ana.stopSeries(first.recurrence!.id);
+  const stopped = (await bo.inbox()).filter((notice) => notice.kind === "meetup-cancelled");
+  expect(stopped).toEqual([expect.objectContaining({ meetupId: first.id, message: expect.stringContaining("The Host stopped this recurring Meetup.") })]);
+  expect(h.email.outbox.map((notice) => notice.to).sort()).toEqual(["ana@example.test", "bo@example.test"]);
+  expect(h.telegram.outbox).toEqual([{ chatId: "102", text: stopped[0]!.message }]);
+  expect(await bo.viewMeetup(first.id)).toMatchObject({ status: "scheduled", membership: "participant", rsvp: "going", participantCount: 2, recurrence: { stopped: true } });
+  h.clock.set(new Date("2026-04-16T10:00:00Z"));
+  await h.app.processRecurrences();
+  await h.app.deliverNotices();
+  expect(await bo.listMeetups()).toEqual([]);
+  expect(h.email.outbox).toHaveLength(2);
+  expect(h.telegram.outbox).toHaveLength(1);
+});
+
 test("a fifth-Thursday series remains discoverable and manageable in months without an occurrence", async () => {
   const { ana, input } = await setup();
   const bo = await member("bo");

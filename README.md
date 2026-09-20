@@ -248,6 +248,8 @@ Apply migrations before starting the web and worker code that needs them. Check 
 
 Migrations `0011` and `0012` add Availability and allow notices without a Meetup. Earlier web and worker versions cannot read these notices safely. Stop every old web and worker instance before applying these migrations, then start both at the new version. Do not run mixed versions.
 
+Migrations `0013` and `0014` add recurring Meetups and RSVP. Upgrade the web and worker together with the same stop, migrate and restart sequence. Once series or RSVP prompts exist, rollback to earlier images is unsupported because they cannot manage recurrence or deliver the correct RSVP actions. Deploy a forward fix.
+
 For an existing local Compose stack, leave Postgres running and run these steps in order. Continue only when each command succeeds:
 
 ```sh
