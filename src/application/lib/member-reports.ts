@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import type { Actor } from "./actor";
 import { readAttendanceHistory, readConnections } from "./attendance";
 import type { Queryable } from "./departments-and-sites";
@@ -19,10 +19,12 @@ export async function memberReport(db: Queryable, actor: Actor, memberId: string
     .where(and(eq(members.organisationId, actor.organisationId), eq(members.id, memberId)));
   if (!row) throw new AccessDeniedError();
   const person = { ...actor, memberId };
-  const history = (await readAttendanceHistory(db, person, now)).filter((occurrence) => occurrence.startsAt >= range.start && occurrence.startsAt < range.end);
+  const history = await readAttendanceHistory(db, person, now, range);
   const occurrences = await db.select({ id: gatherings.id, kind: gatherings.kind, hostMemberId: gatherings.hostMemberId, membership: gatheringMembers.status }).from(gatherings)
     .leftJoin(gatheringMembers, and(eq(gatheringMembers.organisationId, gatherings.organisationId), eq(gatheringMembers.gatheringId, gatherings.id), eq(gatheringMembers.memberId, memberId)))
-    .where(and(eq(gatherings.organisationId, actor.organisationId), inArray(gatherings.status, ["scheduled", "completed"]), gte(gatherings.startsAt, range.start), lt(gatherings.startsAt, range.end)));
+    .where(and(eq(gatherings.organisationId, actor.organisationId), inArray(gatherings.status, ["scheduled", "completed"]),
+      gte(gatherings.startsAt, range.start), lt(gatherings.startsAt, range.end),
+      or(eq(gatherings.hostMemberId, memberId), eq(gatheringMembers.status, "participant"))));
   const connections = await readConnections(db, person, range);
   const interests = await memberInterestsFor(db, actor.organisationId, [memberId]);
   const posts = await db.select({ activity: activities.name, start: availabilities.startsAt, end: availabilities.endsAt, site: sites.name }).from(availabilities)

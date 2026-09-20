@@ -49,11 +49,36 @@ test("participation uses current Active Members and assignments while retaining 
   await bo!.updateProfile({ department: "Legal", site: "Hill" });
   const changed = await admin.reports(period);
   expect(changed.tables.find((table) => table.id === "participation-departments")!.rows).toEqual([
-    ["Finance", 1, 3, 33.33], ["Legal", 1, 1, 100], ["Not set", 0, 1, 0],
+    ["Finance", 1, 3, 33.33], ["Legal", 1, 1, 100], [null, 0, 1, 0],
   ]);
   expect(changed.tables.find((table) => table.id === "participation-sites")!.rows).toEqual([
-    ["Harbour", 1, 3, 33.33], ["Hill", 1, 1, 100], ["Not set", 0, 1, 0],
+    ["Harbour", 1, 3, 33.33], ["Hill", 1, 1, 100], [null, 0, 1, 0],
   ]);
+});
+
+test("participation keeps named Not set groups separate from unassigned Members", async () => {
+  const { admin } = await setup();
+  await admin.createListEntry("department", "Not set");
+  await admin.createListEntry("site", "Not set");
+  const ana = await member("Ana");
+  await member("Bo");
+  await ana.updateProfile({ department: "Not set", site: "Not set" });
+  const occurrence = await ana.createMeetup({
+    activityId: (await ana.meetupChoices()).activities[0]!.id,
+    startsAt: new Date("2026-09-18T10:00:00Z"), durationMinutes: 60, capacity: 2,
+    place: { kind: "virtual", url: "https://meet.example/named-group" },
+  });
+  h.clock.set(new Date("2026-09-18T11:00:00Z"));
+  await ana.confirmAttendance(occurrence.id, [(await ana.profile()).memberId]);
+  const report = await admin.reports(period);
+  for (const id of ["participation-departments", "participation-sites"]) {
+    expect(report.tables.find((table) => table.id === id)!.rows).toEqual([
+      ["Not set", 1, 1, 100], [null, 0, 2, 0],
+    ]);
+    const csv = await admin.exportReport(id, period);
+    expect(csv.content).toContain('"Not set","1","1","100"');
+    expect(csv.content).toContain('"","0","2","0"');
+  }
 });
 
 test("weekly occurrences, RSVP, confirmed no-shows and Activity ratings match the fixture", async () => {

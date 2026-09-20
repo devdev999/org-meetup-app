@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNotNull, lt, lte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, lt, lte, min, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Queryable } from "./departments-and-sites";
 import { InvalidInputError } from "./errors";
@@ -39,11 +39,14 @@ export async function organisationReport(db: Queryable, organisationId: string, 
       inArray(gatherings.status, ["scheduled", "completed"]), gte(gatherings.startsAt, start), lt(gatherings.startsAt, end)));
   const attended = new Set(attendance.map((row) => row.memberId));
   const tables: ReportTable[] = (["department", "site"] as const).map((dimension) => {
-    const groups = Map.groupBy(population, (member) => member[dimension] ?? "Not set");
+    const groups = Map.groupBy(population, (member) => member[dimension]);
     return {
       id: `participation-${dimension}s`, title: `Participation by ${dimension === "department" ? "Department" : "Site"}`,
       basis: participationBasis, columns: [dimension === "department" ? "Department" : "Site", "Attended", "Active Members", "Participation %"],
-      rows: [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([name, people]) => {
+      rows: [...groups].sort(([a], [b]) => {
+        if (a === b) return 0;
+        return a === null ? 1 : b === null ? -1 : a.localeCompare(b);
+      }).map(([name, people]) => {
         const count = people.filter((person) => attended.has(person.id)).length;
         return [name, count, people.length, percentage(count, people.length)];
       }),
@@ -60,18 +63,18 @@ async function activationTable(db: Queryable, organisationId: string, period: Re
   const cohort = await db.select({ id: members.id, provisionedAt: members.createdAt,
     hasDeclaredInterest: members.hasDeclaredInterest, firstInterestAt: members.firstInterestDeclaredAt }).from(members)
     .where(and(eq(members.organisationId, organisationId), gte(members.createdAt, start), lt(members.createdAt, end)));
-  const attendance = await db.select({ memberId: attendanceMembers.memberId, startsAt: gatherings.startsAt }).from(attendanceMembers)
+  const attendance = await db.select({ memberId: attendanceMembers.memberId, startsAt: min(gatherings.startsAt) }).from(attendanceMembers)
     .innerJoin(attendanceRecords, and(eq(attendanceRecords.organisationId, attendanceMembers.organisationId), eq(attendanceRecords.gatheringId, attendanceMembers.gatheringId)))
     .innerJoin(gatherings, and(eq(gatherings.organisationId, attendanceMembers.organisationId), eq(gatherings.id, attendanceMembers.gatheringId)))
     .innerJoin(members, and(eq(members.organisationId, attendanceMembers.organisationId), eq(members.id, attendanceMembers.memberId)))
     .where(and(eq(attendanceMembers.organisationId, organisationId), eq(attendanceMembers.attended, true), isNotNull(attendanceRecords.confirmedAt),
       inArray(gatherings.status, ["scheduled", "completed"]), gte(members.createdAt, start), lt(members.createdAt, end)))
-    .orderBy(gatherings.startsAt);
-  const byMember = Map.groupBy(attendance, (row) => row.memberId);
+    .groupBy(attendanceMembers.memberId);
+  const byMember = new Map(attendance.map((row) => [row.memberId, row.startsAt]));
   const activated = cohort.filter((member) => {
     const initial = member.provisionedAt.getTime();
     const through = initial + 30 * 86_400_000;
-    const firstAttendance = byMember.get(member.id)?.[0]?.startsAt.getTime();
+    const firstAttendance = byMember.get(member.id)?.getTime();
     const firstInterest = member.firstInterestAt?.getTime();
     return firstInterest !== undefined && firstInterest >= initial && firstInterest <= through
       && firstAttendance !== undefined && firstAttendance >= initial && firstAttendance <= through;
@@ -90,7 +93,7 @@ async function usageTables(db: Queryable, organisationId: string, period: Report
     .innerJoin(interests, and(eq(interests.organisationId, memberInterests.organisationId), eq(interests.id, memberInterests.interestId)))
     .innerJoin(members, and(eq(members.organisationId, memberInterests.organisationId), eq(members.id, memberInterests.memberId)))
     .where(and(eq(memberInterests.organisationId, organisationId), eq(members.status, "active"))).groupBy(interests.id);
-  const posts = await db.select({ memberId: availabilities.memberId }).from(availabilities)
+  const [posts] = await db.select({ count: sql<number>`count(*)::integer`, members: sql<number>`count(distinct ${availabilities.memberId})::integer` }).from(availabilities)
     .where(and(eq(availabilities.organisationId, organisationId), gte(availabilities.createdAt, start), lt(availabilities.createdAt, end)));
   const [overlaps] = await db.select({ count: sql<number>`count(*)::integer` }).from(availabilityNoticePairs)
     .where(and(eq(availabilityNoticePairs.organisationId, organisationId), gte(availabilityNoticePairs.day, period.from), lte(availabilityNoticePairs.day, period.to)));
@@ -109,7 +112,7 @@ async function usageTables(db: Queryable, organisationId: string, period: Report
     interestTable("sought-interests", "Most Sought Interests", "seeks"),
     interestTable("unmet-seeks", "Seeks with no Shares", "seeks", true),
     { id: "availability", title: "Availability usage", basis: "Posts created in the selected period, including expired posts. Overlaps count distinct Member pairs once per UTC day across Activities.",
-      columns: ["Posts", "Members posting", "Daily overlapping Member pairs"], rows: [[posts.length, new Set(posts.map((row) => row.memberId)).size, overlaps!.count]] },
+      columns: ["Posts", "Members posting", "Daily overlapping Member pairs"], rows: [[posts!.count, posts!.members, overlaps!.count]] },
     { id: "telegram", title: "Telegram linkage", basis: "Current Active Members, independent of the selected period.",
       columns: ["Linked Members", "Active Members", "Linkage %"], rows: [[linked!.count, activeMembers, percentage(linked!.count, activeMembers)]] },
   ];

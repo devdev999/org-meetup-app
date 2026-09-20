@@ -40,7 +40,7 @@ export async function attendanceHistory(deps: Deps, actor: Actor): Promise<Atten
   return readAttendanceHistory(deps.db, actor, deps.clock.now());
 }
 
-export async function readAttendanceHistory(db: Queryable, actor: Actor, now: Date): Promise<AttendanceHistoryEntry[]> {
+export async function readAttendanceHistory(db: Queryable, actor: Actor, now: Date, period?: { start: Date; end: Date }): Promise<AttendanceHistoryEntry[]> {
   const rows = await db.select({ gathering: gatherings, activityName: activities.name, siteName: sites.name,
     confirmedAt: attendanceRecords.confirmedAt, present: attendanceMembers.memberId, membership: gatheringMembers.status, answer: gatheringRsvps.answer })
     .from(gatherings)
@@ -51,6 +51,7 @@ export async function readAttendanceHistory(db: Queryable, actor: Actor, now: Da
     .leftJoin(gatheringMembers, and(eq(gatheringMembers.organisationId, gatherings.organisationId), eq(gatheringMembers.gatheringId, gatherings.id), eq(gatheringMembers.memberId, actor.memberId)))
     .leftJoin(gatheringRsvps, and(eq(gatheringRsvps.organisationId, gatherings.organisationId), eq(gatheringRsvps.gatheringId, gatherings.id), eq(gatheringRsvps.memberId, actor.memberId)))
     .where(and(eq(gatherings.organisationId, actor.organisationId), inArray(gatherings.status, ["scheduled", "completed"]),
+      period ? and(gte(gatherings.startsAt, period.start), lt(gatherings.startsAt, period.end)) : undefined,
       sql`${gatherings.startsAt} + ${gatherings.durationMinutes} * interval '1 minute' <= ${now.toISOString()}::timestamptz`,
       or(eq(gatherings.hostMemberId, actor.memberId), isNotNull(gatheringMembers.memberId), isNotNull(gatheringRsvps.memberId), isNotNull(attendanceMembers.memberId))))
     .orderBy(desc(gatherings.startsAt), gatherings.id);
