@@ -75,6 +75,11 @@ test("Platform Admin onboards Organisations, groups a Ministry and changes live 
       await agency.getByRole("button", { name: "Create Meetup", exact: true }).click();
       await expect(agency.locator("time")).toHaveAttribute("datetime", `${year}-01-01T16:30:00.000Z`);
       await expect(agency.locator("time")).toHaveText(`${year}-01-02 00:30 Asia/Singapore`);
+      const inviteeContext = await browser.newContext({ baseURL });
+      try {
+        await signIn(await inviteeContext.newPage(), "browser-agency", "Calendar Member", "calendar@browser-agency.example");
+      } finally { await inviteeContext.close(); }
+      await agency.getByRole("link", { name: "Edit Meetup", exact: true }).click();
       await page.reload();
       await expect(page.getByLabel("Scout model", { exact: true })).toHaveValue("browser-scout");
       await expect(page.getByLabel("Interest extraction model", { exact: true })).toHaveValue("gpt-5.6-luna");
@@ -82,6 +87,20 @@ test("Platform Admin onboards Organisations, groups a Ministry and changes live 
       await page.getByLabel("Time zone", { exact: true }).fill("America/New_York");
       await page.getByRole("button", { name: "Save settings", exact: true }).click();
       await expect(page.getByRole("status")).toHaveText("Deployment settings saved.");
+      await agency.getByRole("button", { name: "Save changes", exact: true }).click();
+      await expect(agency.getByRole("alert").filter({ hasText: "The deployment time zone changed." }))
+        .toHaveText("The deployment time zone changed. Reload and review the times before saving.");
+      await agency.getByRole("button", { name: "Invite Calendar Member", exact: true }).click();
+      await expect(agency.getByRole("status")).toHaveText("Invite sent.");
+      await expect(agency.getByLabel("Start time in Asia/Singapore", { exact: true })).toHaveValue(`${year}-01-02T00:30`);
+      await agency.getByRole("button", { name: "Save changes", exact: true }).click();
+      await expect(agency.getByRole("button", { name: "Save changes", exact: true })).toBeEnabled();
+      await expect(agency.getByRole("alert").filter({ hasText: "The deployment time zone changed." }))
+        .toHaveText("The deployment time zone changed. Reload and review the times before saving.");
+      await agency.reload();
+      await expect(agency.getByLabel("Start time in America/New_York", { exact: true })).toHaveValue(`${year}-01-01T11:30`);
+      await agency.getByRole("button", { name: "Save changes", exact: true }).click();
+      await expect(agency.locator("time")).toHaveAttribute("datetime", `${year}-01-01T16:30:00.000Z`);
       for (const value of ["2026-03-08T02:30", "2026-11-01T01:30"]) {
         await agency.goto("/meetups/new");
         await agency.getByRole("combobox", { name: "Activity", exact: true }).selectOption({ label: "coffee" });

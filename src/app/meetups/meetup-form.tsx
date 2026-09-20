@@ -23,7 +23,8 @@ export function MeetupForm({
   availability?: AvailabilitySuggestion;
   mode?: "meetup" | "event" | "event-direct";
 }) {
-  const timeZone = useTimeZone();
+  const deploymentTimeZone = useTimeZone();
+  const [timeZone] = useState(deploymentTimeZone);
   const kind = mode === "meetup" ? "meetup" : "event";
   const label = kind === "meetup" ? "Meetup" : "Event";
   const [placeKind, setPlaceKind] = useState(meetup?.place.kind ?? availability?.place.kind ?? "physical");
