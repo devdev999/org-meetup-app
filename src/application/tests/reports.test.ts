@@ -192,6 +192,34 @@ test("Interest demand, Availability and Telegram figures use the documented popu
   expect(report.tables.find((table) => table.id === "telegram")!.rows).toEqual([[1, 4, 25]]);
 });
 
+test("Availability overlaps survive missed worker runs and exclude future or nonconcurrent posts", async () => {
+  const { admin } = await setup();
+  const ana = await member("Ana");
+  const bo = await member("Bo");
+  const activityId = (await ana.meetupChoices()).activities[0]!.id;
+  for (const person of [ana, bo]) await person.postAvailability({ activityId, kind: "virtual",
+    startsAt: new Date("2026-09-18T09:01:10Z"), endsAt: new Date("2026-09-18T09:01:30Z") });
+  const usage = async () => (await admin.reports(period)).tables.find((table) => table.id === "availability")!.rows;
+  h.clock.set(new Date("2026-09-18T09:01:00Z"));
+  await h.app.processAvailability();
+  expect(await usage()).toEqual([[2, 2, 0]]);
+  h.clock.set(new Date("2026-09-18T09:01:20Z"));
+  expect((await ana.availability()).suggestions).toHaveLength(1);
+  expect(await usage()).toEqual([[2, 2, 1]]);
+  h.clock.set(new Date("2026-09-18T09:02:00Z"));
+  await h.app.processAvailability();
+  expect(await usage()).toEqual([[2, 2, 1]]);
+
+  const cy = await member("Cy");
+  await ana.postAvailability({ activityId, kind: "virtual",
+    startsAt: new Date("2026-09-18T09:03:10Z"), endsAt: new Date("2026-09-18T09:03:30Z") });
+  h.clock.set(new Date("2026-09-18T09:03:40Z"));
+  await cy.postAvailability({ activityId, kind: "virtual",
+    startsAt: new Date("2026-09-18T09:03:10Z"), endsAt: new Date("2026-09-18T09:04:30Z") });
+  expect((await cy.availability()).suggestions).toHaveLength(0);
+  expect(await usage()).toEqual([[4, 3, 1]]);
+});
+
 test.each(["suspension", "departure"] as const)("activation requires Interest and Attendance within the original window after %s", async (change) => {
   h.clock.set(new Date("2026-09-01T09:00:00Z"));
   const { admin, olivia } = await setup();

@@ -1,8 +1,9 @@
 import { and, eq, gte, inArray, isNotNull, lt, lte, min, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import type { Queryable } from "./departments-and-sites";
 import { InvalidInputError } from "./errors";
-import { activities, attendanceMembers, attendanceRecords, availabilities, availabilityNoticePairs, departments, gatheringMembers, gatheringRsvps, gatherings, interests, memberInterests, members, sites, telegramLinks } from "./schema";
+import { activities, attendanceMembers, attendanceRecords, availabilities, departments, gatheringMembers, gatheringRsvps, gatherings, interests, memberInterests, members, sites, telegramLinks } from "./schema";
 import { ratings } from "./attendance";
 import { ratingsTable } from "./attendance-reports";
 import type { Report, ReportPeriod, ReportTable } from "./report-types";
@@ -53,7 +54,7 @@ export async function organisationReport(db: Queryable, organisationId: string, 
     };
   });
   tables.push(...await occurrenceTables(db, organisationId, period, now));
-  tables.push(...await usageTables(db, organisationId, period, population.length));
+  tables.push(...await usageTables(db, organisationId, period, population.length, now));
   tables.push(await activationTable(db, organisationId, period));
   return { period, tables };
 }
@@ -85,7 +86,7 @@ async function activationTable(db: Queryable, organisationId: string, period: Re
     rows: [[cohort.length, activated, unknown, percentage(activated, cohort.length)]] };
 }
 
-async function usageTables(db: Queryable, organisationId: string, period: ReportPeriod, activeMembers: number): Promise<ReportTable[]> {
+async function usageTables(db: Queryable, organisationId: string, period: ReportPeriod, activeMembers: number, now: Date): Promise<ReportTable[]> {
   const { start, end } = reportBounds(period);
   const demand = await db.select({ name: interests.name, kind: interests.kind,
     shares: sql<number>`count(*) filter (where ${memberInterests.stance} = 'shares')::integer`,
@@ -95,8 +96,14 @@ async function usageTables(db: Queryable, organisationId: string, period: Report
     .where(and(eq(memberInterests.organisationId, organisationId), eq(members.status, "active"))).groupBy(interests.id);
   const [posts] = await db.select({ count: sql<number>`count(*)::integer`, members: sql<number>`count(distinct ${availabilities.memberId})::integer` }).from(availabilities)
     .where(and(eq(availabilities.organisationId, organisationId), gte(availabilities.createdAt, start), lt(availabilities.createdAt, end)));
-  const [overlaps] = await db.select({ count: sql<number>`count(*)::integer` }).from(availabilityNoticePairs)
-    .where(and(eq(availabilityNoticePairs.organisationId, organisationId), gte(availabilityNoticePairs.day, period.from), lte(availabilityNoticePairs.day, period.to)));
+  const other = alias(availabilities, "other_availability");
+  const overlapStart = sql`greatest(${availabilities.startsAt}, ${availabilities.createdAt}, ${other.startsAt}, ${other.createdAt})`;
+  const overlapEnd = sql`least(${availabilities.endsAt}, ${availabilities.expiredAt}, ${other.endsAt}, ${other.expiredAt})`;
+  const [overlaps] = await db.select({ count: sql<number>`count(distinct (${availabilities.memberId}, ${other.memberId}, (${availabilities.startsAt} at time zone 'UTC')::date))::integer` })
+    .from(availabilities).innerJoin(other, and(eq(other.organisationId, availabilities.organisationId), lt(availabilities.memberId, other.memberId),
+      eq(availabilities.activityId, other.activityId), sql`${availabilities.siteId} is not distinct from ${other.siteId}`))
+    .where(and(eq(availabilities.organisationId, organisationId), gte(availabilities.startsAt, start), lt(availabilities.startsAt, end),
+      gte(other.startsAt, start), lt(other.startsAt, end), lt(overlapStart, overlapEnd), lte(overlapStart, sql`${now.toISOString()}::timestamptz`)));
   const [linked] = await db.select({ count: sql<number>`count(*)::integer` }).from(telegramLinks)
     .innerJoin(members, and(eq(members.organisationId, telegramLinks.organisationId), eq(members.id, telegramLinks.memberId)))
     .where(and(eq(telegramLinks.organisationId, organisationId), eq(members.status, "active")));
@@ -111,7 +118,7 @@ async function usageTables(db: Queryable, organisationId: string, period: Report
     interestTable("shared-interests", "Most Shared Interests", "shares"),
     interestTable("sought-interests", "Most Sought Interests", "seeks"),
     interestTable("unmet-seeks", "Seeks with no Shares", "seeks", true),
-    { id: "availability", title: "Availability usage", basis: "Posts created in the selected period, including expired posts. Overlaps count distinct Member pairs once per UTC day across Activities.",
+    { id: "availability", title: "Availability usage", basis: "Posts created in the selected period, including expired posts. Started overlaps count distinct Member pairs once per UTC day across matching Activities and Places, using posted windows and recorded expiry.",
       columns: ["Posts", "Members posting", "Daily overlapping Member pairs"], rows: [[posts!.count, posts!.members, overlaps!.count]] },
     { id: "telegram", title: "Telegram linkage", basis: "Current Active Members, independent of the selected period.",
       columns: ["Linked Members", "Active Members", "Linkage %"], rows: [[linked!.count, activeMembers, percentage(linked!.count, activeMembers)]] },
