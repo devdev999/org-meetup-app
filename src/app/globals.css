@@ -234,6 +234,10 @@ th {
   padding: 0;
 }
 
+.member-list, .meetup-list {
+  overflow-wrap: anywhere;
+}
+
 .meetup-list > li {
   padding: 1rem 0;
   border-bottom: 1px solid var(--line);

@@ -35,7 +35,7 @@ export default async function MeetupPage({ params }: { params: Promise<{ id: str
       {meetup.description && <p className="meetup-description">{meetup.description}</p>}
       {meetup.relevantInterests.length > 0 && <section>
         <h2>Relevant Interests</h2>
-        <ul>{meetup.relevantInterests.map((interest) => <li key={interest.interestId}>{interest.name}</li>)}</ul>
+        <ul className="interest-list">{meetup.relevantInterests.map((interest) => <li key={interest.interestId}>{interest.name}</li>)}</ul>
       </section>}
       {meetup.membership === "waitlisted" && meetup.status === "scheduled" && (
         <p className="notice">You are on the waitlist. We will notify you in your inbox when a place opens.</p>
