@@ -99,7 +99,7 @@ export function OccurrenceDetail({ meetup }: { meetup: MeetupDetail | EventDetai
           {otherParticipants.length > 0 && (
             <>
               <h2>Hand over to a Participant</h2>
-              <p>You will remain a Participant and can leave after handing over.</p>
+              <p>The selected Participant becomes Host. Your participation stays the same.</p>
               <MeetupAction meetupId={meetup.id} kind={kind} operation="hand-over" label={`Hand over ${label}`} participants={otherParticipants} />
             </>
           )}
