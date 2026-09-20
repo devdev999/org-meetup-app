@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import type { Application } from "../../application/index";
+import { parseAvailabilityCallback } from "./availability-callback";
 
 const sender = z.object({ id: z.number().int().positive(), is_bot: z.boolean() });
 const chat = z.object({ id: z.number().int(), type: z.string() });
@@ -31,9 +32,8 @@ export function createTelegramWebhook(application: Application, secret: string |
       }
     }
     if (callback?.message && !callback.from.is_bot && callback.message.chat.type === "private" && callback.message.chat.id === callback.from.id) {
-      if (callback.data?.startsWith("av-activity:") || callback.data?.startsWith("av-post:")) {
-        await application.handleTelegram({ kind: "availability-choice", chatId: String(callback.from.id), callbackId: callback.id, choice: callback.data });
-      }
+      const availability = callback.data ? parseAvailabilityCallback(callback.data) : undefined;
+      if (availability) await application.handleTelegram({ ...availability, chatId: String(callback.from.id), callbackId: callback.id });
       const meetupId = callback.data?.startsWith("join:") ? callback.data.slice(5) : undefined;
       if (meetupId) await application.handleTelegram({ kind: "join", chatId: String(callback.from.id), callbackId: callback.id, meetupId });
       const inviteAnswer = callback.data?.match(/^(accept|decline):(.+)$/);

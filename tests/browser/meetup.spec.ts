@@ -94,7 +94,7 @@ test("Availability only creates a Meetup and Invite after the prefilled form is 
     }
     await page.reload();
     await page.getByRole("link", { name: "Plan a Meetup with Di Member" }).click();
-    await expect(page.getByRole("combobox", { name: "Activity", exact: true })).toHaveValue(await page.getByRole("option", { name: "walk", exact: true }).getAttribute("value") ?? "");
+    await expect(page.getByRole("combobox", { name: "Activity", exact: true }).locator("option:checked")).toHaveText("walk");
     await expect(page.getByLabel("Spot at the Site")).toHaveValue("");
     await expect(page.getByRole("combobox", { name: "Site", exact: true }).locator("option:checked")).toHaveText("Harbour House");
     await expect(page.getByRole("combobox", { name: "Audience", exact: true })).toHaveValue("default");

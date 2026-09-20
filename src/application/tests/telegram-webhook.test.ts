@@ -106,25 +106,29 @@ test("Telegram posts Availability in two taps after choosing an Activity and a w
   });
   await webhook(request({ update_id: 9, message: { from: { id: 101, is_bot: false }, chat: { id: 101, type: "private" }, text: "/available" } }));
   const activity = h.telegram.outbox.at(-1)!.buttons!.flat().find((entry) => entry.text === "coffee")!;
-  expect(Buffer.byteLength(activity.data)).toBeLessThanOrEqual(64);
-  await webhook(callback(activity.data, "choose-activity"));
+  expect(activity.action.kind).toBe("availability-activity");
+  h.telegram.answerFailure = new Error("Callback acknowledgement unavailable");
+  await webhook(callback(`av-activity:${activity.action.activityId}`, "choose-activity"));
+  h.telegram.answerFailure = undefined;
   expect((await bo.availability()).open).toEqual([]);
   const presets = h.telegram.outbox.at(-1)!.buttons!.flat();
-  expect(presets.every((entry) => Buffer.byteLength(entry.data) <= 64)).toBe(true);
   const window = presets.find((entry) => entry.text === "Now for 30 minutes at my Site")!;
-  expect((await webhook(callback(window.data, "choose-window"))).status).toBe(200);
+  expect(window.action).toEqual({ kind: "availability-post", activityId: activity.action.activityId, issuedAt: new Date("2026-09-18T09:00:00Z"), minutes: 30, placeKind: "physical" });
+  const windowData = `av-post:${activity.action.activityId}:tljyc0:p:30`;
+  expect((await webhook(callback(windowData, "choose-window"))).status).toBe(200);
   expect((await bo.availability()).open).toEqual([expect.objectContaining({
     activity: { id: expect.any(String), name: "coffee" }, startsAt: new Date("2026-09-18T09:00:00Z"),
     endsAt: new Date("2026-09-18T09:30:00Z"), place: { kind: "physical", siteId: expect.any(String), siteName: "Harbour House" },
   })]);
-  await webhook(callback(window.data, "choose-window"));
+  await webhook(callback(windowData, "choose-window"));
   expect((await bo.availability()).open).toHaveLength(1);
   expect(h.telegram.answers.at(-1)?.text).toBe("Availability posted.");
   const virtual = presets.find((entry) => entry.text === "Now for 60 minutes virtually")!;
-  await webhook(callback(virtual.data, "choose-virtual"));
+  expect(virtual.action).toMatchObject({ kind: "availability-post", minutes: 60, placeKind: "virtual" });
+  await webhook(callback(`av-post:${activity.action.activityId}:tljyc0:v:60`, "choose-virtual"));
   expect((await bo.availability()).open).toHaveLength(2);
   h.clock.set(new Date("2026-09-18T10:00:00Z"));
-  await webhook(callback(window.data, "expired-window"));
+  await webhook(callback(windowData, "expired-window"));
   expect(h.telegram.answers.at(-1)).toEqual({ callbackId: "expired-window", text: "This Availability choice is unavailable. Send /available to choose again." });
   expect((await bo.availability()).open).toEqual([]);
 });

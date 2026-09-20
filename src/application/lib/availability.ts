@@ -79,7 +79,7 @@ export async function postAvailability(deps: Deps, actor: Actor, input: PostAvai
   });
 }
 
-async function openAvailabilities(db: Queryable, organisationId: string, now: Date, ids?: string[]): Promise<Availability[]> {
+async function openAvailabilities(db: Queryable, organisationId: string, now: Date, scope?: { ids?: string[]; siteId?: string | null }): Promise<Availability[]> {
   const rows = await db.select({ availability: availabilities, name: members.name, activityName: activities.name, siteName: sites.name })
     .from(availabilities)
     .innerJoin(members, and(eq(members.organisationId, availabilities.organisationId), eq(members.id, availabilities.memberId)))
@@ -87,7 +87,8 @@ async function openAvailabilities(db: Queryable, organisationId: string, now: Da
     .leftJoin(sites, and(eq(sites.organisationId, availabilities.organisationId), eq(sites.id, availabilities.siteId)))
     .where(and(
       eq(availabilities.organisationId, organisationId), isNull(availabilities.expiredAt),
-      ids ? inArray(availabilities.id, ids) : undefined,
+      scope?.ids ? inArray(availabilities.id, scope.ids) : undefined,
+      scope?.siteId !== undefined ? or(isNull(availabilities.siteId), scope.siteId ? eq(availabilities.siteId, scope.siteId) : undefined) : undefined,
       lte(availabilities.startsAt, now), gt(availabilities.endsAt, now), eq(members.status, "active"), eq(activities.retired, false),
       or(isNull(availabilities.siteId), and(eq(availabilities.siteId, members.siteId), eq(sites.retired, false))),
     )).orderBy(availabilities.endsAt, availabilities.id);
@@ -100,8 +101,7 @@ async function openAvailabilities(db: Queryable, organisationId: string, now: Da
 
 export async function availability(deps: Deps, actor: Actor): Promise<AvailabilityBoard> {
   const current = await requireActiveMember(deps.db, actor);
-  const open = (await openAvailabilities(deps.db, actor.organisationId, deps.clock.now()))
-    .filter((entry) => entry.place.kind === "virtual" || entry.place.siteId === current.siteId);
+  const open = await openAvailabilities(deps.db, actor.organisationId, deps.clock.now(), { siteId: current.siteId });
   const own = open.filter((entry) => entry.member.memberId === actor.memberId);
   const suggestions = own.flatMap((entry) => open.flatMap((other) => {
     const suggestion = overlap(entry, other);
@@ -134,7 +134,7 @@ export async function findAvailabilityOverlap(db: Queryable, actor: Actor, input
         .where(and(eq(availabilities.organisationId, actor.organisationId), inArray(availabilities.id, ids)))),
     )).orderBy(members.id).for("update");
   }
-  const entries = await openAvailabilities(db, actor.organisationId, now, ids);
+  const entries = await openAvailabilities(db, actor.organisationId, now, { ids });
   const own = entries.find((entry) => entry.id === input.ownAvailabilityId && entry.member.memberId === actor.memberId);
   const other = entries.find((entry) => entry.id === input.otherAvailabilityId);
   return own && other ? overlap(own, other) : undefined;
@@ -152,6 +152,10 @@ export async function availabilityMeetup(deps: Deps, actor: Actor, input: Availa
 
 async function recordOverlaps(db: Queryable, organisationId: string, now: Date): Promise<void> {
   const open = await openAvailabilities(db, organisationId, now);
+  const day = now.toISOString().slice(0, 10);
+  const recorded = await db.select({ first: availabilityNoticePairs.firstMemberId, second: availabilityNoticePairs.secondMemberId })
+    .from(availabilityNoticePairs).where(and(eq(availabilityNoticePairs.organisationId, organisationId), eq(availabilityNoticePairs.day, day)));
+  const seen = new Set(recorded.map((pair) => `${pair.first}:${pair.second}`));
   const groups = Map.groupBy(open, (entry) => `${entry.activity.id}:${entry.place.kind === "physical" ? entry.place.siteId : "virtual"}`);
   for (const group of groups.values()) {
     for (let i = 0; i < group.length; i++) {
@@ -160,8 +164,11 @@ async function recordOverlaps(db: Queryable, organisationId: string, now: Date):
         const suggestion = overlap(first, second);
         if (!suggestion) continue;
         const [firstMemberId, secondMemberId] = [first.member.memberId, second.member.memberId].sort();
+        const key = `${firstMemberId}:${secondMemberId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
         const [created] = await db.insert(availabilityNoticePairs).values({
-          organisationId, firstMemberId: firstMemberId!, secondMemberId: secondMemberId!, day: now.toISOString().slice(0, 10),
+          organisationId, firstMemberId: firstMemberId!, secondMemberId: secondMemberId!, day,
         }).onConflictDoNothing().returning();
         if (!created) continue;
         const window = `${suggestion.startsAt.toISOString().slice(0, 16).replace("T", " ")} to ${suggestion.endsAt.toISOString().slice(11, 16)} UTC`;

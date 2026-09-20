@@ -34,10 +34,16 @@ test("the Telegram adapter sends a plain notice with a join button and answers c
         { text: "Decline", callback_data: "decline:7fe9a1aa-2ef9-4d8d-9d8c-8c412c134975" },
       ]] },
     } });
-    await telegram.sendMessage({ chatId: "101", text: "Choose an Activity.", buttons: [[{ text: "coffee", data: "av-activity:opaque-id" }], [{ text: "lunch", data: "av-activity:another-id" }]] });
+    await telegram.sendMessage({ chatId: "101", text: "Choose an Activity.", buttons: [
+      [{ text: "coffee", action: { kind: "availability-activity", activityId: "d9f1542a-5d3c-4bb2-83ec-a2c5ae0bc2a5" } }],
+      [{ text: "30 minutes virtually", action: { kind: "availability-post", activityId: "d9f1542a-5d3c-4bb2-83ec-a2c5ae0bc2a5", issuedAt: new Date("2026-09-18T09:00:00Z"), minutes: 30, placeKind: "virtual" } }],
+    ] });
     expect(requests.at(-1)).toEqual({ path: "/bot123:test/sendMessage", body: {
       chat_id: "101", text: "Choose an Activity.", link_preview_options: { is_disabled: true },
-      reply_markup: { inline_keyboard: [[{ text: "coffee", callback_data: "av-activity:opaque-id" }], [{ text: "lunch", callback_data: "av-activity:another-id" }]] },
+      reply_markup: { inline_keyboard: [
+        [{ text: "coffee", callback_data: "av-activity:d9f1542a-5d3c-4bb2-83ec-a2c5ae0bc2a5" }],
+        [{ text: "30 minutes virtually", callback_data: "av-post:d9f1542a-5d3c-4bb2-83ec-a2c5ae0bc2a5:tljyc0:v:30" }],
+      ] },
     } });
     reject = true;
     await expect(telegram.sendMessage({ chatId: "101", text: "Retry later" })).rejects.toThrow("Too many requests");

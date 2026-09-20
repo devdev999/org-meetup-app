@@ -16,9 +16,12 @@ export function LiveAvailability({ board }: { board: AvailabilityBoard }) {
     return () => { clearInterval(interval); window.removeEventListener("focus", refresh); };
   }, [router]);
   useEffect(() => {
-    if (!board.open.length) return;
-    const nextEnd = Math.min(...board.open.map((entry) => entry.endsAt.getTime()));
-    const timeout = setTimeout(() => { setNow(Date.now()); router.refresh(); }, Math.max(0, nextEnd - Date.now() + 25));
+    const current = Date.now();
+    setNow(current);
+    const futureEnds = board.open.map((entry) => entry.endsAt.getTime()).filter((end) => end > current);
+    if (!futureEnds.length) return;
+    const nextEnd = Math.min(...futureEnds);
+    const timeout = setTimeout(() => { setNow(Date.now()); router.refresh(); }, nextEnd - current + 25);
     return () => clearTimeout(timeout);
   }, [board, router]);
   const open = board.open.filter((entry) => now === null || entry.endsAt.getTime() > now);

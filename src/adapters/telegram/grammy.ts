@@ -1,5 +1,6 @@
 import { Api } from "grammy";
 import type { TelegramMessage, TelegramPort } from "../../application/ports";
+import { availabilityCallback } from "./availability-callback";
 
 export class GrammyTelegram implements TelegramPort {
   private readonly api: Api;
@@ -15,7 +16,7 @@ export class GrammyTelegram implements TelegramPort {
       { text: "Accept", callback_data: `accept:${message.inviteId}` },
       { text: "Decline", callback_data: `decline:${message.inviteId}` },
     ] : message.joinMeetupId ? [{ text: "Join Meetup", callback_data: `join:${message.joinMeetupId}` }] : [];
-    const keyboard = message.buttons?.map((row) => row.map((button) => ({ text: button.text, callback_data: button.data }))) ?? (buttons.length ? [buttons] : []);
+    const keyboard = message.buttons?.map((row) => row.map((button) => ({ text: button.text, callback_data: availabilityCallback(button.action) }))) ?? (buttons.length ? [buttons] : []);
     await this.api.sendMessage(message.chatId, message.text, {
       link_preview_options: { is_disabled: true },
       ...(keyboard.length ? { reply_markup: { inline_keyboard: keyboard } } : {}),
