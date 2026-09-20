@@ -116,8 +116,10 @@ export async function changeMeetup(
 export async function sendInvite(meetupId: string, form: FormData, source: "manual" | "suggestion" = "manual"): Promise<MeetupActionState> {
   const { member } = await requireMemberPastWelcome();
   try {
-    const inviteMember = source === "suggestion" ? member.inviteSuggestedMember : member.inviteMember;
-    const invite = await inviteMember(meetupId, formText(form.get("memberId")) ?? "", formText(form.get("previousInviteId")) || undefined);
+    const memberId = formText(form.get("memberId")) ?? "";
+    const invite = source === "suggestion"
+      ? await member.inviteSuggestedMember(meetupId, memberId, formText(form.get("previousInviteId")) || undefined)
+      : await member.inviteMember(meetupId, memberId);
     refreshMeetups(meetupId);
     return { message: invite.state === "pending" ? "Invite sent." : `This Invite is already ${invite.state}.` };
   } catch (error) {

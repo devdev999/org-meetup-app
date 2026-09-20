@@ -82,7 +82,7 @@ export interface MemberActions {
   editMeetup(id: string, input: EditMeetupInput): Promise<void>;
   cancelMeetup(id: string): Promise<void>;
   handOverMeetup(id: string, participantMemberId: string): Promise<void>;
-  inviteMember(meetupId: string, memberId: string, previousInviteId?: string): Promise<Invite>;
+  inviteMember(meetupId: string, memberId: string): Promise<Invite>;
   inviteSuggestedMember(meetupId: string, memberId: string, previousInviteId?: string): Promise<Invite>;
   inviteChoices(meetupId: string, input?: InviteSearch): Promise<InviteChoices>;
   inviteSuggestions(meetupId: string): Promise<InviteSuggestion[]>;
@@ -154,7 +154,7 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     editMeetup: (id, input) => withNotices(id, () => editMeetup(deps, actor, id, input)),
     cancelMeetup: (id) => withNotices(id, () => cancelMeetup(deps, actor, id)),
     handOverMeetup: (id, participantMemberId) => withNotices(id, () => handOverMeetup(deps, actor, id, participantMemberId)),
-    inviteMember: (id, memberId, previousInviteId) => withNotices(id, () => inviteMember(deps, actor, id, memberId, { previousInviteId })),
+    inviteMember: (id, memberId) => withNotices(id, () => inviteMember(deps, actor, id, memberId)),
     inviteSuggestedMember: (id, memberId, previousInviteId) => withNotices(id, () => inviteMember(deps, actor, id, memberId, { previousInviteId, fromSuggestion: true })),
     inviteChoices: (id, input = {}) => afterNotice(() => inviteChoices(deps, actor, id, input), { action: "meetup-invite-choices", filter: { meetupId: id, name: input.name ?? "", page: String(input.page ?? 0) } }),
     inviteSuggestions: (id) => afterNotice(() => inviteSuggestions(deps, actor, id), { action: "invite-suggestions", filter: { meetupId: id } }),

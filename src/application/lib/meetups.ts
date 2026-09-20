@@ -171,15 +171,8 @@ export async function createMeetup(deps: Deps, actor: Actor, input: CreateMeetup
     await saveRelevantInterests(db, actor.organisationId, created.id, data.relevantInterests ?? [], deps.clock.now());
     const meetup = (await readMeetup(db, actor, created.id, current.siteId, deps.clock.now()))!;
     const selectedIds = [...new Set(data.invitedMemberIds)];
-    if (selectedIds.length) {
-      const eligible = await db.select({ id: members.id }).from(members).where(and(
-        eq(members.organisationId, actor.organisationId), eq(members.status, "active"), inArray(members.id, selectedIds),
-        data.place.kind === "physical" ? eq(members.siteId, data.place.siteId) : undefined,
-      ));
-      if (eligible.length !== selectedIds.length) invalid("An invitee is no longer eligible. Refresh your Suggestions.");
-    }
     const sent: Invite[] = [];
-    for (const memberId of selectedIds) sent.push(await saveInvite(db, actor, meetup, memberId, current.name, deps.clock.now()));
+    for (const memberId of selectedIds) sent.push(await saveInvite(db, actor, meetup, memberId, current.name, deps.clock.now(), { fromSuggestion: true }));
     return { ...meetup, relevantInterests: await relevantInterests(db, actor.organisationId, created.id), invite: null, invites: sent };
   });
 }
@@ -364,7 +357,7 @@ async function saveInvite(db: Queryable, actor: Actor, meetup: MeetupSummary & P
   const [member] = await db.select({ memberId: members.id, name: members.name }).from(members)
     .where(and(eq(members.organisationId, actor.organisationId), eq(members.id, memberId),
       fromSuggestion ? eq(members.status, "active") : inArray(members.status, VISIBLE_MEMBER_STATUSES),
-      fromSuggestion && meetup.place.kind === "physical" ? eq(members.siteId, meetup.place.siteId) : undefined));
+      fromSuggestion && meetup.place.kind === "physical" ? eq(members.siteId, meetup.place.siteId) : undefined)).for("update");
   if (!member && fromSuggestion) invalid("This Suggestion is no longer available. Refresh the page.");
   if (!member) throw new AccessDeniedError();
   const [existing] = await db.select({ id: invites.id, state: invites.state }).from(invites)

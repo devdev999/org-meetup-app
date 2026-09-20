@@ -3,6 +3,7 @@ import { rankInvitees, rankMeetups, type InviteRankingCandidate } from "./sugges
 
 const sql = { interestId: "sql", name: "SQL", kind: "skill" as const };
 const running = { interestId: "running", name: "Running", kind: "hobby" as const };
+const rust = { interestId: "rust", name: "Rust", kind: "skill" as const };
 
 function candidate(memberId: string, changes: Partial<InviteRankingCandidate> = {}): InviteRankingCandidate {
   return { memberId, interests: [], departmentId: "finance", connectionCount: 0, ...changes };
@@ -44,6 +45,30 @@ test("tied Invite Suggestions stay in the same seeded order even when candidate 
   const first = rankInvitees(input);
   expect(rankInvitees({ ...input, candidates: [...candidates].reverse() })).toEqual(first);
   expect(rankInvitees({ ...input, seed: "meetup-b" })).not.toEqual(first);
+});
+
+test.each(["relevant", "compatible"] as const)("one %s overlap ties two learn-together overlaps in both rankers", (overlap) => {
+  const learning = [{ ...running, stance: "seeks" as const }, { ...rust, stance: "seeks" as const }];
+  const hostInterests = overlap === "compatible" ? [{ ...sql, stance: "shares" as const }] : [];
+  const relevantInterests = overlap === "relevant" ? [sql] : [];
+  const memberInterests = [{ ...sql, stance: "seeks" as const }];
+  for (const connections of [0, 1]) {
+    const expected = connections === 0 ? ["single", "learners"] : ["learners", "single"];
+    const invited = rankInvitees({
+      seed: "meetup-a", hostDepartmentId: null, hostInterests: [...hostInterests, ...learning], relevantInterests,
+      candidates: [
+        candidate("single", { interests: memberInterests, connectionCount: connections }),
+        candidate("learners", { interests: learning, connectionCount: 1 - connections }),
+      ],
+    });
+    expect(invited.map((entry) => entry.memberId)).toEqual(expected);
+    const startsAt = new Date("2026-09-20T10:00:00Z");
+    const home = rankMeetups([...memberInterests, ...learning], [
+      { meetupId: "single", interests: relevantInterests, hostInterests, connectionCount: connections, startsAt },
+      { meetupId: "learners", interests: [], hostInterests: learning, connectionCount: 1 - connections, startsAt },
+    ]);
+    expect(home.map((entry) => entry.meetupId)).toEqual(expected);
+  }
 });
 
 test("home ranking uses canonical Interests regardless of Stance, then Connections and start time", () => {

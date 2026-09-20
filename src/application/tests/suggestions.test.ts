@@ -144,7 +144,7 @@ test("a retried notice for an old Invite cannot carry buttons for a renewed Invi
   await bo.answerInvite(original.id, "decline");
   await host.editMeetup(meetup.id, { ...data, startsAt: new Date("2026-09-21T11:00:00Z") });
   h.telegram.failure = undefined;
-  const renewed = await host.inviteMember(meetup.id, boId, original.id);
+  const renewed = await host.inviteSuggestedMember(meetup.id, boId, original.id);
   expect(h.telegram.outbox).toEqual([expect.objectContaining({ inviteId: renewed.id, text: expect.stringContaining("2026-09-21 11:00") })]);
   h.clock.advance(60_000);
   await h.app.deliverNotices();
