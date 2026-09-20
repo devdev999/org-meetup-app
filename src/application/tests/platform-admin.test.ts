@@ -213,6 +213,35 @@ test("a recurring Meetup keeps its creation calendar through daylight saving and
   expect((await pat.viewMeetup(first.id))!.startsAt.toISOString()).toBe("2026-03-01T15:00:00.000Z");
 });
 
+test.each([
+  { day: "2026-03-08", start: "2026-03-08T05:00:00Z", end: "2026-03-09T04:00:00Z", queued: "2026-03-07T14:00:00Z", morning: "2026-03-08T13:00:00Z", week: "2026-03-02" },
+  { day: "2026-11-01", start: "2026-11-01T04:00:00Z", end: "2026-11-02T05:00:00Z", queued: "2026-10-31T13:00:00Z", morning: "2026-11-01T14:00:00Z", week: "2026-10-26" },
+])("reports and the 09:00 digest follow the New York calendar on $day", async ({ day, start, end, queued, morning, week }) => {
+  h.clock.set(new Date(queued));
+  const platform = await platformAdmin();
+  await platform.updateSettings({ ...await platform.settings(), timeZone: "America/New_York" });
+  const pat = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "pat", ...ministryA.platformAdmin });
+  const activityId = (await pat.meetupChoices()).activities.find((activity) => activity.name === "coffee")!.id;
+  const occurrences = [];
+  for (const instant of [new Date(start).getTime() - 60_000, new Date(start).getTime(), new Date(end).getTime() - 60_000, new Date(end).getTime()]) {
+    occurrences.push(await pat.createMeetup({ activityId, startsAt: new Date(instant), durationMinutes: 30, capacity: 3,
+      place: { kind: "virtual", url: "https://meet.example/calendar-boundary" } }));
+  }
+  const scope = { kind: "organisation" as const, id: (await platform.organisations())[0]!.id };
+  const report = await platform.reports(scope, { from: day, to: day });
+  expect(report.tables.find((table) => table.id === "weekly-occurrences")!.rows).toEqual([[week, "Meetup", "coffee", 2]]);
+  const ana = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });
+  await ana.joinMeetup(occurrences[0]!.id);
+  await ana.leaveMeetup(occurrences[0]!.id);
+  h.email.reset();
+  h.clock.set(new Date(new Date(morning).getTime() - 60_000));
+  await h.app.sendDailyDigests();
+  expect(h.email.outbox).toEqual([]);
+  h.clock.set(new Date(morning));
+  await h.app.sendDailyDigests();
+  expect(h.email.outbox).toEqual([expect.objectContaining({ to: ministryA.platformAdmin.email, subject: "Daily Meetup digest" })]);
+});
+
 test("a suspended Platform Admin cannot keep using an earlier authorised handle", async () => {
   const platform = await platformAdmin();
   const pat = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "pat", ...ministryA.platformAdmin });

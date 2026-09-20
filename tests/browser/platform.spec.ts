@@ -67,10 +67,32 @@ test("Platform Admin onboards Organisations, groups a Ministry and changes live 
       await expect(page.getByRole("status")).toHaveText("Deployment settings saved.");
       await agency.goto("/meetups/new");
       await expect(agency.getByLabel("Start time in Asia/Singapore", { exact: true })).toBeVisible();
+      const year = new Date().getUTCFullYear() + 1;
+      await agency.getByRole("combobox", { name: "Activity", exact: true }).selectOption({ label: "coffee" });
+      await agency.getByRole("combobox", { name: "Place", exact: true }).selectOption("virtual");
+      await agency.getByLabel("Virtual Place URL", { exact: true }).fill("https://meet.example/calendar");
+      await agency.getByLabel("Start time in Asia/Singapore", { exact: true }).fill(`${year}-01-02T00:30`);
+      await agency.getByRole("button", { name: "Create Meetup", exact: true }).click();
+      await expect(agency.locator("time")).toHaveAttribute("datetime", `${year}-01-01T16:30:00.000Z`);
+      await expect(agency.locator("time")).toHaveText(`${year}-01-02 00:30 Asia/Singapore`);
       await page.reload();
       await expect(page.getByLabel("Scout model", { exact: true })).toHaveValue("browser-scout");
       await expect(page.getByLabel("Interest extraction model", { exact: true })).toHaveValue("gpt-5.6-luna");
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.getByLabel("Time zone", { exact: true }).fill("America/New_York");
+      await page.getByRole("button", { name: "Save settings", exact: true }).click();
+      await expect(page.getByRole("status")).toHaveText("Deployment settings saved.");
+      for (const value of ["2026-03-08T02:30", "2026-11-01T01:30"]) {
+        await agency.goto("/meetups/new");
+        await agency.getByRole("combobox", { name: "Activity", exact: true }).selectOption({ label: "coffee" });
+        await agency.getByRole("combobox", { name: "Place", exact: true }).selectOption("virtual");
+        await agency.getByLabel("Virtual Place URL", { exact: true }).fill("https://meet.example/invalid-calendar");
+        await agency.getByLabel("Start time in America/New_York", { exact: true }).fill(value);
+        await agency.getByRole("button", { name: "Create Meetup", exact: true }).click();
+        await expect(agency.getByRole("alert").filter({ hasText: "Choose a valid local time." }))
+          .toHaveText("Choose a valid local time. Daylight-saving transitions can skip or repeat a time.");
+        await expect(agency).toHaveURL(/\/meetups\/new$/);
+      }
     } finally {
       await page.goto("/platform/settings");
       for (const [index, name] of names.entries()) await page.locator(`input[name="${name}"]`).fill(original[index]!);

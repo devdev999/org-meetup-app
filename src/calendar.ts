@@ -28,10 +28,3 @@ export function weekStart(value: Date, timeZone: string): string {
   const day = zonedTime(value, timeZone).toPlainDate();
   return day.subtract({ days: day.dayOfWeek - 1 }).toString();
 }
-
-export function nextMorning(value: Date, timeZone: string): Date {
-  const local = zonedTime(value, timeZone);
-  let morning = local.toPlainDate().toPlainDateTime("09:00").toZonedDateTime(timeZone);
-  if (morning.epochMilliseconds <= value.getTime()) morning = morning.add({ days: 1 });
-  return new Date(morning.epochMilliseconds);
-}

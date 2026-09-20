@@ -16,7 +16,7 @@
     "db:generate": "drizzle-kit generate",
     "db:setup": "tsx --env-file-if-exists=.env src/db/setup.ts",
     "typecheck": "next typegen && tsc --noEmit",
-    "lint:boundaries": "depcruise src",
+    "lint:boundaries": "depcruise src tests/browser",
     "test": "vitest run",
     "test:browser": "tsx tests/browser/run.ts",
     "test:watch": "vitest",

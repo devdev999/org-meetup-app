@@ -1,4 +1,4 @@
-import { formatTime, nextMorning } from "../../calendar";
+import { formatTime, zonedTime } from "../../calendar";
 import { readDeploymentSettings, emailSender, deploymentTimeZone } from "./deployment-settings";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, lte, sql, type SQL } from "drizzle-orm";
@@ -61,6 +61,13 @@ export async function setNoticePreference(deps: Deps, actor: Actor, input: Notic
       set: { telegram: parsed.data.telegram, email: parsed.data.email },
     });
   });
+}
+
+function nextMorning(value: Date, timeZone: string): Date {
+  const local = zonedTime(value, timeZone);
+  let morning = local.toPlainDate().toPlainDateTime("09:00").toZonedDateTime(timeZone);
+  if (morning.epochMilliseconds <= value.getTime()) morning = morning.add({ days: 1 });
+  return new Date(morning.epochMilliseconds);
 }
 
 export async function recordNotices(db: Queryable, organisationId: string, recipients: string[],

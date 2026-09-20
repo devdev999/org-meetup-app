@@ -5,7 +5,7 @@ import { applicationFromEnv } from "../../src/config/wiring";
 import { runMigrations } from "../../src/db/migrate";
 import { createTestDatabase } from "../../src/testing/test-database";
 import { seedAttendance } from "./attendance-fixture";
-import { organisationSetup } from "../../src/application/tests/fixtures";
+import { organisationSetup } from "../../src/testing/organisation-setup";
 
 const database = await createTestDatabase();
 try {
