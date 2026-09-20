@@ -51,6 +51,20 @@ test("a Meetup cannot save another Organisation's canonical Interests", async ()
   expect(await host.listMeetups()).toEqual([]);
 });
 
+test("selecting a canonical Meetup Interest preserves an existing Alias with the same display name", async () => {
+  const host = await setup();
+  const sql = (await host.interests()).find((interest) => interest.name === "SQL")!;
+  await host.confirmInterest({ phrase: "SQL", selection: { name: "Databases", kind: "skill" }, stance: "shares" });
+  const data = await input(host, { relevantInterests: [{ phrase: "SQL", selection: { interestId: sql.interestId } }] });
+  const meetup = await host.createMeetup(data);
+  expect(meetup.relevantInterests).toEqual([sql]);
+  await host.editMeetup(meetup.id, { ...data, durationMinutes: 45 });
+  expect((await host.viewMeetup(meetup.id))?.relevantInterests).toEqual([sql]);
+  const [declaration] = await host.myInterests();
+  expect(declaration).toMatchObject({ name: "Databases", stance: "shares" });
+  expect((await host.resolveInterest({ phrase: "SQL", kind: "skill" })).proposed).toEqual({ interestId: declaration!.interestId });
+});
+
 test("Invite Suggestions filter Active Members by Organisation and physical Site, excluding Participants and pending invitees", async () => {
   const host = await setup();
   const bo = await member("Bo", "Legal");
@@ -124,6 +138,22 @@ test("home Suggestions use saved Interests and include only open unjoined Meetup
   expect(result[1]?.reasons).not.toContain("Relevant Interests: SQL.");
   await host.editMeetup(matching.id, { ...await input(host), relevantInterests: [] });
   expect((await bo.meetupSuggestions()).find((suggestion) => suggestion.meetup.id === matching.id)?.reasons).not.toContain("Relevant Interests: SQL.");
+});
+
+test("home Suggestions include compatible Host declarations and reflect a changed Stance", async () => {
+  const host = await setup();
+  const bo = await member("Bo");
+  const cy = await member("Cy");
+  const sql = (await bo.interests()).find((interest) => interest.name === "SQL")!;
+  await bo.confirmInterest({ phrase: "SQL", selection: { interestId: sql.interestId }, stance: "seeks" });
+  await host.confirmInterest({ phrase: "SQL", selection: { interestId: sql.interestId }, stance: "shares" });
+  const ordinary = await cy.createMeetup(await input(cy));
+  const matching = await host.createMeetup(await input(host, { startsAt: new Date("2026-09-21T10:00:00Z") }));
+  const suggestions = await bo.meetupSuggestions();
+  expect(suggestions.map((suggestion) => suggestion.meetup.id)).toEqual([matching.id, ordinary.id]);
+  expect(suggestions[0]?.reasons).toContain("The Host Shares SQL, which you Seek.");
+  await host.setInterestStance({ interestId: sql.interestId, stance: "seeks" });
+  expect((await bo.meetupSuggestions())[0]?.reasons).toContain("Learn SQL together with the Host.");
 });
 
 test("automatic extraction receives the chosen Activity and description and previews canonical Interests without saving", async () => {
@@ -222,10 +252,17 @@ test("Organisation Admin views of Suggestions are audited", async () => {
   await h.app.bootstrap({ ...withDepartmentAndSiteClaims(ministryA), organisationAdmin: person });
   const host = await signInAndAcknowledgeAs(h, "ministry-a", person);
   await member("Bo");
+  await member("Cy", "Legal", "Annex");
   const meetup = await host.createMeetup(await input(host));
   await host.inviteSuggestions(meetup.id);
   await host.previewInviteSuggestions({ seed: "draft", place: { kind: "virtual" }, relevantInterests: [] });
+  const { sites } = await host.meetupChoices();
+  for (const site of sites) await host.previewInviteSuggestions({ seed: "draft", place: { kind: "physical", siteId: site.id }, relevantInterests: [] });
   await host.meetupSuggestions();
-  const actions = (await (await host.organisationAdmin()).auditLog()).map((entry) => entry.action);
+  const entries = await (await host.organisationAdmin()).auditLog();
+  const actions = entries.map((entry) => entry.action);
   expect(actions).toEqual(expect.arrayContaining(["invite-suggestions", "invite-suggestions-preview", "meetup-suggestions"]));
+  expect(entries.filter((entry) => entry.action === "invite-suggestions-preview").map((entry) => entry.filter)).toEqual(expect.arrayContaining([
+    { placeKind: "virtual" }, ...sites.map((site) => ({ placeKind: "physical", siteId: site.id })),
+  ]));
 });

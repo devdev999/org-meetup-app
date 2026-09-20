@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import type { InviteSuggestion } from "../../application";
+import type { InterestChoice, InviteSuggestion } from "../../application";
 import { previewInvites, sendInvite, type MeetupActionState } from "./actions";
 
 export function InviteSuggestions({ meetupId, suggestions }: { meetupId: string; suggestions: InviteSuggestion[] }) {
@@ -31,7 +31,7 @@ export function InviteSuggestions({ meetupId, suggestions }: { meetupId: string;
 }
 
 export function DraftInviteSuggestions({ seed, placeKind, siteId, interests }: {
-  seed: string; placeKind: "physical" | "virtual"; siteId: string; interests: string;
+  seed: string; placeKind: "physical" | "virtual"; siteId: string; interests: InterestChoice[];
 }) {
   const [suggestions, setSuggestions] = useState<InviteSuggestion[]>([]);
   const [selected, setSelected] = useState<InviteSuggestion["member"][]>([]);
@@ -43,7 +43,7 @@ export function DraftInviteSuggestions({ seed, placeKind, siteId, interests }: {
     const timer = setTimeout(async () => {
       if (placeKind === "physical" && !siteId) return;
       try {
-        const result = await previewInvites({ seed, place: placeKind === "physical" ? { kind: "physical", siteId } : { kind: "virtual" }, relevantInterests: JSON.parse(interests) });
+        const result = await previewInvites({ seed, place: placeKind === "physical" ? { kind: "physical", siteId } : { kind: "virtual" }, relevantInterests: interests });
         if (!active) return;
         setSuggestions(result.suggestions);
         setStatus(result.error ?? (result.suggestions.length ? "" : "No eligible Members to suggest."));

@@ -161,23 +161,25 @@ export async function confirmInterest(deps: Deps, actor: Actor, input: ConfirmIn
   return memberInterestList(deps, actor);
 }
 
-export async function saveInterestChoice(db: Queryable, organisationId: string, { phrase, selection }: InterestChoice, now: Date): Promise<string> {
-  let interestId: string;
+export async function saveCanonicalInterest(db: Queryable, organisationId: string, selection: InterestSelection, now: Date): Promise<string> {
   if ("interestId" in selection) {
     const [existing] = await db.select({ id: interests.id }).from(interests)
       .where(and(eq(interests.organisationId, organisationId), eq(interests.id, selection.interestId)));
     if (!existing) throw new InvalidInputError("unknown-interest", "Choose an Interest from your Organisation.");
-    interestId = existing.id;
-  } else {
-    const [interest] = await db.insert(interests).values({
-      organisationId, name: selection.name, nameKey: selection.name.toLowerCase(), kind: selection.kind, createdAt: now,
-    }).onConflictDoUpdate({ target: [interests.organisationId, interests.nameKey], set: { nameKey: selection.name.toLowerCase() } })
-      .returning({ id: interests.id, name: interests.name, kind: interests.kind });
-    if (interest!.name !== selection.name || interest!.kind !== selection.kind) {
-      throw new InvalidInputError("interest-name-conflict", "An Interest with this name already exists with a different spelling or kind. Preview again and confirm the existing Interest, or use another name.");
-    }
-    interestId = interest!.id;
+    return existing.id;
   }
+  const [interest] = await db.insert(interests).values({
+    organisationId, name: selection.name, nameKey: selection.name.toLowerCase(), kind: selection.kind, createdAt: now,
+  }).onConflictDoUpdate({ target: [interests.organisationId, interests.nameKey], set: { nameKey: selection.name.toLowerCase() } })
+    .returning({ id: interests.id, name: interests.name, kind: interests.kind });
+  if (interest!.name !== selection.name || interest!.kind !== selection.kind) {
+    throw new InvalidInputError("interest-name-conflict", "An Interest with this name already exists with a different spelling or kind. Preview again and confirm the existing Interest, or use another name.");
+  }
+  return interest!.id;
+}
+
+export async function saveInterestChoice(db: Queryable, organisationId: string, { phrase, selection }: InterestChoice, now: Date): Promise<string> {
+  const interestId = await saveCanonicalInterest(db, organisationId, selection, now);
   const [alias] = await db.insert(interestAliases).values({
     organisationId, interestId, phrase, phraseKey: aliasKey(phrase), createdAt: now,
   }).onConflictDoUpdate({

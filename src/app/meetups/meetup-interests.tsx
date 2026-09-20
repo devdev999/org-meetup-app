@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Interest, InterestChoice } from "../../application";
 import { extractInterests } from "./actions";
 
@@ -13,7 +13,7 @@ export function MeetupInterests({ catalog, activityId, description, initialInter
   activityId: string;
   description: string;
   initialInterests?: Interest[];
-  onChange: (value: string) => void;
+  onChange: (value: InterestChoice[]) => void;
 }) {
   const [manual, setManual] = useState<InterestChoice[]>(() => (initialInterests ?? []).map((interest) => ({ phrase: interest.name, selection: { interestId: interest.interestId } })));
   const [automatic, setAutomatic] = useState<InterestChoice[]>([]);
@@ -37,10 +37,9 @@ export function MeetupInterests({ catalog, activityId, description, initialInter
     }, 500);
     return () => { active = false; clearTimeout(timer); };
   }, [activityId, description, initialInterests]);
-  const selected = [...new Map([...manual, ...automatic.filter((choice) => !excluded.includes(choiceKey(choice))
-    && !manual.some((entry) => choiceKey(entry) === choiceKey(choice)))].map((choice) => [choiceKey(choice), choice])).values()].slice(0, 20);
-  const serialized = JSON.stringify(selected);
-  useEffect(() => onChange(serialized), [serialized, onChange]);
+  const selected = useMemo(() => [...new Map([...manual, ...automatic.filter((choice) => !excluded.includes(choiceKey(choice))
+    && !manual.some((entry) => choiceKey(entry) === choiceKey(choice)))].map((choice) => [choiceKey(choice), choice])).values()].slice(0, 20), [manual, automatic, excluded]);
+  useEffect(() => onChange(selected), [selected, onChange]);
   return (
     <fieldset>
       <legend>Relevant Interests, optional</legend>
@@ -68,7 +67,7 @@ export function MeetupInterests({ catalog, activityId, description, initialInter
           setExcluded((current) => [...current, key]);
         }}>Remove {name}</button></li>;
       })}</ul>}
-      <input type="hidden" name="relevantInterests" value={serialized} />
+      <input type="hidden" name="relevantInterests" value={JSON.stringify(selected)} />
     </fieldset>
   );
 }

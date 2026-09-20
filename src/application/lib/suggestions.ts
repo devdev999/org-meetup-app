@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireActiveMember, type Actor } from "./actor";
 import type { Deps } from "./deps";
@@ -6,7 +6,7 @@ import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
 import { interestChoiceSchema, listInterests, memberInterestList, type Interest, type InterestChoice } from "./interests";
 import { relevantInterests } from "./meetup-interests";
-import { listMeetups, type InviteChoices, type MeetupSummary } from "./meetups";
+import { readMeetup, validSite, visibleMeetups, type InviteChoices, type MeetupSummary } from "./meetups";
 import { departments, gatheringInterests, gatheringMembers, gatherings, interests, invites, memberInterests, members, sites } from "./schema";
 import { rankInvitees, rankMeetups } from "./suggestion-ranking";
 
@@ -37,11 +37,7 @@ export async function previewInviteSuggestions(deps: Deps, actor: Actor, input: 
   if (!parsed.success) throw new InvalidInputError("invalid-meetup", "Choose a Place and up to twenty relevant Interests.");
   const data = parsed.data;
   const siteId = data.place.kind === "physical" ? data.place.siteId : undefined;
-  if (siteId) {
-    const [site] = await deps.db.select({ id: sites.id }).from(sites)
-      .where(and(eq(sites.organisationId, actor.organisationId), eq(sites.id, siteId), eq(sites.retired, false)));
-    if (!site) throw new InvalidInputError("invalid-meetup", "Choose a current Site in your Organisation.");
-  }
+  if (siteId) await validSite(deps.db, actor.organisationId, siteId);
   const catalog = await listInterests(deps, actor);
   const selected: Interest[] = [];
   for (const { selection } of data.relevantInterests) {
@@ -54,21 +50,36 @@ export async function previewInviteSuggestions(deps: Deps, actor: Actor, input: 
 }
 
 export async function meetupSuggestions(deps: Deps, actor: Actor): Promise<MeetupSuggestion[]> {
-  const until = new Date(deps.clock.now().getTime() + 14 * 24 * 60 * 60 * 1000);
-  const meetups = (await listMeetups(deps, actor, until))
-    .filter((meetup) => meetup.status === "scheduled" && meetup.audience.kind === "open" && meetup.membership === null);
+  const current = await requireActiveMember(deps.db, actor);
+  const now = deps.clock.now();
+  const until = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+  const meetups = await deps.db.select({ id: gatherings.id, hostMemberId: gatherings.hostMemberId, startsAt: gatherings.startsAt }).from(gatherings)
+    .where(and(visibleMeetups(actor, current.siteId), eq(gatherings.status, "scheduled"), eq(gatherings.audienceKind, "open"),
+      gt(gatherings.startsAt, now), lte(gatherings.startsAt, until), ne(gatherings.hostMemberId, actor.memberId),
+      sql`not exists (select 1 from ${gatheringMembers} where ${gatheringMembers.organisationId} = ${gatherings.organisationId} and ${gatheringMembers.gatheringId} = ${gatherings.id} and ${gatheringMembers.memberId} = ${actor.memberId})`));
   if (!meetups.length) return [];
-  const [declarations, savedInterests] = await Promise.all([
+  const [declarations, savedInterests, hostInterests] = await Promise.all([
     memberInterestList(deps, actor),
     deps.db.select({ meetupId: gatheringInterests.gatheringId, interestId: interests.id, name: interests.name, kind: interests.kind })
       .from(gatheringInterests).innerJoin(interests, and(eq(interests.organisationId, gatheringInterests.organisationId), eq(interests.id, gatheringInterests.interestId)))
       .where(and(eq(gatheringInterests.organisationId, actor.organisationId), inArray(gatheringInterests.gatheringId, meetups.map((meetup) => meetup.id)))),
+    deps.db.select({ memberId: memberInterests.memberId, interestId: interests.id, name: interests.name, kind: interests.kind, stance: memberInterests.stance })
+      .from(memberInterests).innerJoin(interests, and(eq(interests.organisationId, memberInterests.organisationId), eq(interests.id, memberInterests.interestId)))
+      .where(and(eq(memberInterests.organisationId, actor.organisationId), inArray(memberInterests.memberId, [...new Set(meetups.map((meetup) => meetup.hostMemberId))]))),
   ]);
-  const byId = new Map(meetups.map((meetup) => [meetup.id, meetup]));
-  return rankMeetups(declarations, meetups.map((meetup) => ({
+  const interestsByMeetup = Map.groupBy(savedInterests, (interest) => interest.meetupId);
+  const interestsByHost = Map.groupBy(hostInterests, (interest) => interest.memberId);
+  const ranked = rankMeetups(declarations, meetups.map((meetup) => ({
     meetupId: meetup.id, startsAt: meetup.startsAt, connectionCount: 0,
-    interests: savedInterests.filter((interest) => interest.meetupId === meetup.id),
-  }))).slice(0, 20).map(({ meetupId, reasons }) => ({ meetup: byId.get(meetupId)!, reasons }));
+    interests: interestsByMeetup.get(meetup.id) ?? [], hostInterests: interestsByHost.get(meetup.hostMemberId) ?? [],
+  }))).slice(0, 20);
+  const results = await Promise.all(ranked.map(async ({ meetupId, reasons }) => {
+    const detail = await readMeetup(deps.db, actor, meetupId, current.siteId, now);
+    if (!detail || detail.status !== "scheduled" || detail.audience.kind !== "open" || detail.membership !== null) return undefined;
+    const { participants, waitlist, ...meetup } = detail;
+    return { meetup, reasons };
+  }));
+  return results.filter((suggestion) => suggestion !== undefined);
 }
 
 export async function inviteSuggestions(deps: Deps, actor: Actor, id: string): Promise<InviteSuggestion[]> {
@@ -107,11 +118,12 @@ async function candidateSuggestions(deps: Deps, actor: Actor, input: {
     memberInterestList(deps, actor),
   ]);
   const byId = new Map(candidates.map((candidate) => [candidate.memberId, candidate]));
+  const interestsByMember = Map.groupBy(declarations, (interest) => interest.memberId);
   return rankInvitees({
     seed: input.seed, hostDepartmentId: input.hostDepartmentId, hostInterests, relevantInterests: input.relevantInterests,
     candidates: candidates.map((candidate) => ({
       memberId: candidate.memberId, departmentId: candidate.departmentId, connectionCount: 0,
-      interests: declarations.filter((interest) => interest.memberId === candidate.memberId),
+      interests: interestsByMember.get(candidate.memberId) ?? [],
     })),
   }).slice(0, 20).map(({ memberId, reasons }) => {
     const candidate = byId.get(memberId)!;

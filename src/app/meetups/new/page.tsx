@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { requireMemberPastWelcome } from "../../../web/session";
 import { MeetupForm } from "../meetup-form";
@@ -17,4 +18,3 @@ export default async function NewMeetupPage() {
     </main>
   );
 }
-import { randomUUID } from "node:crypto";

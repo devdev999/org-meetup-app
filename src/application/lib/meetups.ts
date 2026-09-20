@@ -1,4 +1,5 @@
-import { and, asc, desc, eq, gt, ilike, inArray, lte, or, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, asc, desc, eq, gt, ilike, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireActiveMember, VISIBLE_MEMBER_STATUSES, withActiveMember, type Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
@@ -123,7 +124,7 @@ export async function meetupChoices(deps: Deps, actor: Actor): Promise<MeetupCho
   return { activities: activityRows, sites: siteRows, defaultSiteId: current.siteId };
 }
 
-async function validSite(db: Queryable, organisationId: string, siteId: string) {
+export async function validSite(db: Queryable, organisationId: string, siteId: string) {
   const [site] = await db.select({ id: sites.id }).from(sites)
     .where(and(eq(sites.organisationId, organisationId), eq(sites.id, siteId), eq(sites.retired, false)));
   if (!site) invalid("Choose a current Site in your Organisation.");
@@ -183,7 +184,7 @@ export async function createMeetup(deps: Deps, actor: Actor, input: CreateMeetup
   });
 }
 
-function visibleTo(actor: Actor, siteId: string | null) {
+export function visibleMeetups(actor: Actor, siteId: string | null) {
   return and(
     eq(gatherings.organisationId, actor.organisationId), eq(gatherings.kind, "meetup"),
     or(
@@ -198,13 +199,13 @@ function visibleTo(actor: Actor, siteId: string | null) {
   );
 }
 
-async function readMeetup(db: Queryable, actor: Actor, id: string, siteId: string | null, now: Date): Promise<Omit<MeetupDetail, "invite" | "invites" | "relevantInterests"> | undefined> {
+export async function readMeetup(db: Queryable, actor: Actor, id: string, siteId: string | null, now: Date): Promise<Omit<MeetupDetail, "invite" | "invites" | "relevantInterests"> | undefined> {
   const [row] = await db.select({ meetup: gatherings, activityName: activities.name, hostName: members.name, siteName: sites.name })
     .from(gatherings)
     .innerJoin(activities, and(eq(activities.id, gatherings.activityId), eq(activities.organisationId, gatherings.organisationId)))
     .innerJoin(members, and(eq(members.id, gatherings.hostMemberId), eq(members.organisationId, gatherings.organisationId)))
     .leftJoin(sites, and(eq(sites.id, gatherings.placeSiteId), eq(sites.organisationId, gatherings.organisationId)))
-    .where(and(visibleTo(actor, siteId), eq(gatherings.id, id)));
+    .where(and(visibleMeetups(actor, siteId), eq(gatherings.id, id)));
   if (!row) return undefined;
   const meetup = row.meetup;
   const people = await db.select({ memberId: members.id, name: members.name, status: gatheringMembers.status })
@@ -248,10 +249,10 @@ export async function viewMeetup(deps: Deps, actor: Actor, id: string): Promise<
   return readMeetupDetail(deps.db, actor, id, current.siteId, deps.clock.now());
 }
 
-export async function listMeetups(deps: Deps, actor: Actor, until?: Date): Promise<MeetupSummary[]> {
+export async function listMeetups(deps: Deps, actor: Actor): Promise<MeetupSummary[]> {
   const current = await requireActiveMember(deps.db, actor);
   const rows = await deps.db.select({ id: gatherings.id }).from(gatherings)
-    .where(and(visibleTo(actor, current.siteId), gt(gatherings.startsAt, deps.clock.now()), until ? lte(gatherings.startsAt, until) : undefined))
+    .where(and(visibleMeetups(actor, current.siteId), gt(gatherings.startsAt, deps.clock.now())))
     .orderBy(gatherings.startsAt, gatherings.id);
   const results = await Promise.all(rows.map((row) => readMeetup(deps.db, actor, row.id, current.siteId, deps.clock.now())));
   return results.filter((meetup) => meetup !== undefined).map(({ participants, waitlist, ...summary }) => summary);
@@ -493,4 +494,3 @@ export async function cancelMeetup(deps: Deps, actor: Actor, id: string): Promis
     await db.delete(gatheringMembers).where(and(membershipWhere(actor.organisationId, id), eq(gatheringMembers.status, "waitlisted")));
   });
 }
-import { randomUUID } from "node:crypto";

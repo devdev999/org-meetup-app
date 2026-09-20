@@ -48,14 +48,27 @@ test("tied Invite Suggestions stay in the same seeded order even when candidate 
 
 test("home ranking uses canonical Interests regardless of Stance, then Connections and start time", () => {
   const candidates = [
-    { meetupId: "soon-unrelated", interests: [], connectionCount: 0, startsAt: new Date("2026-09-19T08:00:00Z") },
-    { meetupId: "known", interests: [sql], connectionCount: 2, startsAt: new Date("2026-09-19T09:00:00Z") },
-    { meetupId: "later", interests: [sql], connectionCount: 0, startsAt: new Date("2026-09-20T10:00:00Z") },
-    { meetupId: "sooner", interests: [sql], connectionCount: 0, startsAt: new Date("2026-09-19T10:00:00Z") },
-    { meetupId: "more-overlap", interests: [sql, running], connectionCount: 3, startsAt: new Date("2026-09-21T10:00:00Z") },
+    { meetupId: "soon-unrelated", interests: [], hostInterests: [], connectionCount: 0, startsAt: new Date("2026-09-19T08:00:00Z") },
+    { meetupId: "known", interests: [sql], hostInterests: [], connectionCount: 2, startsAt: new Date("2026-09-19T09:00:00Z") },
+    { meetupId: "later", interests: [sql], hostInterests: [], connectionCount: 0, startsAt: new Date("2026-09-20T10:00:00Z") },
+    { meetupId: "sooner", interests: [sql], hostInterests: [], connectionCount: 0, startsAt: new Date("2026-09-19T10:00:00Z") },
+    { meetupId: "more-overlap", interests: [sql, running], hostInterests: [], connectionCount: 3, startsAt: new Date("2026-09-21T10:00:00Z") },
   ];
   const result = rankMeetups([{ ...sql, stance: "seeks" }, { ...running, stance: "shares" }], candidates);
   expect(result.map((entry) => entry.meetupId)).toEqual(["more-overlap", "sooner", "later", "known", "soon-unrelated"]);
   expect(result[0]?.reasons).toContain("Relevant Interests: SQL, Running.");
   expect(rankMeetups([{ ...sql, stance: "shares" }, { ...running, stance: "seeks" }], candidates)).toEqual(result);
+});
+
+test("home ranking includes compatible Host Interests before Connections and start time", () => {
+  const candidates = [
+    { meetupId: "unrelated", interests: [], hostInterests: [], connectionCount: 0, startsAt: new Date("2026-09-19T08:00:00Z") },
+    { meetupId: "learn-together", interests: [], hostInterests: [{ ...sql, stance: "seeks" as const }], connectionCount: 0, startsAt: new Date("2026-09-19T09:00:00Z") },
+    { meetupId: "learn-from-host", interests: [], hostInterests: [{ ...sql, stance: "shares" as const }], connectionCount: 1, startsAt: new Date("2026-09-20T10:00:00Z") },
+    { meetupId: "host-and-relevant", interests: [running], hostInterests: [{ ...sql, stance: "shares" as const }], connectionCount: 2, startsAt: new Date("2026-09-21T10:00:00Z") },
+  ];
+  const result = rankMeetups([{ ...sql, stance: "seeks" }, { ...running, stance: "seeks" }], candidates);
+  expect(result.map((entry) => entry.meetupId)).toEqual(["host-and-relevant", "learn-from-host", "learn-together", "unrelated"]);
+  expect(result[0]?.reasons).toContain("The Host Shares SQL, which you Seek.");
+  expect(result[2]?.reasons).toContain("Learn SQL together with the Host.");
 });

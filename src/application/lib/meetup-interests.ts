@@ -4,7 +4,7 @@ import { requireActiveMember, type Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
-import { resolveInterest, saveInterestChoice, type Interest, type InterestChoice, type InterestResolution } from "./interests";
+import { resolveInterest, saveCanonicalInterest, saveInterestChoice, type Interest, type InterestChoice, type InterestResolution } from "./interests";
 import { activities, gatheringInterests, interests } from "./schema";
 
 export interface ExtractMeetupInterestsInput { activityId: string; description: string }
@@ -41,7 +41,9 @@ export async function relevantInterests(db: Queryable, organisationId: string, m
 
 export async function saveRelevantInterests(db: Queryable, organisationId: string, meetupId: string, choices: InterestChoice[], now: Date): Promise<void> {
   const ids = new Set<string>();
-  for (const choice of choices) ids.add(await saveInterestChoice(db, organisationId, choice, now));
+  for (const choice of choices) ids.add("interestId" in choice.selection
+    ? await saveCanonicalInterest(db, organisationId, choice.selection, now)
+    : await saveInterestChoice(db, organisationId, choice, now));
   await db.delete(gatheringInterests).where(and(eq(gatheringInterests.organisationId, organisationId), eq(gatheringInterests.gatheringId, meetupId)));
   if (ids.size) await db.insert(gatheringInterests).values([...ids].map((interestId) => ({ organisationId, gatheringId: meetupId, interestId })));
 }

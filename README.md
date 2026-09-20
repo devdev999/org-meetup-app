@@ -48,13 +48,13 @@ The application stores Meetups and future Events together with a kind. All comma
 
 ## Suggestions
 
-The home page suggests up to twenty open, unjoined Meetups in your scope over the next fourteen days. It ranks overlap with saved relevant Interests before start time and shows the reasons. Broad Activity names and descriptions are not ranking inputs.
+The home page suggests up to twenty open, unjoined Meetups in your scope over the next fourteen days. It ranks overlap with the Host's declarations and saved relevant Interests before start time and shows the reasons. Broad Activity names and descriptions are not ranking inputs.
 
 Hosts can select up to twenty relevant Interests while creating or editing a Meetup. Creation also extracts proposals from the selected Activity and description. Review or remove these before Create, including any proposed new Interests. Manual choices survive extraction reruns, and a failed or empty extraction leaves creation available. Saving relevant Interests never changes personal Shares or Seeks.
 
 Creation and editing show up to twenty suggested invitees. Candidates must be Active in the Host's Organisation and, for physical Meetups, based at the Place's Site. Hosts, current Participants and pending invitees are excluded. Creation lets the Host select Invites to send with the normal Create confirmation. Editing offers immediate one-tap Invites based on the saved Interests and Place.
 
-The pure ranker gives compatible Member Interest overlap two points and Seeks with Seeks one point. Each overlap with a saved relevant Interest adds two points regardless of Stance. Ties prefer a Member without a recorded Connection, then a different known Department, then an order seeded for that Meetup. Home ranking uses one point per relevant Interest, then fewer Connections with Participants, then the soonest start. Connection counts are zero until issue #12 supplies Attendance data. Queries compute Suggestions each time; only the confirmed relevant Interests and Invites are saved.
+The pure ranker gives compatible Member Interest overlap two points and Seeks with Seeks one point. Each overlap with a saved relevant Interest adds two points regardless of Stance. Invitee ties prefer a Member without a recorded Connection, then a different known Department, then an order seeded for that Meetup. Home uses the same Interest weights, then fewer Connections with Participants, then the soonest start. Connection counts are zero until issue #12 supplies Attendance data. Queries compute Suggestions each time; only the confirmed relevant Interests and Invites are saved.
 
 ## Notifications
 

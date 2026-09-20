@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import type { Interest, MemberActions, MeetupDetail } from "../../application/index";
+import type { Interest, InterestChoice, MemberActions, MeetupDetail } from "../../application/index";
 import { saveMeetup, type MeetupActionState } from "./actions";
 import { MeetupInterests } from "./meetup-interests";
 import { DraftInviteSuggestions } from "./invite-suggestions";
@@ -22,7 +22,7 @@ export function MeetupForm({
   const [activityId, setActivityId] = useState(meetup?.activity.id ?? "");
   const [description, setDescription] = useState(meetup?.description ?? "");
   const [siteId, setSiteId] = useState(meetup?.place.kind === "physical" ? meetup.place.siteId : choices.defaultSiteId ?? "");
-  const [relevantInterests, setRelevantInterests] = useState("[]");
+  const [relevantInterests, setRelevantInterests] = useState<InterestChoice[]>([]);
   const [startsAt, setStartsAt] = useState(meetup ? new Date(meetup.startsAt).toISOString().slice(0, 16) : "");
   useEffect(() => {
     if (!meetup) setStartsAt(new Date(Date.now() + 30 * 60 * 1000).toISOString().slice(0, 16));
