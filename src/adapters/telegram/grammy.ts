@@ -14,7 +14,9 @@ export class GrammyTelegram implements TelegramPort {
   async sendMessage(message: TelegramMessage): Promise<void> {
     const rsvpId = message.rsvpEventId ?? message.rsvpMeetupId;
     const joinId = message.joinEventId ?? message.joinMeetupId;
-    const buttons = message.inviteId ? [
+    const buttons = message.confirmAttendanceNoticeId ? [
+      { text: "Everyone came, including me", callback_data: `attendance:${message.confirmAttendanceNoticeId}` },
+    ] : message.inviteId ? [
       { text: "Accept", callback_data: `accept:${message.inviteId}` },
       { text: "Decline", callback_data: `decline:${message.inviteId}` },
     ] : rsvpId ? [

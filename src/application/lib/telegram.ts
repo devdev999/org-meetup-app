@@ -10,9 +10,11 @@ import { organisations, telegramLinkCodes, telegramLinks } from "./schema";
 import { postAvailability } from "./availability";
 import type { TelegramAvailabilityAction, TelegramMessage } from "../ports";
 import { answerRsvp } from "./recurring-meetups";
+import { confirmAttendancePrompt } from "./attendance";
 
 export interface TelegramLink { url: string; expiresAt: Date }
 export type TelegramCommand = { kind: "link"; chatId: string; code: string }
+  | { kind: "confirm-attendance"; chatId: string; callbackId: string; noticeId: string }
   | { kind: "join"; chatId: string; callbackId: string; meetupId: string }
   | { kind: "join-event"; chatId: string; callbackId: string; eventId: string }
   | { kind: "answer-invite"; chatId: string; callbackId: string; inviteId: string; answer: "accept" | "decline" }
@@ -73,7 +75,10 @@ export async function handleTelegram(deps: Deps, command: TelegramCommand): Prom
     let gatheringId: string | undefined;
     if (actor) {
       try {
-        if (command.kind === "join" || command.kind === "join-event") {
+        if (command.kind === "confirm-attendance") {
+          gatheringId = await confirmAttendancePrompt(deps, actor, command.noticeId);
+          text = "Attendance recorded. Amend it in the app if needed.";
+        } else if (command.kind === "join" || command.kind === "join-event") {
           gatheringId = command.kind === "join-event" ? command.eventId : command.meetupId;
           const result = await joinMeetup(deps, actor, gatheringId, command.kind === "join-event" ? "event" : "meetup");
           text = result === "participant" ? `You joined the ${command.kind === "join-event" ? "Event" : "Meetup"}.` : "You are on the waitlist.";

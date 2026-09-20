@@ -33,6 +33,8 @@ export function createTelegramWebhook(application: Application, secret: string |
     }
     if (callback?.message && !callback.from.is_bot && callback.message.chat.type === "private" && callback.message.chat.id === callback.from.id) {
       const availability = callback.data ? parseAvailabilityCallback(callback.data) : undefined;
+      const attendance = callback.data?.match(/^attendance:(.+)$/);
+      if (attendance) await application.handleTelegram({ kind: "confirm-attendance", chatId: String(callback.from.id), callbackId: callback.id, noticeId: attendance[1]! });
       if (availability) await application.handleTelegram({ ...availability, chatId: String(callback.from.id), callbackId: callback.id });
       const join = callback.data?.match(/^(join|join-event):(.+)$/);
       if (join) await application.handleTelegram(join[1] === "join-event"

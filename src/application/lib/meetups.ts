@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, gt, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireActiveMember, VISIBLE_MEMBER_STATUSES, withActiveMember, type Actor } from "./actor";
+import { retainHostForAttendance } from "./attendance-records";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { AccessDeniedError, InvalidInputError } from "./errors";
@@ -9,7 +10,7 @@ import { isUuid } from "./input";
 import { interestChoiceSchema, type Interest, type InterestChoice } from "./interests";
 import { relevantInterests, saveRelevantInterests } from "./meetup-interests";
 import { gatheringNoticeText, recordNotices, supersedeDeliveries } from "./notifications";
-import { activities, departments, eventProposals, gatheringMembers, gatheringRsvps, gatherings, invites, members, notices, organisations, recurrenceInterests, recurrenceMembers, recurrences, sites } from "./schema";
+import { activities, attendanceMembers, departments, eventProposals, gatheringMembers, gatheringRsvps, gatherings, invites, members, notices, organisations, recurrenceInterests, recurrenceMembers, recurrences, sites } from "./schema";
 import { availabilityOverlapSchema, findAvailabilityOverlap, type AvailabilityOverlap } from "./availability";
 import { readRecurrences, recurrenceSchema, saveRsvp, type Recurrence, type RecurrenceInput } from "./recurrence-records";
 
@@ -250,6 +251,7 @@ export function visibleGatherings(actor: Actor, siteId: string | null, kind?: Ga
     inArray(gatherings.status, ["scheduled", "cancelled", "completed"]),
     or(
       eq(gatherings.hostMemberId, actor.memberId),
+      sql`exists (select 1 from ${attendanceMembers} where ${attendanceMembers.organisationId} = ${gatherings.organisationId} and ${attendanceMembers.gatheringId} = ${gatherings.id} and ${attendanceMembers.memberId} = ${actor.memberId} and ${attendanceMembers.attended} = true)`,
       sql`exists (select 1 from ${recurrenceMembers} where ${recurrenceMembers.organisationId} = ${gatherings.organisationId} and ${recurrenceMembers.recurrenceId} = ${gatherings.recurrenceId} and ${recurrenceMembers.memberId} = ${actor.memberId})`,
       sql`exists (select 1 from ${gatheringRsvps} where ${gatheringRsvps.organisationId} = ${gatherings.organisationId} and ${gatheringRsvps.gatheringId} = ${gatherings.id} and ${gatheringRsvps.memberId} = ${actor.memberId})`,
       sql`exists (select 1 from ${invites} where ${invites.organisationId} = ${gatherings.organisationId} and ${invites.gatheringId} = ${gatherings.id} and ${invites.memberId} = ${actor.memberId})`,
@@ -376,9 +378,8 @@ export async function noticeRecipients(db: Queryable, organisationId: string, me
 
 export async function notify(db: Queryable, organisationId: string, gathering: GatheringSummary, recipients: string[], kind: Notice["kind"], message: string, now: Date) {
   const place = gathering.place.kind === "physical" ? `${gathering.place.spot}, ${gathering.place.siteName}` : gathering.place.url;
-  const externalPlace = gathering.place.kind === "physical" ? place : "Online";
   await recordNotices(db, organisationId, recipients, {
-    gatheringId: gathering.id, kind, ...gatheringNoticeText({ message, activity: gathering.activity.name, startsAt: gathering.startsAt, place, externalPlace }),
+    gatheringId: gathering.id, kind, ...gatheringNoticeText({ message, activity: gathering.activity.name, startsAt: gathering.startsAt, place, placeKind: gathering.place.kind }),
   }, now);
 }
 
@@ -613,6 +614,7 @@ export async function handOverMeetup(deps: Deps, actor: Actor, id: string, parti
     const [active] = await db.select({ id: members.id }).from(members)
       .where(and(eq(members.organisationId, actor.organisationId), eq(members.id, nextHost.memberId), eq(members.status, "active")));
     if (!active) invalid("Choose an Active Participant as Host.");
+    await retainHostForAttendance(db, actor.organisationId, id, actor.memberId);
     await db.update(gatherings).set({ hostMemberId: nextHost.memberId }).where(gatheringWhere(actor.organisationId, id));
     await notify(db, actor.organisationId, gathering, await noticeRecipients(db, actor.organisationId, gathering.id),
       "meetup-handed-over", `${firstName(nextHost.name)} is now Host of this ${meetupOrEvent(gathering)}.`, now);

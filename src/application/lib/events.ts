@@ -1,5 +1,6 @@
 import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { requireActiveMember, withActiveMember, type Actor } from "./actor";
+import { retainHostForAttendance } from "./attendance-records";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { AccessDeniedError, InvalidInputError } from "./errors";
@@ -126,6 +127,7 @@ export async function reassignEventHost(db: Queryable, actor: Actor, id: string,
   if (!nextHost) throw new InvalidInputError("invalid-event", "Choose an Active Member in your Organisation as Host.");
   if (row.hostMemberId === memberId) return;
   const event = (await readGathering(db, { organisationId: actor.organisationId, memberId: row.hostMemberId }, id, null, now))!;
+  await retainHostForAttendance(db, actor.organisationId, id, row.hostMemberId);
   await db.update(gatherings).set({ hostMemberId: memberId }).where(and(eq(gatherings.organisationId, actor.organisationId), eq(gatherings.id, id)));
   await notify(db, actor.organisationId, event, [...await noticeRecipients(db, actor.organisationId, id), row.hostMemberId, memberId], "meetup-handed-over", `${firstName(nextHost.name)} is now Host of this Event.`, now);
 }

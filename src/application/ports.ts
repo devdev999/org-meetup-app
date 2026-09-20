@@ -87,6 +87,7 @@ export interface TelegramMessage {
   inviteId?: string;
   rsvpMeetupId?: string;
   rsvpEventId?: string;
+  confirmAttendanceNoticeId?: string;
   buttons?: Array<Array<{ text: string; action: TelegramAvailabilityAction }>>;
 }
 

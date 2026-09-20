@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { applicationFromEnv } from "../../src/config/wiring";
 import { runMigrations } from "../../src/db/migrate";
 import { createTestDatabase } from "../../src/testing/test-database";
+import { seedAttendance } from "./attendance-fixture";
 
 const database = await createTestDatabase();
 try {
@@ -28,6 +29,7 @@ try {
     platformAdmin: { email: "pat@ministry-a.example", name: "Pat Platform" },
     organisationAdmin: { email: "olivia@ministry-a.example", name: "Olivia Admin" },
   });
+  process.env.ATTENDANCE_FIXTURES = JSON.stringify(await seedAttendance(database.pool, process.env.APP_URL!));
   const require = createRequire(import.meta.url);
   process.exitCode = await new Promise<number>((resolve, reject) => {
     const runner = spawn(process.execPath, [require.resolve("@playwright/test/cli"), "test", ...process.argv.slice(2)], {

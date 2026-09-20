@@ -4,6 +4,8 @@ import { recordAdminView } from "./admin-audit";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { AccessDeniedError } from "./errors";
+import { isUuid } from "./input";
+import { ratings, readAttendanceHistory, type ActivityRating, type AttendanceHistoryEntry } from "./attendance";
 import { approveEvent, createEvent, managedEvents, readEventProposals, reassignEventHost, rejectEvent, type EventProposal, type ManagedEvent } from "./events";
 import type { CreateEventInput, EventDetail } from "./meetups";
 import { deliverSoon } from "./notifications";
@@ -26,6 +28,8 @@ import {
 } from "./organisation-lists";
 
 export interface OrganisationAdminActions {
+  memberAttendance(memberId: string): Promise<AttendanceHistoryEntry[]>;
+  ratings(): Promise<ActivityRating[]>;
   createEvent(input: CreateEventInput): Promise<EventDetail>;
   eventProposals(): Promise<EventProposal[]>;
   events(): Promise<ManagedEvent[]>;
@@ -62,7 +66,7 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
   }
   await requireAdmin(deps.db);
 
-  async function authorised<T>(operation: (db: Queryable) => Promise<T>, auditAction?: string): Promise<T> {
+  async function authorised<T>(operation: (db: Queryable) => Promise<T>, auditAction?: string, filter: Record<string, string> = {}): Promise<T> {
     return deps.db.transaction(async (tx) => {
       await tx
         .select({ id: organisations.id })
@@ -72,11 +76,18 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
       await requireAdmin(tx);
       const result = await operation(tx);
       if (auditAction)
-        await recordAdminView(tx, actor, { action: auditAction, filter: {} }, deps.clock.now());
+        await recordAdminView(tx, actor, { action: auditAction, filter }, deps.clock.now());
       return result;
     });
   }
   return {
+    ratings: () => authorised((db) => ratings(db, actor.organisationId)),
+    memberAttendance: (memberId) => authorised(async (db) => {
+      if (!isUuid(memberId)) throw new AccessDeniedError();
+      const [member] = await db.select({ id: members.id }).from(members).where(and(eq(members.organisationId, actor.organisationId), eq(members.id, memberId)));
+      if (!member) throw new AccessDeniedError();
+      return readAttendanceHistory(db, { ...actor, memberId }, deps.clock.now());
+    }, "member-attendance", { memberId }),
     createEvent: async (input) => {
       const event = await authorised((db) => createEvent(db, actor, input, deps.clock.now()));
       await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: event.id });

@@ -393,6 +393,43 @@ export const gatheringRsvps = pgTable("gathering_rsvps", {
   foreignKey({ columns: [table.organisationId, table.memberId], foreignColumns: [members.organisationId, members.id] }),
 ]);
 
+export const occurrenceRatings = pgTable("occurrence_ratings", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  gatheringId: uuid().notNull(),
+  memberId: uuid().notNull(),
+  value: integer().notNull(),
+  createdAt: timestamptz().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.gatheringId, table.memberId] }),
+  foreignKey({ columns: [table.organisationId, table.gatheringId], foreignColumns: [gatherings.organisationId, gatherings.id] }),
+  foreignKey({ columns: [table.organisationId, table.memberId], foreignColumns: [members.organisationId, members.id] }),
+]);
+
+export const attendanceRecords = pgTable("attendance_records", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  gatheringId: uuid().notNull(),
+  confirmedAt: timestamptz(),
+  confirmedByMemberId: uuid(),
+  promptedHostMemberId: uuid(),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.gatheringId] }),
+  foreignKey({ columns: [table.organisationId, table.gatheringId], foreignColumns: [gatherings.organisationId, gatherings.id] }),
+  foreignKey({ columns: [table.organisationId, table.confirmedByMemberId], foreignColumns: [members.organisationId, members.id] }),
+  foreignKey({ columns: [table.organisationId, table.promptedHostMemberId], foreignColumns: [members.organisationId, members.id] }),
+]);
+
+export const attendanceMembers = pgTable("attendance_members", {
+  organisationId: uuid().notNull().references(() => organisations.id),
+  gatheringId: uuid().notNull(),
+  memberId: uuid().notNull(),
+  attended: boolean().notNull().default(true),
+}, (table) => [
+  primaryKey({ columns: [table.organisationId, table.gatheringId, table.memberId] }),
+  index("attendance_members_history_idx").on(table.organisationId, table.memberId, table.gatheringId),
+  foreignKey({ columns: [table.organisationId, table.gatheringId], foreignColumns: [attendanceRecords.organisationId, attendanceRecords.gatheringId] }),
+  foreignKey({ columns: [table.organisationId, table.memberId], foreignColumns: [members.organisationId, members.id] }),
+]);
+
 export const invites = pgTable("invites", {
   id: uuid().primaryKey().defaultRandom(),
   organisationId: uuid().notNull().references(() => organisations.id),
