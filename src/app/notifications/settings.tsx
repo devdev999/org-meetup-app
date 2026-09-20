@@ -16,6 +16,7 @@ const labels: Record<NoticeKind, string> = {
   "invite-accepted": "Accepted Invites",
   "invite-declined": "Declined Invites",
   "availability-overlap": "Overlapping Availability",
+  "rsvp-prompt": "RSVP prompts",
 };
 
 export function NoticePreferenceForm({ preference }: { preference: NoticePreference }) {

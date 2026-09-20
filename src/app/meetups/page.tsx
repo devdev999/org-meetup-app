@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { requireMemberPastWelcome } from "../../web/session";
 import { MeetupTime } from "./meetup-time";
+import { RecurrenceDetails } from "./recurrence";
 
 export default async function MeetupsPage() {
-  const { member } = await requireMemberPastWelcome();
-  const meetups = await member.listMeetups();
+  const { member, profile } = await requireMemberPastWelcome();
+  const [meetups, series] = await Promise.all([member.listMeetups(), member.listSeries()]);
   return (
     <main>
       <nav className="member-nav" aria-label="Member navigation">
@@ -32,6 +33,13 @@ export default async function MeetupsPage() {
           ))}
         </ul>
       )}
+      {series.length > 0 && <section>
+        <h2>Recurring Meetups</h2>
+        <ul className="meetup-list">{series.map((entry) => <li key={entry.id}>
+          <h3>{entry.activity.name}</h3>
+          <RecurrenceDetails series={entry} memberId={profile.memberId} />
+        </li>)}</ul>
+      </section>}
     </main>
   );
 }

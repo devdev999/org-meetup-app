@@ -62,10 +62,14 @@ export async function saveMeetup(meetupId: string | null, form: FormData): Promi
       await member.editMeetup(meetupId, meetupInput(form));
       savedId = meetupId;
     } else {
+      const frequency = form.get("frequency");
+      if (frequency !== null && !["once", "weekly", "fortnightly", "monthly"].includes(String(frequency))) return { error: "Choose a valid repeat schedule." };
       const meetup = await member.createMeetup({
         ...meetupInput(form),
         activityId: formText(form.get("activityId")) ?? "",
         audience: audienceInput(form),
+        recurrence: frequency === "weekly" || frequency === "fortnightly" || frequency === "monthly"
+          ? { frequency, endsOn: formText(form.get("endsOn")) || null } : undefined,
         invitedMemberIds: form.getAll("invitedMemberId").map((value) => formText(value) ?? ""),
         availabilityOverlap: form.has("ownAvailabilityId") || form.has("otherAvailabilityId") ? {
           ownAvailabilityId: formText(form.get("ownAvailabilityId")) ?? "",
@@ -79,6 +83,37 @@ export async function saveMeetup(meetupId: string | null, form: FormData): Promi
   }
   refreshMeetups(savedId);
   redirect(`/meetups/${savedId}`);
+}
+
+export async function changeSeries(seriesId: string, operation: "join" | "leave" | "stop"): Promise<MeetupActionState> {
+  const { member } = await requireMemberPastWelcome();
+  try {
+    if (operation === "join") await member.joinSeries(seriesId);
+    else if (operation === "leave") await member.leaveSeries(seriesId);
+    else if (operation === "stop") await member.stopSeries(seriesId);
+    else return { error: "Choose a series action." };
+    revalidatePath("/meetups", "layout");
+    revalidatePath("/");
+    revalidatePath("/inbox");
+    return { message: operation === "join" ? "You joined the series. Check each occurrence for your place or waitlist position."
+      : operation === "leave" ? "You left the series and its future occurrences." : "Series stopped. Future occurrences are cancelled." };
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
+export async function answerRsvp(meetupId: string, form: FormData): Promise<MeetupActionState> {
+  const { member } = await requireMemberPastWelcome();
+  const answer = form.get("answer");
+  if (answer !== "going" && answer !== "not-going") return { error: "Choose Going or Not going." };
+  try {
+    const membership = await member.answerRsvp(meetupId, answer);
+    refreshMeetups(meetupId);
+    return { message: membership === null ? "Not going recorded for this occurrence."
+      : membership === "waitlisted" ? "Going recorded. You are on the waitlist." : "Going recorded. You have a place." };
+  } catch (error) {
+    return actionError(error);
+  }
 }
 
 export async function changeMeetup(

@@ -4,14 +4,17 @@ import { requireMemberPastWelcome } from "../../../web/session";
 import { MeetupTime } from "../meetup-time";
 import { MeetupAction } from "../meetup-action";
 import { InviteAnswerForm } from "../invite-form";
+import { RecurrenceDetails } from "../recurrence";
+import { RsvpForm } from "../rsvp-form";
 
 export default async function MeetupPage({ params }: { params: Promise<{ id: string }> }) {
-  const { member } = await requireMemberPastWelcome();
+  const { member, profile } = await requireMemberPastWelcome();
   const { id } = await params;
   const meetup = await member.viewMeetup(id);
   if (!meetup) notFound();
   const isHost = meetup.membership === "host";
   const otherParticipants = meetup.participants.filter((participant) => participant.memberId !== meetup.host.memberId);
+  const canRsvp = meetup.recurrence && (meetup.recurrence.isStanding || meetup.membership || meetup.rsvp !== null);
   return (
     <main>
       <nav className="member-nav" aria-label="Member navigation">
@@ -29,9 +32,21 @@ export default async function MeetupPage({ params }: { params: Promise<{ id: str
         <dd>{meetup.place.kind === "physical"
           ? `${meetup.place.siteName ?? "Site"}, ${meetup.place.spot}`
           : <a href={meetup.place.url} target="_blank" rel="noreferrer">Open virtual Place</a>}</dd>
-        <dt>Capacity</dt><dd>{meetup.participantCount} of {meetup.capacity} places filled, including the Host</dd>
+        <dt>Capacity</dt><dd>{meetup.participantCount} of {meetup.capacity} places filled</dd>
         <dt>Audience</dt><dd>{meetup.audience.kind === "invite-only" ? "Invite-only" : meetup.audience.scope === "organisation" ? "Open to the Organisation" : "Open to Members at the audience Site"}</dd>
       </dl>
+      {meetup.recurrence && <section>
+        <h2>Recurring Meetup</h2>
+        <RecurrenceDetails series={meetup.recurrence} memberId={profile.memberId} />
+      </section>}
+      {canRsvp && <section>
+        <h2>Your RSVP</h2>
+        <p>Your RSVP: {meetup.rsvp === "going" ? "Going" : meetup.rsvp === "not-going" ? "Not going" : "No answer"}.</p>
+        {meetup.canChange && <>
+          {meetup.recurrence?.isStanding && <p>Not going frees your place in this occurrence and keeps your standing place in the series.</p>}
+          <RsvpForm meetupId={meetup.id} />
+        </>}
+      </section>}
       {meetup.description && <p className="meetup-description">{meetup.description}</p>}
       {meetup.relevantInterests.length > 0 && <section>
         <h2>Relevant Interests</h2>
@@ -49,12 +64,18 @@ export default async function MeetupPage({ params }: { params: Promise<{ id: str
           {meetup.canChange && meetup.invite.state === "pending" && <InviteAnswerForm inviteId={meetup.invite.id} />}
         </section>
       )}
-      {meetup.canChange && !meetup.membership && meetup.audience.kind === "open" && meetup.invite?.state !== "pending" && (
+      {meetup.canChange && !canRsvp && !meetup.membership && meetup.audience.kind === "open" && meetup.invite?.state !== "pending" && (
         <MeetupAction meetupId={meetup.id} operation="join" label={meetup.participantCount >= meetup.capacity ? "Join waitlist" : "Join Meetup"} />
       )}
-      {meetup.canChange && (meetup.membership === "participant" || meetup.membership === "waitlisted") && (
+      {meetup.canChange && !meetup.recurrence?.isStanding && (meetup.membership === "participant" || meetup.membership === "waitlisted") && (
         <MeetupAction meetupId={meetup.id} operation="leave" label={meetup.membership === "waitlisted" ? "Leave waitlist" : "Leave Meetup"} />
       )}
+      {meetup.rsvps && <section>
+        <h2>RSVP answers</h2>
+        <p>{meetup.rsvps.filter((entry) => entry.answer === "going").length} going · {meetup.rsvps.filter((entry) => entry.answer === "not-going").length} not going · {meetup.rsvps.filter((entry) => entry.answer === null).length} no answer</p>
+        <p className="muted">A Going answer on the waitlist does not confirm a place.</p>
+        <ul>{meetup.rsvps.map((entry) => <li key={entry.memberId}>{entry.name}: {entry.answer === "going" ? "Going" : entry.answer === "not-going" ? "Not going" : "No answer"}{meetup.waitlist?.some((person) => person.memberId === entry.memberId) ? ", waitlisted" : ""}</li>)}</ul>
+      </section>}
       {(isHost || meetup.membership === "participant") && (
         <section>
           <h2>Participants</h2>

@@ -22,6 +22,50 @@ async function declareSql(page: Page, stance: "shares" | "seeks") {
   await expect(page.getByText("Interest saved.", { exact: true })).toBeVisible();
 }
 
+test("Members create a recurring Meetup, join its series, answer RSVP and stop future occurrences", async ({ page, browser, baseURL }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signIn(page, "Evie Host", "evie@ministry-a.example", "Finance");
+  await page.goto("/meetups/new");
+  await page.getByRole("combobox", { name: "Activity", exact: true }).selectOption({ label: "walk" });
+  await page.getByRole("combobox", { name: "Repeats", exact: true }).selectOption("weekly");
+  await page.getByLabel("Start time in UTC").fill(new Date(Date.now() - 60_000).toISOString().slice(0, 16));
+  await page.getByLabel("Series end date in UTC, optional").fill(new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10));
+  await page.getByLabel("Spot at the Site").fill("Main entrance");
+  await page.getByLabel("Capacity, including the Host").fill("2");
+  await page.getByRole("button", { name: "Create Meetup", exact: true }).click();
+  await expect(page.getByText("Choose a future start time.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Repeats", exact: true })).toHaveValue("weekly");
+  await expect(page.getByLabel("Spot at the Site")).toHaveValue("Main entrance");
+  await page.getByLabel("Start time in UTC").fill(new Date(Date.now() + 86_400_000).toISOString().slice(0, 16));
+  await page.getByRole("button", { name: "Create Meetup", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Recurring Meetup", exact: true })).toBeVisible();
+  const meetupUrl = page.url();
+  const second = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 } });
+  try {
+    const finn = await second.newPage();
+    await signIn(finn, "Finn Member", "finn@ministry-a.example", "Legal");
+    await finn.goto(meetupUrl);
+    await finn.getByRole("button", { name: "Join series", exact: true }).click();
+    await expect(finn.getByText("You are a standing Participant.", { exact: true })).toBeVisible();
+    await finn.getByRole("button", { name: "Not going", exact: true }).click();
+    await expect(finn.getByText("Your RSVP: Not going.", { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "RSVP answers", exact: true }).locator("..")).toContainText("1 not going");
+    await expect(page.getByText("1 of 2 places filled", { exact: false })).toBeVisible();
+    await finn.getByRole("button", { name: "Going", exact: true }).click();
+    await expect(finn.getByText("Your RSVP: Going.", { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByText("2 of 2 places filled", { exact: false })).toBeVisible();
+    await page.getByRole("button", { name: "Stop series", exact: true }).click();
+    await expect(page.getByText("This Meetup has been cancelled.", { exact: true })).toBeVisible();
+    await finn.reload();
+    await expect(finn.getByText("This Meetup has been cancelled.", { exact: true })).toBeVisible();
+    await expect(finn.getByRole("button", { name: "Going", exact: true })).toHaveCount(0);
+  } finally {
+    await second.close();
+  }
+});
+
 test("Members sign in, declare Interests, create a Meetup and join from Suggestions", async ({ page, browser, baseURL }) => {
   await signIn(page, "Ana Host", "ana@ministry-a.example", "Finance");
   await declareSql(page, "seeks");

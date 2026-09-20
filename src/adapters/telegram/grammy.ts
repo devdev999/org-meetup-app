@@ -15,6 +15,9 @@ export class GrammyTelegram implements TelegramPort {
     const buttons = message.inviteId ? [
       { text: "Accept", callback_data: `accept:${message.inviteId}` },
       { text: "Decline", callback_data: `decline:${message.inviteId}` },
+    ] : message.rsvpMeetupId ? [
+      { text: "Going", callback_data: `going:${message.rsvpMeetupId}` },
+      { text: "Not going", callback_data: `not-going:${message.rsvpMeetupId}` },
     ] : message.joinMeetupId ? [{ text: "Join Meetup", callback_data: `join:${message.joinMeetupId}` }] : [];
     const keyboard = message.buttons?.map((row) => row.map((button) => ({ text: button.text, callback_data: availabilityCallback(button.action) }))) ?? (buttons.length ? [buttons] : []);
     await this.api.sendMessage(message.chatId, message.text, {

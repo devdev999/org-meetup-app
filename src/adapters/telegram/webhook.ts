@@ -41,6 +41,11 @@ export function createTelegramWebhook(application: Application, secret: string |
         kind: "answer-invite", chatId: String(callback.from.id), callbackId: callback.id,
         inviteId: inviteAnswer[2]!, answer: inviteAnswer[1] === "accept" ? "accept" : "decline",
       });
+      const rsvpAnswer = callback.data?.match(/^(going|not-going):(.+)$/);
+      if (rsvpAnswer) await application.handleTelegram({
+        kind: "answer-rsvp", chatId: String(callback.from.id), callbackId: callback.id,
+        meetupId: rsvpAnswer[2]!, answer: rsvpAnswer[1] === "going" ? "going" : "not-going",
+      });
     }
     return Response.json({ ok: true });
   };

@@ -9,11 +9,13 @@ import { deliverSoon } from "./notifications";
 import { organisations, telegramLinkCodes, telegramLinks } from "./schema";
 import { postAvailability } from "./availability";
 import type { TelegramAvailabilityAction, TelegramMessage } from "../ports";
+import { answerRsvp } from "./recurring-meetups";
 
 export interface TelegramLink { url: string; expiresAt: Date }
 export type TelegramCommand = { kind: "link"; chatId: string; code: string }
   | { kind: "join"; chatId: string; callbackId: string; meetupId: string }
   | { kind: "answer-invite"; chatId: string; callbackId: string; inviteId: string; answer: "accept" | "decline" }
+  | { kind: "answer-rsvp"; chatId: string; callbackId: string; meetupId: string; answer: "going" | "not-going" }
   | { kind: "availability-menu"; chatId: string }
   | (TelegramAvailabilityAction & { chatId: string; callbackId: string });
 
@@ -73,6 +75,11 @@ export async function handleTelegram(deps: Deps, command: TelegramCommand): Prom
           const result = await joinMeetup(deps, actor, command.meetupId);
           gatheringId = command.meetupId;
           text = result === "participant" ? "You joined the Meetup." : "You are on the waitlist.";
+        } else if (command.kind === "answer-rsvp") {
+          const status = await answerRsvp(deps, actor, command.meetupId, command.answer);
+          gatheringId = command.meetupId;
+          text = status === null ? "Not going recorded. Your standing place is kept."
+            : status === "waitlisted" ? "Going recorded. You are on the waitlist." : "Going recorded. You have a place.";
         } else {
           const result = await answerInvite(deps, actor, command.inviteId, command.answer);
           gatheringId = result.meetupId;

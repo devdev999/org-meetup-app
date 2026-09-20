@@ -1,10 +1,31 @@
 import { PgBoss } from "pg-boss";
 import { expect, test } from "vitest";
-import { AVAILABILITY_QUEUE, DIGEST_QUEUE, INVITE_EXPIRY_QUEUE, registerJobs } from "../../worker/jobs";
+import { AVAILABILITY_QUEUE, DIGEST_QUEUE, INVITE_EXPIRY_QUEUE, RECURRENCE_QUEUE, registerJobs } from "../../worker/jobs";
 import { ministryA, signInAndAcknowledgeAs } from "./fixtures";
 import { harness } from "./harness";
 
 const h = harness();
+
+test("the worker generates recurring Meetups and RSVP prompts through the real queue", async () => {
+  await h.app.bootstrap(ministryA);
+  const ana = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });
+  const first = await ana.createMeetup({
+    activityId: (await ana.meetupChoices()).activities[0]!.id, startsAt: new Date("2026-09-19T10:00:00Z"), durationMinutes: 30,
+    place: { kind: "virtual", url: "https://meet.example/walk" }, capacity: 2, recurrence: { frequency: "weekly" },
+  });
+  const boss = new PgBoss({ connectionString: h.connectionString });
+  await boss.start();
+  try {
+    await registerJobs(boss, { application: h.app, clock: h.clock, log: () => {} });
+    await boss.send(RECURRENCE_QUEUE, {});
+    await expect.poll(async () => (await ana.listMeetups()).map((meetup) => meetup.startsAt.toISOString()), { timeout: 15_000 }).toEqual([
+      "2026-09-19T10:00:00.000Z", "2026-09-26T10:00:00.000Z",
+    ]);
+    expect(await ana.inbox()).toContainEqual(expect.objectContaining({ kind: "rsvp-prompt", meetupId: first.id }));
+  } finally {
+    await boss.stop({ graceful: true });
+  }
+});
 
 test("the worker sends a daily email digest through the real queue", async () => {
   await h.app.bootstrap(ministryA);

@@ -15,6 +15,8 @@ import { deliverSoon, notificationSettings, setNoticePreference, type Notificati
 import { inviteSuggestions, meetupSuggestions, previewInviteSuggestions, type InviteSuggestion, type MeetupSuggestion, type PreviewInviteSuggestionsInput } from "./suggestions";
 import { extractMeetupInterests, type ExtractMeetupInterestsInput } from "./meetup-interests";
 import { availability, availabilityMeetup, postAvailability, type Availability, type AvailabilityBoard, type AvailabilitySuggestion, type AvailabilityOverlap, type PostAvailabilityInput } from "./availability";
+import { answerRsvp, joinSeries, leaveSeries, listSeries, stopSeries, type RecurringMeetup } from "./recurring-meetups";
+import type { RsvpAnswer } from "./meetups";
 
 export type MemberStatus = (typeof members.status.enumValues)[number];
 
@@ -69,6 +71,11 @@ export interface MemberSearch {
  * to it, so nothing a page passes in can reach another Organisation.
  */
 export interface MemberActions {
+  joinSeries(id: string): Promise<void>;
+  listSeries(): Promise<RecurringMeetup[]>;
+  leaveSeries(id: string): Promise<void>;
+  stopSeries(id: string): Promise<void>;
+  answerRsvp(id: string, answer: RsvpAnswer): Promise<"participant" | "waitlisted" | null>;
   postAvailability(input: PostAvailabilityInput): Promise<Availability>;
   availability(): Promise<AvailabilityBoard>;
   availabilityMeetup(input: AvailabilityOverlap): Promise<AvailabilitySuggestion | undefined>;
@@ -140,6 +147,17 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
   }
 
   return {
+    joinSeries: (id) => joinSeries(deps, actor, id),
+    listSeries: () => listSeries(deps, actor),
+    answerRsvp: (id, answer) => withNotices(id, () => answerRsvp(deps, actor, id, answer)),
+    leaveSeries: async (id) => {
+      await leaveSeries(deps, actor, id);
+      await deliverSoon(deps, { organisationId: actor.organisationId });
+    },
+    stopSeries: async (id) => {
+      await stopSeries(deps, actor, id);
+      await deliverSoon(deps, { organisationId: actor.organisationId });
+    },
     postAvailability: async (input) => {
       const posted = await postAvailability(deps, actor, input);
       await deliverSoon(deps, { organisationId: actor.organisationId, kind: "availability-overlap" });

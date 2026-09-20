@@ -6,6 +6,35 @@ import { harness } from "./harness";
 const h = harness();
 const secret = "test-webhook-secret";
 
+test("the Telegram webhook records recurring RSVP answers only for an authorized private sender", async () => {
+  await h.app.bootstrap(ministryA);
+  const ana = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });
+  const bo = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", name: "Bo", email: "bo@example.test" });
+  const link = await bo.beginTelegramLink();
+  await h.app.handleTelegram({ kind: "link", chatId: "102", code: new URL(link.url).searchParams.get("start")! });
+  const meetup = await ana.createMeetup({
+    activityId: (await ana.meetupChoices()).activities[0]!.id, startsAt: new Date("2026-09-18T10:00:00Z"), durationMinutes: 30,
+    place: { kind: "virtual", url: "https://meet.example/walk" }, capacity: 2, recurrence: { frequency: "weekly" },
+  });
+  await bo.joinSeries(meetup.recurrence!.id);
+  const webhook = createTelegramWebhook(h.app, secret);
+  const callback = (answer: string, chat = { id: 102, type: "private" }) => ({ update_id: 20, callback_query: {
+    id: answer, from: { id: 102, is_bot: false }, message: { chat }, data: `${answer}:${meetup.id}`,
+  } });
+  await webhook(request(callback("not-going"), "wrong"));
+  await webhook(request(callback("not-going", { id: -102, type: "group" })));
+  await webhook(request(callback("not-going", { id: 999, type: "private" })));
+  expect((await bo.viewMeetup(meetup.id))?.rsvp).toBeNull();
+  expect((await webhook(request(callback("not-going")))).status).toBe(200);
+  expect(await bo.viewMeetup(meetup.id)).toMatchObject({ rsvp: "not-going", membership: null });
+  await webhook(request(callback("going")));
+  expect(await bo.viewMeetup(meetup.id)).toMatchObject({ rsvp: "going", membership: "participant" });
+  await bo.leaveSeries(meetup.recurrence!.id);
+  await webhook(request(callback("going")));
+  expect((await bo.viewMeetup(meetup.id))?.membership).toBeNull();
+  expect(h.telegram.answers.at(-1)?.text).toContain("unavailable");
+});
+
 function request(update: unknown, token = secret) {
   return new Request("https://meetups.example/api/telegram", {
     method: "POST", headers: { "Content-Type": "application/json", "X-Telegram-Bot-Api-Secret-Token": token }, body: JSON.stringify(update),
