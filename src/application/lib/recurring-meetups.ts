@@ -118,7 +118,7 @@ export async function answerRsvp(deps: Deps, actor: Actor, id: string, answer: R
 }
 
 export async function processRecurrences(deps: Deps): Promise<void> {
-  const pending = await deps.db.selectDistinct({ organisationId: recurrences.organisationId }).from(recurrences).where(isNull(recurrences.stoppedAt));
+  const pending = await deps.db.selectDistinct({ organisationId: recurrences.organisationId }).from(recurrences).where(recurrencesWithFutureWork(deps.db, deps.clock.now()));
   for (const { organisationId } of pending) {
     await deps.db.transaction(async (db) => {
       await db.select({ id: organisations.id }).from(organisations).where(eq(organisations.id, organisationId)).for("update");

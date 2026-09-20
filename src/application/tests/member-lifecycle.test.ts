@@ -112,6 +112,25 @@ test.each(["meetup", "event"] as const)("suspension stops hosted %s series and r
   ]);
 });
 
+test.each(["meetup", "event"] as const)("a handed-over %s keeps RSVP prompts after its series Host is suspended", async (kind) => {
+  const { admin, ana: anaMember, bo: boMember, input } = await setup();
+  const ana = participationFor(anaMember, kind);
+  const bo = participationFor(boMember, kind);
+  const occurrence = await createMeetupOrEvent(h, bo, { ...input, recurrence: { frequency: "weekly" } }, kind);
+  await ana.joinSeries(occurrence.recurrence!.id);
+  await bo.handOver(occurrence.id, (await ana.profile()).memberId);
+  await admin.suspendMember((await bo.profile()).memberId);
+  expect(await ana.view(occurrence.id)).toMatchObject({ status: "scheduled", host: { name: "Ana" }, recurrence: { stopped: true } });
+  h.email.reset();
+  await h.app.processRecurrences();
+  await h.app.processRecurrences();
+  await h.app.deliverNotices();
+  const prompts = (await ana.inbox()).filter((notice) => notice.kind === "rsvp-prompt");
+  expect(prompts).toHaveLength(1);
+  expect(prompts[0]).toMatchObject(kind === "meetup" ? { meetupId: occurrence.id } : { eventId: occurrence.id });
+  expect(h.email.outbox.filter((message) => message.to === "ana@example.test" && message.text.startsWith("Are you going"))).toHaveLength(1);
+});
+
 test.each(["meetup", "event"] as const)("lifecycle cleanup preserves ended and already-stopped %s series history", async (kind) => {
   const { admin, ana: anaMember, bo: boMember, input } = await setup();
   const ana = participationFor(anaMember, kind);
