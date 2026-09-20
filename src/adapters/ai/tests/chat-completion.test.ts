@@ -36,11 +36,12 @@ afterAll(async () => {
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 });
 
-const adapter = () => new ChatCompletionAi({ baseUrl, apiKey: "provider-key", model: "interest-model" });
+const adapter = () => new ChatCompletionAi({ apiKey: "provider-key" });
+const settings = () => ({ baseUrl, model: "interest-model" });
 const input: AiInterestRequest = { phrase: "rustlang", shortlist: [{ name: "Rust", kind: "skill", count: 3 }] };
 
 test("resolves Interest text through the configured chat-completion endpoint", async () => {
-  expect(await adapter().resolveInterest(input)).toEqual({ existingName: "Rust" });
+  expect(await adapter().resolveInterest(input, settings())).toEqual({ existingName: "Rust" });
   expect(requests).toEqual([{
     url: "/v1/chat/completions",
     authorization: "Bearer provider-key",
@@ -56,9 +57,19 @@ test("resolves Interest text through the configured chat-completion endpoint", a
   }]);
 });
 
+test("the same adapter uses each request's current endpoint and model", async () => {
+  const ai = adapter();
+  await ai.resolveInterest(input, settings());
+  await ai.resolveInterest(input, { baseUrl: baseUrl.replace("/v1", "/v2"), model: "replacement-model" });
+  expect(requests.map((request) => request.url)).toEqual(["/v1/chat/completions", "/v2/chat/completions"]);
+  expect(requests[1]).toMatchObject({ authorization: "Bearer provider-key", body: { model: "replacement-model" } });
+  await expect(ai.resolveInterest(input, { baseUrl: null, model: "replacement-model" })).rejects.toThrow("not been configured");
+  expect(requests).toHaveLength(2);
+});
+
 test("rejects an unsuccessful provider response even when it contains a result", async () => {
   reply!.status = 503;
-  await expect(adapter().resolveInterest(input)).rejects.toThrow("503");
+  await expect(adapter().resolveInterest(input, settings())).rejects.toThrow("503");
 });
 
 test.each([
@@ -70,29 +81,29 @@ test.each([
   { choices: [{ finish_reason: "stop", message: { content: '{"existingName":"Rust"}', refusal: "Refused" } }] },
 ])("rejects malformed, incomplete or refused provider output: %j", async (body) => {
   reply = { status: 200, body };
-  await expect(adapter().resolveInterest(input)).rejects.toThrow();
+  await expect(adapter().resolveInterest(input, settings())).rejects.toThrow();
 });
 
 test("sends only Interest text, kinds and counts even when input includes extra fields", async () => {
   const request = { ...input, memberId: "member-123", shortlist: [{ ...input.shortlist[0]!, organisationId: "secret" }] };
-  await adapter().resolveInterest(request);
+  await adapter().resolveInterest(request, settings());
   expect(JSON.stringify(requests)).not.toContain("member-123");
   expect(JSON.stringify(requests)).not.toContain("secret");
 });
 
 test("times out an unresponsive provider so Interest resolution can fall back", async () => {
   reply = null;
-  const ai = new ChatCompletionAi({ baseUrl, apiKey: "provider-key", model: "interest-model", timeoutMs: 50 });
-  await expect(ai.resolveInterest(input)).rejects.toMatchObject({ name: "TimeoutError" });
+  const ai = new ChatCompletionAi({ apiKey: "provider-key", timeoutMs: 50 });
+  await expect(ai.resolveInterest(input, settings())).rejects.toMatchObject({ name: "TimeoutError" });
 }, 1_000);
 
 test("extracts Interests from Activity and description through the configured extraction model", async () => {
   reply = { status: 200, body: { choices: [{ finish_reason: "stop", message: {
     content: JSON.stringify({ interests: [{ phrase: "Chess", kind: "hobby" }] }),
   } }] } };
-  const ai = new ChatCompletionAi({ baseUrl, apiKey: "provider-key", model: "canonical-model", extractionModel: "small-model" });
+  const ai = new ChatCompletionAi({ apiKey: "provider-key" });
   const input = { activity: "coffee", description: "Chess with Ana in Finance." };
-  expect(await ai.extractInterests(input)).toEqual([{ phrase: "Chess", kind: "hobby" }]);
+  expect(await ai.extractInterests(input, { baseUrl, model: "small-model" })).toEqual([{ phrase: "Chess", kind: "hobby" }]);
   expect(requests[0]?.body).toMatchObject({ model: "small-model", messages: [
     { role: "system", content: expect.stringContaining("Interests") },
     { role: "user", content: JSON.stringify(input) },
@@ -105,21 +116,21 @@ test.each([
   { interests: "Chess" },
 ])("rejects unusable extraction output: %j", async (output) => {
   reply = { status: 200, body: { choices: [{ finish_reason: "stop", message: { content: JSON.stringify(output) } }] } };
-  await expect(adapter().extractInterests({ activity: "coffee", description: "Chess" })).rejects.toThrow();
+  await expect(adapter().extractInterests({ activity: "coffee", description: "Chess" }, settings())).rejects.toThrow();
 });
 
 test("extraction times out an unresponsive provider", async () => {
   reply = null;
-  const ai = new ChatCompletionAi({ baseUrl, apiKey: "provider-key", model: "interest-model", timeoutMs: 50 });
-  await expect(ai.extractInterests({ activity: "coffee", description: "SQL" })).rejects.toMatchObject({ name: "TimeoutError" });
+  const ai = new ChatCompletionAi({ apiKey: "provider-key", timeoutMs: 50 });
+  await expect(ai.extractInterests({ activity: "coffee", description: "SQL" }, settings())).rejects.toMatchObject({ name: "TimeoutError" });
 }, 1_000);
 
 test.each(["canonicalisation", "extraction"])("cancelling %s aborts the provider request", async (operation) => {
   reply = null;
-  const ai = new ChatCompletionAi({ baseUrl, apiKey: "provider-key", model: "interest-model", timeoutMs: 500 });
+  const ai = new ChatCompletionAi({ apiKey: "provider-key", timeoutMs: 500 });
   const controller = new AbortController();
-  const pending = operation === "canonicalisation" ? ai.resolveInterest(input, controller.signal)
-    : ai.extractInterests({ activity: "coffee", description: "Python" }, controller.signal);
+  const pending = operation === "canonicalisation" ? ai.resolveInterest(input, settings(), controller.signal)
+    : ai.extractInterests({ activity: "coffee", description: "Python" }, settings(), controller.signal);
   const result = pending.catch((error: unknown) => error);
   await expect.poll(() => requests.length).toBe(1);
   controller.abort();

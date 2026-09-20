@@ -1,8 +1,16 @@
-import { isAccessDeniedError, isInvalidInputError, type ReportCsv, type ReportPeriod } from "../application";
+import { localDate } from "../calendar";
+import { application } from "./application";
+import { InvalidInputError, isAccessDeniedError, isInvalidInputError, type PlatformReportScope, type ReportCsv, type ReportPeriod } from "../application";
 
-export function selectedReportPeriod(input: { from?: string; to?: string }): ReportPeriod {
-  const today = new Date().toISOString().slice(0, 10);
+export async function selectedReportPeriod(input: { from?: string; to?: string }): Promise<ReportPeriod> {
+  const today = localDate(new Date(), await application().timeZone());
   return { from: input.from ?? `${today.slice(0, 7)}-01`, to: input.to ?? today };
+}
+
+export function selectedPlatformScope(input: { scope?: string; kind?: string; id?: string }, defaultId = ""): PlatformReportScope {
+  const [kind, id] = input.scope ? input.scope.split(":") : [input.kind ?? "organisation", input.id ?? defaultId];
+  if ((kind !== "organisation" && kind !== "ministry") || !id) throw new InvalidInputError("invalid-report", "Choose an Organisation or Ministry.");
+  return { kind, id };
 }
 
 export async function csvDownload(operation: () => Promise<ReportCsv>): Promise<Response> {

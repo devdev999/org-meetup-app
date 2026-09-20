@@ -10,7 +10,7 @@ import { FakeIdentity } from "../adapters/identity/fake";
 import { OidcIdentity } from "../adapters/identity/oidc";
 import { createApplication, type Application } from "../application/index";
 import type { AiPort, EmailPort, IdentityPort, TelegramPort } from "../application/ports";
-import { aiConfig, assertFakeIssuerAllowed, databaseUrl, emailConfig, fakeIssuerEnabled, telegramConfig } from "./env";
+import { aiConfig, assertFakeIssuerAllowed, deploymentSettingsFromEnv, databaseUrl, emailConfig, fakeIssuerEnabled, oidcCredentials, telegramConfig } from "./env";
 
 /**
  * Production wiring, shared by the web process, the worker and the setup
@@ -23,21 +23,22 @@ export function connectPool(): Pool {
 }
 
 export function identityFromEnv(): IdentityPort {
+  const credentials = oidcCredentials();
   if (fakeIssuerEnabled()) {
     assertFakeIssuerAllowed();
     console.warn("IDENTITY_PROVIDER=fake: anyone can sign in as anyone. Local development only.");
-    return new FakeIdentity();
+    return new FakeIdentity(Object.keys(credentials));
   }
-  return new OidcIdentity();
+  return new OidcIdentity({ credentials });
 }
 
 export function applicationFromEnv(pool: Pool): Application {
-  return createApplication({ pool, identity: identityFromEnv(), clock: new SystemClock(), ai: aiFromEnv(), telegram: telegramFromEnv(), email: emailFromEnv() });
+  return createApplication({ deploymentDefaults: deploymentSettingsFromEnv(), pool, identity: identityFromEnv(), clock: new SystemClock(), ai: aiFromEnv(), telegram: telegramFromEnv(), email: emailFromEnv() });
 }
 
 export function telegramFromEnv(): TelegramPort {
   const config = telegramConfig();
-  return config.provider === "memory" ? new MemoryTelegram(config.botUsername) : new GrammyTelegram(config);
+  return config.provider === "memory" ? new MemoryTelegram() : new GrammyTelegram(config);
 }
 
 export function emailFromEnv(): EmailPort {

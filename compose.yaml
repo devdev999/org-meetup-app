@@ -16,6 +16,7 @@ x-app-environment: &app-environment
   IDENTITY_PROVIDER: fake
   # The web image runs with NODE_ENV=production, which refuses the fake issuer unless a local run says so.
   ALLOW_FAKE_IDENTITY: "yes"
+  OIDC_CREDENTIALS: ${OIDC_CREDENTIALS:-}
   AI_PROVIDER: ${AI_PROVIDER:-memory}
   AI_BASE_URL: ${AI_BASE_URL:-}
   AI_API_KEY: ${AI_API_KEY:-}
@@ -28,10 +29,9 @@ x-app-environment: &app-environment
   EMAIL_PROVIDER: ${EMAIL_PROVIDER:-memory}
   SMTP_URL: ${SMTP_URL:-}
   EMAIL_FROM: ${EMAIL_FROM:-}
+  TIME_ZONE: ${TIME_ZONE:-UTC}
   BOOTSTRAP_ORGANISATION_SLUG: ministry-a
   BOOTSTRAP_ORGANISATION_NAME: Ministry A
-  BOOTSTRAP_DEPARTMENTS: '["Finance","Legal"]'
-  BOOTSTRAP_SITES: '["Harbour House"]'
   BOOTSTRAP_OIDC_ISSUER: http://localhost:${WEB_PORT:-3000}/dev-idp
   BOOTSTRAP_OIDC_CLIENT_ID: org-meetups
   BOOTSTRAP_OIDC_CLAIM_EMAIL: email
@@ -40,8 +40,6 @@ x-app-environment: &app-environment
   BOOTSTRAP_OIDC_CLAIM_SITE: site
   BOOTSTRAP_PLATFORM_ADMIN_EMAIL: pat@ministry-a.example
   BOOTSTRAP_PLATFORM_ADMIN_NAME: Pat Platform
-  BOOTSTRAP_ORGANISATION_ADMIN_EMAIL: olivia@ministry-a.example
-  BOOTSTRAP_ORGANISATION_ADMIN_NAME: Olivia Admin
 
 services:
   postgres:
@@ -60,7 +58,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
-  # Applies migrations and seeds the first Organisation, then exits.
+  # Applies migrations and initializes the first Platform Admin, then exits.
   setup:
     build:
       context: .

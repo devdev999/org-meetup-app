@@ -13,7 +13,7 @@ async function member(name: string, organisation = "ministry-a") {
 }
 
 async function setup() {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   return member("Ana");
 }
 
@@ -88,8 +88,7 @@ test.each(["meetup", "event"] as const)("%s Invite retries preserve their sender
   const invite = await host.invite(meetup.id, (await bo.profile()).memberId);
   const original = (await bo.inbox())[0];
   if (kind === "event") {
-    const adminMember = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "event-admin", email: "event-admin@example.test", name: "Event Admin" });
-    await (await adminMember.organisationAdmin()).reassignEventHost(meetup.id, (await nextHost.profile()).memberId);
+    await (await h.organisationAdmin()).reassignEventHost(meetup.id, (await nextHost.profile()).memberId);
   } else await host.handOver(meetup.id, (await nextHost.profile()).memberId);
   await nextHost.edit(meetup.id, { startsAt: new Date("2026-09-18T11:00:00Z"), durationMinutes: 60, capacity: 2, place: { kind: "virtual", url: "https://meet.example/new-room" } });
   h.telegram.failure = undefined;
@@ -267,7 +266,7 @@ test("a Provisioned Member receives an Invite by email and can answer after thei
 
 test("Invites cannot cross Organisations, be sent by another Member or target the Host", async () => {
   const host = await setup();
-  await h.app.bootstrap(ministryB);
+  await h.setupOrganisation(ministryB);
   const bo = await member("Bo");
   const outsider = await member("Cy", "ministry-b");
   const meetup = await createMeetup(host, false);
@@ -286,7 +285,7 @@ test("Invites cannot cross Organisations, be sent by another Member or target th
 
 test("only the Host can list Invite choices, including Provisioned and waitlisted Members", async () => {
   const host = await setup();
-  await h.app.bootstrap(ministryB);
+  await h.setupOrganisation(ministryB);
   await member("Outside", "ministry-b");
   const bo = await member("Bo");
   const cy = await member("Cy");
@@ -306,7 +305,7 @@ test("only the Host can list Invite choices, including Provisioned and waitliste
 
 test("an Organisation Admin's Invite choices record access in the audit log", async () => {
   const person = { sub: "olivia", name: "Olivia Admin", email: "olivia@example.test" };
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: person });
+  await h.setupOrganisation({ ...ministryA, organisationAdmin: person });
   const host = await signInAndAcknowledgeAs(h, "ministry-a", person);
   const meetup = await createMeetup(host);
   await host.inviteChoices(meetup.id);
@@ -327,7 +326,7 @@ test("a Host can narrow Invite choices by a case-insensitive literal name", asyn
 });
 
 test("Invite choices distinguish same-name Members by Department and Site", async () => {
-  await h.app.bootstrap(withDepartmentAndSiteClaims(ministryA));
+  await h.setupOrganisation(withDepartmentAndSiteClaims(ministryA));
   const host = await member("Ana");
   const finance = await signInAndAcknowledgeAs(h, "ministry-a", {
     sub: "alex-finance", email: "alex.finance@example.test", name: "Alex Tan", ou: "Finance", building: "Harbour House",

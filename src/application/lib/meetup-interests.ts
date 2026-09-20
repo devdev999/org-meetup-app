@@ -1,3 +1,4 @@
+import { extractionSettings } from "./deployment-settings";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { requireActiveMember, type Actor } from "./actor";
@@ -21,7 +22,7 @@ export async function extractMeetupInterests(deps: Deps, actor: Actor, input: Ex
   let result;
   try {
     result = z.array(z.object({ phrase: z.string().trim().min(1).max(120), kind: z.enum(["skill", "hobby"]) })).max(10)
-      .parse(await deps.ai.extractInterests({ activity: activity.name, description: parsed.data.description }, signal));
+      .parse(await deps.ai.extractInterests({ activity: activity.name, description: parsed.data.description }, await extractionSettings(deps), signal));
   } catch {
     return [];
   }

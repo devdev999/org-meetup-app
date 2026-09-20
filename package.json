@@ -23,6 +23,7 @@
     "check": "pnpm typecheck && pnpm lint:boundaries && pnpm test"
   },
   "dependencies": {
+    "@js-temporal/polyfill": "0.5.1",
     "csv-parse": "7.0.2",
     "drizzle-orm": "0.45.2",
     "grammy": "1.46.0",

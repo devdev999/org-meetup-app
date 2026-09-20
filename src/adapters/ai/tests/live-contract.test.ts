@@ -19,6 +19,6 @@ test.skipIf(!configured).each([
       { name: "SQL", kind: "skill", count: 2 },
       { name: "Board games", kind: "hobby", count: 1 },
     ],
-  });
+  }, { baseUrl: process.env.AI_BASE_URL!, model: process.env.AI_MODEL! });
   expect(result).toEqual({ existingName: expectedName });
 }, 10_000);

@@ -2,9 +2,10 @@ import { sql } from "drizzle-orm";
 import { boolean, check, date, foreignKey, index, integer, jsonb, pgEnum, pgTable, primaryKey, serial, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type { NoticeKind } from "./notice-kinds";
 import type { RecurrenceRule } from "./recurrence-rule";
+import type { DeploymentSettings } from "./deployment-settings-input";
 
 /**
- * Every table except platform configuration carries `organisationId`
+ * Organisation data carries `organisationId`; Ministries and platform configuration are global
  * (ADR 0001, ADR 0005). Rows that point at rows of another table do so with
  * composite foreign keys that include the Organisation, so the database
  * itself refuses an association across Organisations. Column names are
@@ -13,13 +14,27 @@ import type { RecurrenceRule } from "./recurrence-rule";
 
 const timestamptz = () => timestamp({ withTimezone: true });
 
+export const ministries = pgTable("ministries", {
+  id: uuid().primaryKey().defaultRandom(),
+  name: text().notNull(),
+  nameKey: text().notNull().unique(),
+  createdAt: timestamptz().notNull(),
+});
+
 /** An Organisation: one population of Members. */
 export const organisations = pgTable("organisations", {
   id: uuid().primaryKey().defaultRandom(),
   slug: text().notNull().unique(),
   name: text().notNull(),
+  ministryId: uuid().references(() => ministries.id),
   createdAt: timestamptz().notNull(),
-});
+}, (table) => [index("organisations_ministry_idx").on(table.ministryId)]);
+
+export const platformConfiguration = pgTable("platform_configuration", {
+  id: integer().primaryKey().default(1),
+  ownerOrganisationId: uuid().references(() => organisations.id),
+  settings: jsonb().$type<DeploymentSettings>(),
+}, (table) => [check("platform_configuration_singleton", sql`${table.id} = 1`)]);
 
 /** Which claim of the issuer's ID token carries each piece of Member data. */
 export interface ClaimMapping {
@@ -37,7 +52,7 @@ export const organisationOidcSettings = pgTable("organisation_oidc_settings", {
     .references(() => organisations.id),
   issuer: text().notNull(),
   clientId: text().notNull(),
-  clientSecret: text(),
+  credentialRef: text(),
   claimMapping: jsonb().$type<ClaimMapping>().notNull(),
   updatedAt: timestamptz().notNull(),
 });
@@ -317,6 +332,7 @@ const gatheringFields = () => ({
 export const recurrences = pgTable("recurrences", {
   ...gatheringFields(),
   frequency: text().$type<RecurrenceRule["frequency"]>().notNull(),
+  timeZone: text().notNull().default("UTC"),
   endsOn: date(),
   stoppedAt: timestamptz(),
 }, (table) => [
@@ -371,7 +387,7 @@ export const eventProposals = pgTable("event_proposals", {
   proposerMemberId: uuid().notNull(),
   state: text().$type<"proposed" | "approved" | "rejected">().notNull().default("proposed"),
   note: text(),
-  recurrence: jsonb().$type<Pick<RecurrenceRule, "frequency" | "endsOn">>(),
+  recurrence: jsonb().$type<Pick<RecurrenceRule, "frequency" | "endsOn" | "timeZone">>(),
   invitedMemberIds: uuid().array().notNull().default(sql`'{}'::uuid[]`),
 }, (table) => [
   primaryKey({ columns: [table.organisationId, table.eventId] }),

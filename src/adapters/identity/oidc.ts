@@ -9,6 +9,7 @@ import {
 } from "../../application/ports";
 
 export interface OidcIdentityOptions {
+  credentials?: Readonly<Record<string, string>>;
   /** Lets an issuer be reached over plain http. Only for a stub issuer in tests. */
   allowInsecureRequests?: boolean;
 }
@@ -24,6 +25,11 @@ export class OidcIdentity implements IdentityPort {
 
   constructor(options: OidcIdentityOptions = {}) {
     this.#options = options;
+  }
+
+  isConfigured(settings: OidcSettings): boolean {
+    return settings.credentialRef === null || Object.hasOwn(this.#options.credentials ?? {}, settings.credentialRef)
+      && Boolean(this.#options.credentials?.[settings.credentialRef]);
   }
 
   async authorizationUrl(settings: OidcSettings, request: AuthorizationRequest): Promise<string> {
@@ -70,7 +76,7 @@ export class OidcIdentity implements IdentityPort {
   }
 
   #configuration(settings: OidcSettings): Promise<client.Configuration> {
-    const key = `${settings.issuer} ${settings.clientId}`;
+    const key = JSON.stringify([settings.issuer, settings.clientId, settings.credentialRef]);
     let configuration = this.#configurations.get(key);
     if (!configuration) {
       configuration = this.#discover(settings).catch((error: unknown) => {
@@ -87,6 +93,7 @@ export class OidcIdentity implements IdentityPort {
    * says it accepts. Public clients (no secret) rely on PKCE alone.
    */
   async #discover(settings: OidcSettings): Promise<client.Configuration> {
+    if (!this.isConfigured(settings)) throw new IdentityError("The issuer credential is not installed.");
     const insecure = this.#options.allowInsecureRequests ? { execute: [client.allowInsecureRequests] } : undefined;
     let discovered: client.Configuration;
     try {
@@ -97,14 +104,15 @@ export class OidcIdentity implements IdentityPort {
         { cause: error },
       );
     }
-    if (settings.clientSecret === null) return discovered;
+    if (settings.credentialRef === null) return discovered;
+    const clientSecret = this.#options.credentials![settings.credentialRef]!;
 
     const server = discovered.serverMetadata();
     const configuration = new client.Configuration(
       server,
       settings.clientId,
-      { client_secret: settings.clientSecret },
-      clientAuthentication(server.token_endpoint_auth_methods_supported, settings.clientSecret),
+      { client_secret: clientSecret },
+      clientAuthentication(server.token_endpoint_auth_methods_supported, clientSecret),
     );
     if (this.#options.allowInsecureRequests) client.allowInsecureRequests(configuration);
     return configuration;

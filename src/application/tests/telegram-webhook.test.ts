@@ -8,7 +8,7 @@ const h = harness();
 const secret = "test-webhook-secret";
 
 test.each(["meetup", "event"] as const)("the Telegram webhook records %s RSVP answers only for an authorized private sender", async (kind) => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });
   const bo = participationFor(await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", name: "Bo", email: "bo@example.test" }), kind);
   const link = await bo.beginTelegramLink();
@@ -43,7 +43,7 @@ function request(update: unknown, token = secret) {
 }
 
 test("an authenticated Telegram webhook links a Member, joins a Meetup and replies through the port", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana Member", email: "ana@example.test" });
   const bo = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", name: "Bo Member", email: "bo@example.test" });
   const link = await bo.beginTelegramLink();
@@ -65,7 +65,7 @@ test("an authenticated Telegram webhook links a Member, joins a Meetup and repli
 });
 
 test("Telegram commands from group chats or another sender cannot bind an account", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });
   const link = await ana.beginTelegramLink();
   const text = `/start ${new URL(link.url).searchParams.get("start")}`;
@@ -78,7 +78,7 @@ test("Telegram commands from group chats or another sender cannot bind an accoun
 });
 
 test("Telegram Invite buttons accept or decline only for the linked invitee and notify the Host", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const host = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana Member", email: "ana@example.test" });
   const bo = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", name: "Bo Member", email: "bo@example.test" });
   const cy = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "cy", name: "Cy Member", email: "cy@example.test" });
@@ -124,7 +124,7 @@ test("Telegram Invite buttons accept or decline only for the linked invitee and 
 });
 
 test("Telegram posts Availability in two taps after choosing an Activity and a window", async () => {
-  await h.app.bootstrap(withDepartmentAndSiteClaims(ministryA));
+  await h.setupOrganisation(withDepartmentAndSiteClaims(ministryA));
   const ana = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test", building: "Harbour House" });
   const bo = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", name: "Bo", email: "bo@example.test", building: "Harbour House" });
   const code = new URL((await ana.beginTelegramLink()).url).searchParams.get("start")!;

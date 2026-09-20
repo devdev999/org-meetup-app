@@ -35,7 +35,7 @@ export function LiveAvailability({ board }: { board: AvailabilityBoard }) {
       {suggestions.length === 0 ? <p>No overlaps with your Availability right now.</p> : <ul className="meetup-list">
         {suggestions.map((suggestion) => <li key={`${suggestion.ownAvailabilityId}:${suggestion.otherAvailabilityId}`}>
           <h3>{suggestion.member.name} is free for {suggestion.activity.name}</h3>
-          <p>Your Availability overlaps from <MeetupTime value={suggestion.startsAt.toISOString()} /> to {suggestion.endsAt.toISOString().slice(11, 16)} UTC.</p>
+          <p>Your Availability overlaps from <MeetupTime value={suggestion.startsAt.toISOString()} /> to <MeetupTime value={suggestion.endsAt.toISOString()} />.</p>
           <p>{suggestion.place.kind === "physical" ? suggestion.place.siteName : "Virtual"}</p>
           <Link href={`/meetups/new?ownAvailabilityId=${suggestion.ownAvailabilityId}&otherAvailabilityId=${suggestion.otherAvailabilityId}`}>Plan a Meetup with {suggestion.member.name}</Link>
         </li>)}
@@ -45,7 +45,7 @@ export function LiveAvailability({ board }: { board: AvailabilityBoard }) {
         {open.map((entry) => <li key={entry.id}>
           <h3>{entry.member.name}</h3>
           <p>{entry.activity.name}, {entry.place.kind === "physical" ? entry.place.siteName : "Virtual"}</p>
-          <p><MeetupTime value={entry.startsAt.toISOString()} /> to {entry.endsAt.toISOString().slice(11, 16)} UTC</p>
+          <p><MeetupTime value={entry.startsAt.toISOString()} /> to <MeetupTime value={entry.endsAt.toISOString()} /></p>
         </li>)}
       </ul>}
     </>

@@ -5,7 +5,7 @@ import { harness } from "./harness";
 const h = harness();
 
 test("a Member previews an Interest before confirming it with a Stance", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   const catalog = await member.interests();
   const rust = catalog.find((interest) => interest.name === "Rust")!;
@@ -20,7 +20,7 @@ test("a Member previews an Interest before confirming it with a Stance", async (
 });
 
 test("a Member's override resolves its saved Alias without another AI request", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   const sql = (await member.interests()).find((interest) => interest.name === "SQL")!;
   const preview = await member.resolveInterest({ phrase: "database wizardry", kind: "skill" });
@@ -35,7 +35,7 @@ test("a Member's override resolves its saved Alias without another AI request", 
 });
 
 test("the AI receives only Interest text, kinds and Member counts", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   const sql = (await member.interests()).find((interest) => interest.name === "SQL")!;
   await member.confirmInterest({ phrase: "database wizardry", selection: { interestId: sql.interestId }, stance: "shares" });
@@ -45,7 +45,7 @@ test("the AI receives only Interest text, kinds and Member counts", async () => 
 });
 
 test("a Member can keep a phrase as a Hobby and replace their Stance", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   h.ai.responses.push({ existingName: "Bouldering" });
   const preview = await member.resolveInterest({ phrase: "indoor bouldering", kind: "hobby" });
@@ -59,8 +59,8 @@ test("a Member can keep a phrase as a Hobby and replace their Stance", async () 
 });
 
 test("Members find other Members by Interest, Department and Site and see their Stances", async () => {
-  await h.app.bootstrap(withDepartmentAndSiteClaims(ministryA));
-  await h.app.bootstrap(withDepartmentAndSiteClaims(ministryB));
+  await h.setupOrganisation(withDepartmentAndSiteClaims(ministryA));
+  await h.setupOrganisation(withDepartmentAndSiteClaims(ministryB));
   const viewer = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   const bo = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", email: "bo@example.test", name: "Bo", ou: "Legal", building: "Harbour House" });
   const cleo = await signInAndAcknowledgeAs(h, "ministry-b", { sub: "cleo", email: "cleo@example.test", name: "Cleo", ou: "Legal", building: "Harbour House" });
@@ -80,7 +80,7 @@ test("Members find other Members by Interest, Department and Site and see their 
 });
 
 test("AI can propose a new canonical Interest while the original phrase remains searchable", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   const viewer = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", email: "bo@example.test", name: "Bo" });
   h.ai.responses.push({ name: "Model railways", kind: "hobby" });
@@ -94,7 +94,7 @@ test("AI can propose a new canonical Interest while the original phrase remains 
 });
 
 test("similarity resolves typos and proposes new Interests during an AI outage without saving", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   const boardGames = (await member.interests()).find((interest) => interest.name === "Board games")!;
   h.ai.responses.push(new Error("timeout"), new Error("timeout"), { existingName: "Outside the shortlist" });
@@ -105,8 +105,8 @@ test("similarity resolves typos and proposes new Interests during an AI outage w
 });
 
 test("Interests and Aliases stay in their Organisation and starter seeding is idempotent", async () => {
-  await h.app.bootstrap(ministryA);
-  await h.app.bootstrap(ministryB);
+  await h.setupOrganisation(ministryA);
+  await h.setupOrganisation(ministryB);
   const a = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   const b = await signInAndAcknowledgeAs(h, "ministry-b", { sub: "bo", email: "bo@example.test", name: "Bo" });
   const initial = await a.interests();
@@ -117,13 +117,13 @@ test("Interests and Aliases stay in their Organisation and starter seeding is id
   await expect(b.confirmInterest({ phrase: "SQL", selection: { interestId: sqlA.interestId }, stance: "shares" })).rejects.toMatchObject({ code: "unknown-interest" });
   h.ai.responses.push(new Error("offline"));
   expect((await b.resolveInterest({ phrase: "Xyzzy", kind: "hobby" })).proposed).toEqual({ name: "Xyzzy", kind: "hobby" });
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   expect(await a.interests()).toEqual(initial);
 });
 
 test("a roster departure removes the Member from searches and profiles and revokes their actor", async () => {
   const adminPerson = { email: "olivia@example.test", name: "Olivia" };
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson });
+  await h.setupOrganisation({ ...ministryA, organisationAdmin: adminPerson });
   const viewer = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "olivia", ...adminPerson });
   const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   const sql = (await member.interests()).find((interest) => interest.name === "SQL")!;
@@ -143,7 +143,7 @@ test("a roster departure removes the Member from searches and profiles and revok
 });
 
 test("Interest commands and discovery require notice acknowledgement and validate input", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const member = await signInAs(h, "ministry-a", ana);
   await expect(member.resolveInterest({ phrase: "SQL", kind: "skill" })).rejects.toMatchObject({ name: "AdminVisibilityNoticeRequiredError" });
   await expect(member.searchMembers()).rejects.toMatchObject({ name: "AdminVisibilityNoticeRequiredError" });
@@ -155,7 +155,7 @@ test("Interest commands and discovery require notice acknowledgement and validat
 });
 
 test("confirming the same Interest again replaces the Stance without duplicating the Interest", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   await member.confirmInterest({ phrase: "sql", selection: { name: "SQL", kind: "skill" }, stance: "shares" });
   const sql = (await member.interests()).find((interest) => interest.name === "SQL")!;
@@ -164,7 +164,7 @@ test("confirming the same Interest again replaces the Stance without duplicating
 });
 
 test("a normalized Alias cannot be confirmed against a different Interest", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const anaMember = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   const bo = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", email: "bo@example.test", name: "Bo" });
   const sql = (await anaMember.interests()).find((interest) => interest.name === "SQL")!;
@@ -181,7 +181,7 @@ test("a normalized Alias cannot be confirmed against a different Interest", asyn
 });
 
 test("concurrent confirmations keep one Alias mapping and roll back the conflicting Interest", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const a = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   const b = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", email: "bo@example.test", name: "Bo" });
   const before = await a.interests();
@@ -199,7 +199,7 @@ test("concurrent confirmations keep one Alias mapping and roll back the conflict
 
 test.each([["\u00a0SQL\u00a0", "sql"], ["\ufeffSQL\ufeff", "sql"], ["İ", "i"], ["ΟΣ", "οσ"]])(
   "Alias normalization treats %s and %s as the same phrase", async (phrase, variant) => {
-    await h.app.bootstrap(ministryA);
+    await h.setupOrganisation(ministryA);
     const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
     const sql = (await member.interests()).find((interest) => interest.name === "SQL")!;
     const rust = (await member.interests()).find((interest) => interest.name === "Rust")!;
@@ -215,7 +215,7 @@ test.each([["\u00a0SQL\u00a0", "sql"], ["\ufeffSQL\ufeff", "sql"], ["İ", "i"], 
 );
 
 test("AI proposals with an existing canonical name preview its actual name and kind", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   const sql = (await member.interests()).find((interest) => interest.name === "SQL")!;
   h.ai.responses.push({ name: "sql", kind: "hobby" });
@@ -228,7 +228,7 @@ test("AI proposals with an existing canonical name preview its actual name and k
 
 test.each([{ name: "sql", kind: "skill" as const }, { name: "SQL", kind: "hobby" as const }])(
   "a conflicting new selection $name/$kind requires another confirmation", async (selection) => {
-    await h.app.bootstrap(ministryA);
+    await h.setupOrganisation(ministryA);
     const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
     await expect(member.confirmInterest({ phrase: "sql", selection, stance: "shares" }))
       .rejects.toMatchObject({ code: "interest-name-conflict" });

@@ -9,6 +9,7 @@ import {
   type CreateMeetupInput,
   type MeetupAudience,
 } from "../../application/index";
+import { application } from "../../web/application";
 import { formText } from "../../web/forms";
 import { requireMemberPastWelcome } from "../../web/session";
 
@@ -58,6 +59,7 @@ function refreshMeetups(meetupId: string, kind: "meetups" | "events" = "meetups"
 export async function saveMeetup(meetupId: string | null, form: FormData, mode: "meetup" | "event" | "event-direct" = "meetup"): Promise<MeetupActionState> {
   const { member } = await requireMemberPastWelcome();
   let savedId: string;
+  if (form.get("timeZone") !== await application().timeZone()) return { error: "The deployment time zone changed. Reload and review the times before saving." };
   try {
     const fields = meetupInput(form);
     const eventFields = { ...fields, capacity: formText(form.get("capacity")) ? fields.capacity : null };

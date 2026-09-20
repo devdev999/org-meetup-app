@@ -1,11 +1,8 @@
 import { z } from "zod";
-import type { AiExtractionRequest, AiExtractedInterest, AiInterestRequest, AiInterestResolution, AiPort } from "../../application/ports";
+import type { AiExtractionRequest, AiExtractedInterest, AiInterestRequest, AiInterestResolution, AiRequestSettings, AiPort } from "../../application/ports";
 
 interface ChatCompletionConfig {
-  baseUrl: string;
   apiKey: string;
-  model: string;
-  extractionModel?: string;
   timeoutMs?: number;
 }
 
@@ -46,23 +43,24 @@ const instructions = [
 export class ChatCompletionAi implements AiPort {
   constructor(private readonly config: ChatCompletionConfig) {}
 
-  async resolveInterest(input: AiInterestRequest, signal?: AbortSignal): Promise<AiInterestResolution> {
-    return resolutionSchema.parse(await this.complete(this.config.model, instructions, {
+  async resolveInterest(input: AiInterestRequest, settings: AiRequestSettings, signal?: AbortSignal): Promise<AiInterestResolution> {
+    return resolutionSchema.parse(await this.complete(settings, instructions, {
       phrase: input.phrase,
       shortlist: input.shortlist.map(({ name, kind, count }) => ({ name, kind, count })),
     }, signal));
   }
 
-  async extractInterests(input: AiExtractionRequest, signal?: AbortSignal): Promise<AiExtractedInterest[]> {
-    const result = await this.complete(this.config.extractionModel ?? this.config.model, extractionInstructions, {
+  async extractInterests(input: AiExtractionRequest, settings: AiRequestSettings, signal?: AbortSignal): Promise<AiExtractedInterest[]> {
+    const result = await this.complete(settings, extractionInstructions, {
       activity: input.activity, description: input.description,
     }, signal);
     return extractionSchema.parse(result).interests;
   }
 
-  private async complete(model: string, instructions: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
+  private async complete({ baseUrl, model }: AiRequestSettings, instructions: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
+    if (!baseUrl) throw new Error("An AI endpoint has not been configured.");
     const timeout = AbortSignal.timeout(this.config.timeoutMs ?? 5_000);
-    const response = await fetch(`${this.config.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+    const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
       signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       headers: {

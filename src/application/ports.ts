@@ -12,7 +12,7 @@ export interface OidcSettings {
   issuer: string;
   clientId: string;
   /** Null for a public client that relies on PKCE alone. */
-  clientSecret: string | null;
+  credentialRef: string | null;
 }
 
 /** Everything the identity provider needs to start one sign-in. */
@@ -39,6 +39,7 @@ export type RawClaims = Record<string, unknown>;
 
 /** Identity claims from OpenID Connect. */
 export interface IdentityPort {
+  isConfigured(settings: OidcSettings): boolean;
   /** Where to send the browser so the issuer can authenticate the person. */
   authorizationUrl(settings: OidcSettings, request: AuthorizationRequest): Promise<string>;
   /** Turns the issuer's callback into verified claims, or throws `IdentityError`. */
@@ -71,9 +72,11 @@ export type AiInterestResolution = { existingName: string } | { name: string; ki
 export interface AiExtractionRequest { activity: string; description: string }
 export interface AiExtractedInterest { phrase: string; kind: InterestKind }
 
+export interface AiRequestSettings { baseUrl: string | null; model: string }
+
 export interface AiPort {
-  resolveInterest(input: AiInterestRequest, signal?: AbortSignal): Promise<AiInterestResolution>;
-  extractInterests(input: AiExtractionRequest, signal?: AbortSignal): Promise<AiExtractedInterest[]>;
+  resolveInterest(input: AiInterestRequest, settings: AiRequestSettings, signal?: AbortSignal): Promise<AiInterestResolution>;
+  extractInterests(input: AiExtractionRequest, settings: AiRequestSettings, signal?: AbortSignal): Promise<AiExtractedInterest[]>;
 }
 
 export type TelegramAvailabilityAction = { kind: "availability-activity"; activityId: string }
@@ -92,12 +95,12 @@ export interface TelegramMessage {
 }
 
 export interface TelegramPort {
-  readonly botUsername: string | null;
   sendMessage(message: TelegramMessage): Promise<void>;
   answerCallback(input: { callbackId: string; text: string }): Promise<void>;
 }
 
 export interface EmailMessage {
+  from: string;
   id: string;
   to: string;
   subject: string;

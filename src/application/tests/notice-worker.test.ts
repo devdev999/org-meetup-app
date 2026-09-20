@@ -7,7 +7,7 @@ import { harness } from "./harness";
 const h = harness();
 
 test("the worker prompts for Attendance through the real queue after an occurrence ends", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });
   const occurrence = await ana.createMeetup({
     activityId: (await ana.meetupChoices()).activities[0]!.id, startsAt: new Date("2026-09-18T10:00:00Z"), durationMinutes: 60,
@@ -27,7 +27,7 @@ test("the worker prompts for Attendance through the real queue after an occurren
 });
 
 test("the worker generates recurring Meetups and RSVP prompts through the real queue", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });
   const first = await ana.createMeetup({
     activityId: (await ana.meetupChoices()).activities[0]!.id, startsAt: new Date("2026-09-19T10:00:00Z"), durationMinutes: 30,
@@ -48,7 +48,7 @@ test("the worker generates recurring Meetups and RSVP prompts through the real q
 });
 
 test("the worker sends a daily email digest through the real queue", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });
   const bo = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", name: "Bo", email: "bo@example.test" });
   const meetup = await ana.createMeetup({
@@ -74,7 +74,7 @@ test("the worker sends a daily email digest through the real queue", async () =>
 });
 
 test("the worker expires pending Invites through the real queue", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const host = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });
   const bo = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", name: "Bo", email: "bo@example.test" });
   const meetup = await host.createMeetup({
@@ -95,7 +95,7 @@ test("the worker expires pending Invites through the real queue", async () => {
 });
 
 test("the worker notices newly open Availability through the real queue", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });
   const bo = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", name: "Bo", email: "bo@example.test" });
   const input = {

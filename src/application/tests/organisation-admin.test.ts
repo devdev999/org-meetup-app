@@ -6,7 +6,7 @@ const h = harness();
 const adminPerson = { email: "olivia@ministry-a.example", name: "Olivia Admin" };
 
 async function adminAndMember() {
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson });
+  await h.setupOrganisation({ ...ministryA, organisationAdmin: adminPerson });
   const actor = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "olivia", ...adminPerson });
   return { admin: await actor.organisationAdmin(), member: await signInAndAcknowledgeAs(h, "ministry-a", ana) };
 }
@@ -52,13 +52,13 @@ test("an Organisation Admin creates, renames and retires lists while existing pr
   await expect(another.updateProfile({ department: null, site: "Annex" })).rejects.toMatchObject({
     code: "unknown-site",
   });
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson });
+  await h.app.initializePlatform(ministryA);
   expect((await admin.lists()).activities.filter((entry) => entry.name === "coffee")).toHaveLength(1);
 });
 
 test("unknown-login notices and audit entries belong to the Organisation Admin's own Organisation", async () => {
   const { admin, member } = await adminAndMember();
-  await h.app.bootstrap({ ...ministryB, organisationAdmin: adminPerson });
+  await h.setupOrganisation({ ...ministryB, organisationAdmin: adminPerson });
   const otherMember = await signInAndAcknowledgeAs(h, "ministry-b", { sub: "olivia-b", ...adminPerson });
   const otherAdmin = await otherMember.organisationAdmin();
   await signInAndAcknowledgeAs(h, "ministry-a", ana);
@@ -83,7 +83,7 @@ test("unknown-login notices and audit entries belong to the Organisation Admin's
 });
 
 test("an Organisation Admin must acknowledge the notice before using the admin area", async () => {
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson });
+  await h.setupOrganisation({ ...ministryA, organisationAdmin: adminPerson });
   const actor = await signInAs(h, "ministry-a", { sub: "olivia", ...adminPerson });
   await expect(actor.organisationAdmin()).rejects.toMatchObject({ name: "AdminVisibilityNoticeRequiredError" });
   await actor.acknowledgeAdminVisibilityNotice();
@@ -94,7 +94,7 @@ test.each(["department", "site", "activity"] as const)(
   "%s names are unique within an Organisation and changes cannot cross Organisations",
   async (kind) => {
     const { admin } = await adminAndMember();
-    await h.app.bootstrap({ ...ministryB, organisationAdmin: adminPerson });
+    await h.setupOrganisation({ ...ministryB, organisationAdmin: adminPerson });
     const other = await signInAndAcknowledgeAs(h, "ministry-b", { sub: "olivia-b", ...adminPerson });
     const otherAdmin = await other.organisationAdmin();
     const entry = await admin.createListEntry(kind, "Research");
@@ -111,12 +111,12 @@ test.each(["department", "site", "activity"] as const)(
   },
 );
 
-test("bootstrap keeps renamed and retired starter Activities", async () => {
+test("repeating initial setup keeps renamed and retired starter Activities", async () => {
   const { admin } = await adminAndMember();
   const coffee = (await admin.lists()).activities.find((entry) => entry.name === "coffee")!;
   await admin.renameListEntry("activity", coffee.id, "tea");
   await admin.retireListEntry("activity", coffee.id);
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson });
+  await h.app.initializePlatform(ministryA);
   const activities = (await admin.lists()).activities;
   expect(activities).toHaveLength(7);
   expect(activities).toContainEqual({ id: coffee.id, name: "tea", retired: true });

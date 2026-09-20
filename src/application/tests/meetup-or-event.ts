@@ -1,5 +1,4 @@
 import type { CreateMeetupInput, MemberActions } from "../index";
-import { ministryA, signInAndAcknowledgeAs } from "./fixtures";
 import type { Harness } from "./harness";
 
 export function participationFor(member: MemberActions, kind: "meetup" | "event") {
@@ -18,9 +17,7 @@ export function participationFor(member: MemberActions, kind: "meetup" | "event"
 
 export async function createMeetupOrEvent(h: Harness, host: MemberActions, input: CreateMeetupInput, kind: "meetup" | "event") {
   if (kind === "meetup") return host.createMeetup(input);
-  const adminPerson = { email: "event-admin@example.test", name: "Event Admin" };
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson });
-  const admin = await (await signInAndAcknowledgeAs(h, "ministry-a", { sub: "event-admin", ...adminPerson })).organisationAdmin();
+  const admin = await h.organisationAdmin((await host.profile()).organisation.slug);
   const proposal = await host.proposeEvent(input);
   await admin.approveEvent(proposal.id);
   return (await host.viewEvent(proposal.id))!;

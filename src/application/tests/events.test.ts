@@ -11,7 +11,7 @@ async function member(name: string) {
 }
 
 async function setup() {
-  await h.app.bootstrap({ ...ministryA, organisation: { ...ministryA.organisation, sites: ["Harbour House", "Annex"] }, organisationAdmin: adminPerson });
+  await h.setupOrganisation({ ...ministryA, organisation: { ...ministryA.organisation, sites: ["Harbour House", "Annex"] }, organisationAdmin: adminPerson });
   const adminMember = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "olivia", ...adminPerson });
   const ana = await member("ana");
   const choices = await ana.meetupChoices();
@@ -71,7 +71,7 @@ test("Organisation Admin Event management includes private and past published Ev
   expect(await admin.events()).toMatchObject([{ id: approved.id, kind: "event", host: { name: "ana" }, status: "scheduled" }]);
   expect((await admin.events()).some((entry) => entry.id === pending.id)).toBe(false);
   expect((await admin.auditLog()).some((entry) => entry.action === "events")).toBe(true);
-  await h.app.bootstrap({ ...ministryB, organisationAdmin: adminPerson });
+  await h.setupOrganisation({ ...ministryB, organisationAdmin: adminPerson });
   const otherAdmin = await (await signInAndAcknowledgeAs(h, "ministry-b", { sub: "other-admin", ...adminPerson })).organisationAdmin();
   expect(await otherAdmin.events()).toEqual([]);
 });
@@ -79,7 +79,7 @@ test("Organisation Admin Event management includes private and past published Ev
 test("only the Organisation Admin can reject an Event proposal and the proposer sees the note", async () => {
   const { ana, admin, input } = await setup();
   const bo = await member("bo");
-  await h.app.bootstrap({ ...ministryB, organisationAdmin: adminPerson });
+  await h.setupOrganisation({ ...ministryB, organisationAdmin: adminPerson });
   const otherAdmin = await (await signInAndAcknowledgeAs(h, "ministry-b", { sub: "other-admin", ...adminPerson })).organisationAdmin();
   const proposal = await ana.proposeEvent({ ...input, recurrence: { frequency: "weekly" } });
   await expect(ana.organisationAdmin()).rejects.toBeInstanceOf(AccessDeniedError);
@@ -114,7 +114,7 @@ test("proposal publication cannot be bypassed by ordinary participation commands
   }
   const event = await admin.createEvent(input);
   await expect(ana.joinMeetup(event.id)).rejects.toBeInstanceOf(AccessDeniedError);
-  await h.app.bootstrap({ ...ministryB, organisationAdmin: adminPerson });
+  await h.setupOrganisation({ ...ministryB, organisationAdmin: adminPerson });
   const outsider = await signInAndAcknowledgeAs(h, "ministry-b", { sub: "outside", ...adminPerson });
   const otherAdmin = await outsider.organisationAdmin();
   expect(await outsider.viewEvent(event.id)).toBeUndefined();

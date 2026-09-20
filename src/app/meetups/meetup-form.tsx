@@ -1,5 +1,7 @@
 "use client";
 
+import { localDateTime, parseLocalDateTime, formatTime } from "../../calendar";
+import { useTimeZone } from "../_components/calendar";
 import { useActionState, useEffect, useState } from "react";
 import type { AvailabilitySuggestion, EventDetail, Interest, InterestChoice, MemberActions, MeetupDetail } from "../../application/index";
 import { saveMeetup, type MeetupActionState } from "./actions";
@@ -21,6 +23,7 @@ export function MeetupForm({
   availability?: AvailabilitySuggestion;
   mode?: "meetup" | "event" | "event-direct";
 }) {
+  const timeZone = useTimeZone();
   const kind = mode === "meetup" ? "meetup" : "event";
   const label = kind === "meetup" ? "Meetup" : "Event";
   const [placeKind, setPlaceKind] = useState(meetup?.place.kind ?? availability?.place.kind ?? "physical");
@@ -31,15 +34,17 @@ export function MeetupForm({
   const [description, setDescription] = useState(meetup?.description ?? "");
   const [siteId, setSiteId] = useState(meetup?.place.kind === "physical" ? meetup.place.siteId : availability?.place.kind === "physical" ? availability.place.siteId : choices.defaultSiteId ?? "");
   const [relevantInterests, setRelevantInterests] = useState<InterestChoice[]>([]);
-  const [startsAt, setStartsAt] = useState(meetup ? new Date(meetup.startsAt).toISOString().slice(0, 16) : availability ? new Date(availability.startsAt).toISOString().slice(0, 19) : "");
+  const [startsAt, setStartsAt] = useState(meetup ? localDateTime(meetup.startsAt, timeZone) : availability ? localDateTime(availability.startsAt, timeZone, true) : "");
   useEffect(() => {
-    if (!meetup && !availability) setStartsAt(new Date(Date.now() + 30 * 60 * 1000).toISOString().slice(0, 16));
-  }, [meetup, availability]);
+    if (!meetup && !availability) setStartsAt(localDateTime(new Date(Date.now() + 30 * 60 * 1000), timeZone));
+  }, [meetup, availability, timeZone]);
   const [state, action, pending] = useActionState<MeetupActionState, FormData>(
     (_previous, form) => {
-      const start = new Date(`${String(form.get("startsAt"))}Z`);
-      if (Number.isNaN(start.getTime())) return Promise.resolve({ error: "Choose a start time." });
-      form.set("startsAt", start.toISOString());
+      try {
+        const value = String(form.get("startsAt"));
+        const start = meetup && value === localDateTime(meetup.startsAt, timeZone) ? new Date(meetup.startsAt) : parseLocalDateTime(value, timeZone);
+        form.set("startsAt", start.toISOString());
+      } catch { return Promise.resolve({ error: "Choose a valid local time. Daylight-saving transitions can skip or repeat a time." }); }
       return saveMeetup(meetup?.id ?? null, form, mode);
     },
     {},
@@ -51,11 +56,12 @@ export function MeetupForm({
 
   return (
     <form action={action} onReset={(event) => event.preventDefault()}>
+      <input type="hidden" name="timeZone" value={timeZone} />
       {availability && <>
         <input type="hidden" name="ownAvailabilityId" value={availability.ownAvailabilityId} />
         <input type="hidden" name="otherAvailabilityId" value={availability.otherAvailabilityId} />
         <p className="notice">Creating this Meetup will invite {availability.member.name}. Supply the Place and review the fields before confirming.</p>
-        <p className="muted">Your overlap is {availability.startsAt.toISOString().slice(11, 19)} to {availability.endsAt.toISOString().slice(11, 19)} UTC. The overlap start is filled in. Choose a future start within this window before confirming.</p>
+        <p className="muted">Your overlap is {formatTime(availability.startsAt, timeZone)} to {formatTime(availability.endsAt, timeZone)}. The overlap start is filled in. Choose a future start within this window before confirming.</p>
       </>}
       {!meetup && (
         <label>
@@ -67,10 +73,10 @@ export function MeetupForm({
         </label>
       )}
       <label>
-        Start time in UTC
+        Start time in {timeZone}
         <input type="datetime-local" name="startsAt" required step={availability ? 1 : 60} value={startsAt} onChange={(change) => setStartsAt(change.target.value)} />
       </label>
-      <p className="muted">All {label} times use UTC.</p>
+      <p className="muted">Times use {timeZone}.</p>
       {!meetup && <>
         <label>
           Repeats
@@ -84,7 +90,7 @@ export function MeetupForm({
         {frequency !== "once" && <>
           <p className="muted">The first start sets the weekday and time. Monthly uses the same numbered weekday and skips months without a matching fifth weekday.</p>
           <label>
-            Series end date in UTC, optional
+            Series end date in {timeZone}, optional
             <input type="date" name="endsOn" value={endsOn} onChange={(change) => setEndsOn(change.target.value)} />
           </label>
         </>}

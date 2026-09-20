@@ -16,7 +16,14 @@ import {
  * page both act as the issuer through `FakeIdentity.callbackUrl`.
  */
 export class FakeIdentity implements IdentityPort {
+  constructor(private readonly credentialRefs: string[] = []) {}
+
+  isConfigured(settings: OidcSettings): boolean {
+    return settings.credentialRef === null || this.credentialRefs.includes(settings.credentialRef);
+  }
+
   async authorizationUrl(settings: OidcSettings, request: AuthorizationRequest): Promise<string> {
+    if (!this.isConfigured(settings)) throw new IdentityError("The issuer credential is not installed.");
     const url = new URL("authorize", withTrailingSlash(settings.issuer));
     url.searchParams.set("iss", settings.issuer);
     url.searchParams.set("client_id", settings.clientId);

@@ -16,7 +16,7 @@ test("the Telegram adapter sends a plain notice with a join button and answers c
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("No test server address");
   try {
-    const telegram = new GrammyTelegram({ token: "123:test", botUsername: "test_bot", apiRoot: `http://127.0.0.1:${address.port}` });
+    const telegram = new GrammyTelegram({ token: "123:test", apiRoot: `http://127.0.0.1:${address.port}` });
     await telegram.sendMessage({ chatId: "101", text: "Bo joined your Meetup.", joinMeetupId: "d9f1542a-5d3c-4bb2-83ec-a2c5ae0bc2a5" });
     await telegram.answerCallback({ callbackId: "callback-1", text: "You joined the Meetup." });
     expect(requests).toEqual([

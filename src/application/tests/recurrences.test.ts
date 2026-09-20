@@ -11,7 +11,7 @@ function member(sub: string) {
 
 async function setup() {
   h.clock.set(new Date("2026-01-05T09:00:00Z"));
-  await h.app.bootstrap(withDepartmentAndSiteClaims(ministryA));
+  await h.setupOrganisation(withDepartmentAndSiteClaims(ministryA));
   const ana = await signInAndAcknowledgeAs(h, "ministry-a", {
     sub: "ana", email: "ana@example.test", name: "Ana Member", building: "Harbour House",
   });
@@ -313,7 +313,7 @@ test("ordinary Join and Leave keep RSVP accurate for one-off and recurring Meetu
 test("standing access survives a Site change and Not going, then ends on leaving, while another Organisation stays isolated", async () => {
   const { ana, input } = await setup();
   const bo = await member("bo");
-  await h.app.bootstrap(ministryB);
+  await h.setupOrganisation(ministryB);
   const outsider = await signInAndAcknowledgeAs(h, "ministry-b", { sub: "outside", name: "Outside", email: "outside@example.test" });
   const first = await ana.createMeetup(input);
   await bo.joinSeries(first.recurrence!.id);

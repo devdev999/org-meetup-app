@@ -6,4 +6,4 @@ export interface ReportTable {
   columns: string[];
   rows: (string | number | null)[][];
 }
-export interface Report { period: ReportPeriod; tables: ReportTable[] }
+export interface Report { timeZone: string; period: ReportPeriod; tables: ReportTable[] }

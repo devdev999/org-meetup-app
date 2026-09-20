@@ -8,7 +8,7 @@ import { ReportPeriodFields, ReportTables } from "../../../_components/report-ta
 export default async function MemberReportPage({ searchParams }: { searchParams: Promise<{ memberId?: string; from?: string; to?: string }> }) {
   const admin = await requireOrganisationAdmin();
   const params = await searchParams;
-  const period = selectedReportPeriod(params);
+  const period = await selectedReportPeriod(params);
   const memberId = params.memberId ?? "";
   let report: Report | undefined;
   let error: string | undefined;
@@ -21,7 +21,7 @@ export default async function MemberReportPage({ searchParams }: { searchParams:
   return <>
     <h2>Member report</h2>
     <p><Link href={`/admin/reports?${new URLSearchParams({ ...period })}`}>Back to reports</Link></p>
-    <p>Every view and export is recorded in the audit log. Dates and times use UTC.</p>
+    <p>Every view and export is recorded in the audit log. Report dates use {report?.timeZone ?? "the deployment time zone"}. Timestamps include their UTC offset.</p>
     <form><input type="hidden" name="memberId" value={memberId} /><ReportPeriodFields period={period} /><button type="submit">Update Member report</button></form>
     {error && <p role="alert">{error}</p>}
     {report && <ReportTables report={report} memberId={memberId} />}

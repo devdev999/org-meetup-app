@@ -9,7 +9,7 @@ import { exportJWK, generateKeyPair, SignJWT } from "jose";
  * The test plays the person: `answer` takes the authorization URL the adapter
  * built and returns the callback URL the browser would be sent to.
  */
-export type TokenEndpointAuthMethod = "client_secret_basic" | "client_secret_post";
+export type TokenEndpointAuthMethod = "client_secret_basic" | "client_secret_post" | "none";
 
 export interface StubIssuerOptions {
   /** What the issuer advertises and accepts at its token endpoint. Default: both methods. */
@@ -72,7 +72,7 @@ export async function startStubIssuer(options: StubIssuerOptions = {}): Promise<
       if (!authMethods.includes(credentials.method)) {
         return json(401, { error: "invalid_client", error_description: `${credentials.method} is not accepted here` });
       }
-      if (credentials.clientId !== clientId || credentials.clientSecret !== clientSecret) {
+      if (credentials.clientId !== clientId || credentials.method !== "none" && credentials.clientSecret !== clientSecret) {
         return json(401, { error: "invalid_client" });
       }
       const issued = codes.get(body.get("code") ?? "");
@@ -161,7 +161,7 @@ function clientCredentials(
     };
   }
   return {
-    method: "client_secret_post",
+    method: body.has("client_secret") ? "client_secret_post" : "none",
     clientId: body.get("client_id") ?? undefined,
     clientSecret: body.get("client_secret") ?? undefined,
   };

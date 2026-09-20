@@ -14,11 +14,11 @@ Needs Docker.
 docker compose up --build
 ```
 
-Then open <http://localhost:3000>. Compose starts Postgres, applies migrations and seeds the first Organisation ("Ministry A") with its first Platform Admin, Departments ("Finance", "Legal") and Site ("Harbour House"), then starts the web process and the worker. Sign-in goes through the built-in fake issuer (`IDENTITY_PROVIDER=fake`): a page where you type who you are. Sign in as `pat@ministry-a.example` to be the seeded Platform Admin, or as anyone else to see an unknown login create a new Member. The Department and Site fields on that page stand in for the directory claims a real issuer would send; they add to the Organisation's lists, which a Member then chooses from on their profile. Leave those fields blank to choose from the seeded lists after acknowledging the first-login notice.
+Then open <http://localhost:3000>. Compose starts Postgres, applies migrations and creates the platform owner's Organisation, "Ministry A", and its first Platform Admin. Sign in as `pat@ministry-a.example` through the built-in fake issuer, then open Platform Admin from the profile. Appoint the first Organisation Admin for Ministry A, or create another Organisation with its issuer and first Organisation Admin. Each Organisation receives starter Interests and Activities.
+
+The fake issuer lets you type who you are. Its Department and Site fields stand in for directory claims and add names to the Organisation's lists. An Organisation Admin can also manage those lists, upload a roster and review unknown logins. Platform Admin access alone grants no Organisation Admin role.
 
 The worker logs a heartbeat once a minute: `docker compose logs -f worker`.
-
-Sign in as `olivia@ministry-a.example` for the seeded Organisation Admin. Open the admin area from the profile to upload a roster, manage Departments, Sites and Activities, or review unknown logins and the audit log. The Platform Admin account has no Organisation Admin access unless separately assigned that role.
 
 ### Roster uploads
 
@@ -36,7 +36,7 @@ Organisation Admin access is checked for each command and query. Roster views, p
 
 Open Meetups from your profile to create one, join one or manage one you Host. Physical Meetups default to the Host's Site as their audience, even when the Place is at another Site. Virtual Meetups default to the whole Organisation. The Host can instead choose a Site, the Organisation or invite-only. Invite-only Meetups are visible to their Host and invitees.
 
-Meetup input, display and notices use UTC for this deployment. Configurable deployment time zones belong to issue #15. Existing Participants and waitlisted Members keep access if their profile Site changes, so they can still leave their Meetup.
+Meetup input, display and new notices use the configured deployment time zone, initially UTC. Existing Participants and waitlisted Members keep access if their profile Site changes, so they can still leave their Meetup.
 
 Capacity includes the Host and must be between two and thirty. Joining a full Meetup adds the Member to its FIFO waitlist. Leaving or increasing capacity promotes the next Member and adds a notice to their inbox. Repeated joins do not take extra spots, and concurrent joins cannot overfill a Meetup.
 
@@ -48,7 +48,7 @@ The application stores Meetups and Events together with a kind. All commands and
 
 ### Recurring Meetups and RSVP
 
-Choose Weekly, Fortnightly or Monthly when creating a Meetup. The first start sets its weekday and UTC time. Monthly repeats on the same numbered weekday, and a fifth-weekday series skips months without one. The optional end date includes that whole UTC day.
+Choose Weekly, Fortnightly or Monthly when creating a Meetup. The first start sets its weekday and local time in the deployment calendar. Monthly repeats on the same numbered weekday, and a fifth-weekday series skips months without one. The optional end date includes that whole local day. Each series keeps its creation time zone after a deployment setting changes. Daylight-saving transitions choose the earlier repeated time or shift a skipped time forward for that occurrence. Date inputs reject skipped or repeated times; choose another time for the first occurrence.
 
 The worker creates ordinary occurrences fourteen days ahead. Each inherits the original series fields, relevant Interests and standing Participants. Editing, handing over or cancelling one occurrence affects that occurrence only. Its original scheduled slot stays recorded, so the worker does not create it again. The Recurring Meetups list keeps series controls available between monthly occurrences.
 
@@ -112,11 +112,11 @@ Open **Notification settings** from the profile or inbox. Members can enable Tel
 
 The app creates a single-use Telegram link valid for ten minutes. Open it and press Start in a private chat, then refresh the link status in the app. Creating another link invalidates the previous code. A Telegram account can belong to only one Member across the deployment. Unlinking removes the binding and pending link codes. Telegram buttons join a Meetup through the same Member command as the web app, including its access and capacity checks.
 
-Enabled Telegram notices arrive immediately. Email for new and accepted Invites, joins, waitlist promotions, cancellations, RSVP and Attendance prompts, Availability overlaps and time, duration or Place changes also arrives immediately. Other email notices, including declined Invites and Attendance confirmations, batch into the next daily digest at 09:00 UTC. Delivery preferences are checked again before a retry or digest. Provisioned Members can receive email before first login. Departed and Suspended Members receive no external notices.
+Enabled Telegram notices arrive immediately. Email for new and accepted Invites, joins, waitlist promotions, cancellations, RSVP and Attendance prompts, Availability overlaps and time, duration or Place changes also arrives immediately. Other email notices, including declined Invites and Attendance confirmations, batch into the next daily digest at 09:00 in the deployment time zone. Delivery preferences are checked again before a retry or digest. Provisioned Members can receive email before first login. Departed and Suspended Members receive no external notices.
 
 Notices and pending deliveries are saved with the Meetup change. Sending runs after that transaction commits and outside any transaction, so a slow provider holds no database connection. While sending, the process renews its one-minute lease every twenty seconds. Only the owning claim can renew or settle a delivery. A member action sends only its own Meetup's notices; the worker delivers the rest and checks for retries and due digests every minute. A failed delivery retries each minute and is given up after 15 attempts, after which it stays queryable but is no longer retried, while the inbox keeps every notice. Completed deliveries are not replayed. A process failure after provider acceptance, or an interruption that prevents lease renewal for a full minute, can still cause a duplicate. Telegram has no server-side key to prevent it.
 
-Telegram messages contain first names, Activity, UTC time and the physical Place name. Virtual Places appear as "Online" on Telegram so room URLs cannot disclose personal information, while email carries the meeting URL so an email-only Member can join. Telegram buttons contain an action and an opaque Meetup or Invite identifier. Profiles, Interests, Departments and descriptions are not added to messages.
+Telegram messages contain first names, Activity, time with its zone and the physical Place name. Virtual Places appear as "Online" on Telegram so room URLs cannot disclose personal information, while email carries the meeting URL so an email-only Member can join. Telegram buttons contain an action and an opaque Meetup or Invite identifier. Profiles, Interests, Departments and descriptions are not added to messages.
 
 ### Channel configuration
 
@@ -125,12 +125,12 @@ Telegram messages contain first names, Activity, UTC time and the physical Place
 | Variable | Value |
 | --- | --- |
 | `TELEGRAM_PROVIDER` | `memory` or `telegram`. |
-| `TELEGRAM_BOT_USERNAME` | Bot username without `@`. Required for Telegram; optional for local link testing with memory. |
+| `TELEGRAM_BOT_USERNAME` | Initial bot username without `@`. Later edited in Platform Admin settings. |
 | `TELEGRAM_BOT_TOKEN` | Bot token, required for Telegram. |
 | `TELEGRAM_WEBHOOK_SECRET` | A secret of 16 to 256 letters, digits, underscores or hyphens. Required for Telegram. |
 | `EMAIL_PROVIDER` | `memory` or `smtp`. |
 | `SMTP_URL` | SMTP connection URL with any credentials, such as `smtps://sender:password@smtp.example:465`. Required for SMTP. |
-| `EMAIL_FROM` | Sender email address, required for SMTP. |
+| `EMAIL_FROM` | Initial sender email address. A sender must be configured in Platform Admin settings before email can send. |
 
 Register the public HTTPS URL `<APP_URL>/api/telegram` with Telegram's [setWebhook method](https://core.telegram.org/bots/api#setwebhook). Set `secret_token` to `TELEGRAM_WEBHOOK_SECRET` and `allowed_updates` to `["message", "callback_query"]`. The endpoint checks the secret header before processing an update. Group chats and messages whose sender differs from the private chat are ignored.
 
@@ -138,11 +138,11 @@ Register the public HTTPS URL `<APP_URL>/api/telegram` with Telegram's [setWebho
 
 Open **Availability** from home, your profile or Meetups to post an Activity and a window today. Physical posts use your current Site. Virtual posts are visible across your Organisation. Only open windows from Active Members appear. Suspension or departure closes a Member's posts. A Site change or retirement closes affected physical posts, and retiring an Activity closes its posts. Earlier overlaps remain in reports. The page refreshes while open and removes posts when their windows end.
 
-Matching Activities with intersecting windows at the same Site, or both virtual, produce Suggestions for both Members. Each pair receives one overlap notice per UTC day, even across multiple posts or Activities. The inbox always receives it. Enabled Telegram and email notices send immediately through the existing delivery queue and retry policy. The worker checks newly open windows and expires ended windows every minute.
+Matching Activities with intersecting windows at the same Site, or both virtual, produce Suggestions for both Members. Each pair receives one overlap notice per deployment calendar day, even across multiple posts or Activities. The inbox always receives it. Enabled Telegram and email notices send immediately through the existing delivery queue and retry policy. The worker checks newly open windows and expires ended windows every minute.
 
 **Plan a Meetup** opens the ordinary creation form with the Activity, overlap start and Site or virtual setting filled in. Choose a future start within the overlap window, supply the physical spot or virtual URL, and review duration, capacity and audience. Only confirmation saves a Meetup and sends the other Member an Invite. Confirmation rechecks the overlap, Activity, Site and start time in the same transaction as creation.
 
-After linking Telegram, send `/available`. Tap an Activity, then a 30- or 60-minute window at your Site or virtually. Window choices expire after ten minutes, and windows end by midnight UTC. Repeating the same choice preserves the existing post.
+After linking Telegram, send `/available`. Tap an Activity, then a 30- or 60-minute window at your Site or virtually. Window choices expire after ten minutes, and windows end by midnight in the deployment time zone. Repeating the same choice preserves the existing post.
 
 ## Interests and finding Members
 
@@ -166,7 +166,7 @@ Needs Node 22.12 or newer (the containers use 24) and pnpm 10.
 pnpm install
 cp .env.example .env            # then edit if needed
 docker compose up -d postgres   # published on localhost:5439
-pnpm db:setup                   # migrations + bootstrap from BOOTSTRAP_* variables
+pnpm db:setup                   # migrations, lifecycle cleanup and first Platform Admin setup
 pnpm dev                        # web on http://localhost:3000
 pnpm worker:dev                 # in another terminal
 ```
@@ -184,7 +184,7 @@ CI runs the same three checks, builds the web app, runs the browser smoke test a
 
 ## Reports and audit
 
-The Organisation Admin area opens Reports. Select an inclusive UTC date period for weekly Meetup and Event totals, participation, RSVP and Attendance, waitlists, Availability, activation and ratings. Interest demand and Telegram linkage show current Active Members. Each table states its basis and exports the same figures as CSV.
+The Organisation Admin area opens Reports. Select an inclusive date period in the deployment time zone for weekly Meetup and Event totals, participation, RSVP and Attendance, waitlists, Availability, activation and ratings. Interest demand and Telegram linkage show current Active Members. Each table states its basis and exports the same figures as CSV.
 
 Participation uses current Active Members and their current Department and Site, even for an earlier period. The numerator counts Members with confirmed Attendance in that period. Suspended and Departed Members remain in individual history but do not count in this participation population.
 
@@ -201,7 +201,7 @@ src/
   application/        the application module: all behaviour, one interface
     index.ts          entry point: createApplication, the Application and actor interfaces, errors
     ports.ts          entry point: the ports (identity claims, clock) and their types
-    lib/              implementation, private: schema, sign-in, actors, bootstrap
+    lib/              implementation, private: schema, sign-in, actors, setup
     tests/            tests at the interface, against real Postgres and the in-memory adapters
   adapters/           one production and one in-memory adapter per port
     identity/         oidc.ts (openid-client) and fake.ts (stateless fake issuer)
@@ -247,33 +247,43 @@ pnpm test:browser
 
 ## Configuration
 
-All from the environment; see [`.env.example`](./.env.example).
+Secrets and process settings come from the environment; see [`.env.example`](./.env.example). Platform Admin settings store the non-secret AI endpoint, Scout model, Interest extraction model, Telegram bot username, email sender and time zone. The running web and worker processes read current settings for new operations. Environment defaults are copied once during setup and do not overwrite later UI changes.
 
-| Variable            | Meaning                                                                                    |
-| ------------------- | ------------------------------------------------------------------------------------------ |
-| `DATABASE_URL`      | Postgres connection string.                                                                 |
-| `APP_URL`           | Public base URL of the web process; builds the sign-in redirect URI.                        |
-| `SESSION_SECRET`    | At least 32 characters; seals the session and pending-sign-in cookies.                      |
-| `IDENTITY_PROVIDER` | `oidc` (default) for real issuers, `fake` for the built-in issuer. A production build (`NODE_ENV=production`) refuses `fake` unless `ALLOW_FAKE_IDENTITY=yes`, which compose sets for the local run. |
-| `BOOTSTRAP_*`       | The first Organisation, its OIDC settings and claim mapping, and the first Platform Admin. Unset to skip. |
-| `BOOTSTRAP_DEPARTMENTS`, `BOOTSTRAP_SITES` | Optional JSON arrays of names to seed the Organisation's profile choices, such as `["Finance","Legal"]` and `["Harbour House"]`. |
-| `BOOTSTRAP_ORGANISATION_ADMIN_EMAIL`, `BOOTSTRAP_ORGANISATION_ADMIN_NAME` | Optional first Organisation Admin. Set both together. This role is separate from Platform Admin. |
+| Variable | Meaning |
+| --- | --- |
+| `DATABASE_URL` | Postgres connection string. |
+| `APP_URL` | Public web URL used for sign-in callbacks. |
+| `SESSION_SECRET` | At least 32 characters; seals session and pending-sign-in cookies. |
+| `IDENTITY_PROVIDER` | `oidc` for real issuers, or `fake` for local development. Production refuses `fake` unless `ALLOW_FAKE_IDENTITY=yes`. |
+| `OIDC_CREDENTIALS` | JSON mapping of credential references to installed OIDC client secrets. Supply it to web, worker and setup. |
+| `BOOTSTRAP_*` | Creates only the first platform owner Organisation and Platform Admin. Unset all fields to skip. Later setup runs leave an existing owner unchanged. |
+| `BOOTSTRAP_OIDC_CREDENTIAL_REF` | Optional installed credential reference for the initial owner issuer. Blank means a public client. |
+| `AI_BASE_URL`, `AI_MODEL`, `AI_EXTRACTION_MODEL` | Initial AI endpoint, Scout model and small Interest model. Both model defaults are `gpt-5.6-luna`. |
+| `TELEGRAM_BOT_USERNAME`, `EMAIL_FROM`, `TIME_ZONE` | Initial non-secret defaults. Time zone defaults to UTC. |
 
-Supply these lists when the issuer does not provide Department or Site claims, so Members still have profile choices. Names are trimmed and matched ignoring case. Re-running `pnpm db:setup` adds new choices without removing existing ones or changing a Member's selections. Unset lists default to empty; blank names or malformed JSON are rejected. Compose supplies sample lists, and `.env.example` shows the format for local development.
+Open Platform Admin, then Organisations, to create an Organisation or appoint an existing Organisation's first admin. Creation accepts issuer, client ID, claim mapping and an optional credential reference. Leave the reference blank only for a public client. A required reference with no installed secret shows "Sign-in awaiting OIDC credential". An operator installs that reference in `OIDC_CREDENTIALS` and restarts the services. The UI and database hold no OIDC secret value. Confidential clients use `client_secret_basic` or `client_secret_post`; public clients rely on PKCE. Sign-in rejects an explicit `email_verified: false` claim.
 
-Per-Organisation OIDC settings (issuer, client id, client secret, claim mapping) are held in the database and seeded from `BOOTSTRAP_*` until the Platform Admin ticket replaces the bootstrap. The client authenticates at the token endpoint with `client_secret_basic` when the issuer advertises it or advertises nothing, otherwise `client_secret_post`; a client without a secret relies on PKCE alone. A login whose claims carry `email_verified: false` is refused; an absent claim is accepted because the issuer is the Organisation's own directory.
+Ministries group Organisations for aggregate reports. Participation and rating totals use combined underlying counts and scores. Exact Department, Site and Activity names combine across Organisations; Interest names also require matching kinds. Unassigned groups stay separate from named groups, and Availability overlaps stay within an Organisation. Platform Admins see no individual Member report or export, and their audit view retains the redaction described above.
+
+Retired `BOOTSTRAP_DEPARTMENTS`, `BOOTSTRAP_SITES` and Organisation Admin bootstrap fields are ignored. Manage those values through the app. `BOOTSTRAP_OIDC_CLIENT_SECRET` is rejected with instructions to use a credential reference.
 
 `pnpm db:setup`, `pnpm worker` and `pnpm worker:dev` read `.env` when it exists (Node's `--env-file-if-exists`), as `next dev` does; variables already in the environment win.
 
 ### AI configuration
 
-`AI_PROVIDER=memory` is the default. It makes no outbound requests and provides deterministic Interest resolution for local development and tests. Set `AI_PROVIDER=chat-completion` in production and supply `AI_BASE_URL`, `AI_API_KEY` and `AI_MODEL`. The base URL must include the provider's API prefix, such as `https://chat.example/v1`. The adapter appends `/chat/completions`, authenticates with a bearer key, and requests a JSON object through the [Chat Completions protocol](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create). The chosen endpoint and model must support JSON mode.
+`AI_PROVIDER=memory` is the default. It makes no outbound requests and provides deterministic Interest resolution for local development and tests. Set `AI_PROVIDER=chat-completion` and install `AI_API_KEY` in the environment. Configure the endpoint and models through Platform Admin settings, or supply their initial environment defaults before first setup. The base URL must include the provider's API prefix, such as `https://chat.example/v1`. The adapter appends `/chat/completions`, authenticates with a bearer key, and requests a JSON object through the [Chat Completions protocol](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create). The chosen endpoint and model must support JSON mode.
 
-To check a configured endpoint, set `AI_CONTRACT_TEST=yes` and the three `AI_*` connection variables in the shell, then run `pnpm test src/adapters/ai/tests/live-contract.test.ts`. This makes three live requests using fixed Interest phrases. The contract tests skip unless explicitly enabled with credentials.
+To check a configured endpoint, put `AI_CONTRACT_TEST=yes`, `AI_BASE_URL`, `AI_API_KEY` and `AI_MODEL` in the ignored `.env`, then run `node --env-file=.env node_modules/vitest/vitest.mjs run src/adapters/ai/tests/live-contract.test.ts`. This makes three live requests using fixed Interest phrases. The contract tests skip unless explicitly enabled with credentials.
 
 Canonicalisation sends the typed Interest phrase and shortlisted Interest names, kinds and counts. Extraction sends the selected Activity name and description, then canonicalises each extracted phrase within the Member's Organisation. These texts may contain identifying information under ADR 0009. Requests time out after five seconds. Failed canonicalisation falls back to text similarity; failed extraction adds no Interests and leaves manual creation available.
 
-Set `AI_EXTRACTION_MODEL` for a separate extraction model, such as the issue's preferred `gpt-5.6-luna` where the configured endpoint supports it. If unset, extraction uses `AI_MODEL`. Both operations require JSON mode. The production adapter lives in `src/adapters/ai/chat-completion.ts`; `MemoryAi` records requests and accepts scripted results or errors for application tests. HTTP adapter tests cover the request, invalid output and timeout behavior with a local stub endpoint.
+Set the Interest extraction model independently of Scout in Platform Admin settings. Both extraction and canonicalisation use this small model. Its default is `gpt-5.6-luna`; choose a supported model for the endpoint. Both operations require JSON mode. The production adapter lives in `src/adapters/ai/chat-completion.ts`; `MemoryAi` records requests and accepts scripted results or errors for application tests. HTTP adapter tests cover the request, invalid output and timeout behavior with a local stub endpoint.
+
+## Upgrading existing Organisations to Platform Admin configuration
+
+Before migration 0021, stop the web and worker and install each existing confidential issuer's secret in `OIDC_CREDENTIALS` under `legacy-<Organisation slug>`. Keep these values in the deployment's secret store and environment. The migration replaces stored secrets with those references and drops the secret column. Public clients keep a null reference. Remove the retired direct secret bootstrap variable, then run complete `pnpm db:setup` and restart both services at the new version. Check readiness on the Organisations page and complete a sign-in before reopening access.
+
+The earliest-created Organisation with an existing Platform Admin becomes the platform owner, with Organisation slug as the tie-breaker. Platform Admin flags outside that owner are removed. Organisation Admin roles and Member identities remain unchanged. Existing series and pending Event proposals retain UTC calendars. Setup also performs the existing inactive-Member lifecycle cleanup. The schema change removes the old code's secret column, so use a forward fix rather than restarting the old version.
 
 ## Migrations
 

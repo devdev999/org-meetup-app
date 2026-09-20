@@ -30,8 +30,8 @@ test("the SMTP adapter delivers a plain email with the configured sender and ref
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("No test server address");
   try {
-    const email = new SmtpEmail({ url: `smtp://127.0.0.1:${address.port}`, from: "meetups@example.test" });
-    const message = { id: "notice-1", to: "ana@example.test", subject: "Meetup notice", text: "Bo joined your Meetup." };
+    const email = new SmtpEmail({ url: `smtp://127.0.0.1:${address.port}` });
+    const message = { from: "meetups@example.test", id: "notice-1", to: "ana@example.test", subject: "Meetup notice", text: "Bo joined your Meetup." };
     await email.sendMessage(message);
     expect(commands).toContain("MAIL FROM:<meetups@example.test>");
     expect(commands).toContain("RCPT TO:<ana@example.test>");
@@ -39,6 +39,8 @@ test("the SMTP adapter delivers a plain email with the configured sender and ref
     expect(messages[0]).toContain("Subject: Meetup notice");
     expect(messages[0]).toContain("Content-Type: text/plain");
     expect(messages[0]).toContain("Bo joined your Meetup.");
+    await email.sendMessage({ ...message, id: "notice-2", from: "changed@example.test" });
+    expect(commands).toContain("MAIL FROM:<changed@example.test>");
     refuseRecipient = true;
     await expect(email.sendMessage(message)).rejects.toThrow();
   } finally {

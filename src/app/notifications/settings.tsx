@@ -1,5 +1,6 @@
 "use client";
 
+import { MeetupTime } from "../meetups/meetup-time";
 import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 import type { NoticeKind, NoticePreference } from "../../application/index";
@@ -61,7 +62,7 @@ export function TelegramConnection({ available, linked }: { available: boolean; 
       {!linked && state.link && (
         <div className="notice" role="status">
           <p><a href={state.link.url} target="_blank" rel="noreferrer">Open Telegram</a> and press Start to link your account.</p>
-          <p>This link expires at {state.link.expiresAt.slice(11, 16)} UTC.</p>
+          <p>This link expires at <MeetupTime value={state.link.expiresAt} />.</p>
           <button type="button" className="secondary" onClick={() => router.refresh()}>Refresh link status</button>
         </div>
       )}

@@ -1,29 +1,38 @@
+import { calendarDayStart, zonedTime } from "../../calendar";
+
 export interface RecurrenceRule {
   frequency: "weekly" | "fortnightly" | "monthly";
   startsAt: Date;
   endsOn?: string | null;
+  timeZone?: string;
 }
 
 export function expandRecurrence(rule: RecurrenceRule, after: Date, through: Date): Date[] {
-  const limit = rule.endsOn ? new Date(Math.min(through.getTime(), Date.parse(`${rule.endsOn}T23:59:59.999Z`))) : through;
+  const timeZone = rule.timeZone ?? "UTC";
+  const end = rule.endsOn ? calendarDayStart(rule.endsOn, timeZone, 1).getTime() : Infinity;
+  const limit = Math.min(through.getTime(), end - 1);
+  const start = zonedTime(rule.startsAt, timeZone).toPlainDateTime();
+  const afterLocal = zonedTime(after, timeZone).toPlainDateTime();
   const dates: Date[] = [];
   if (rule.frequency === "monthly") {
-    const firstMonth = Math.max(rule.startsAt.getUTCFullYear() * 12 + rule.startsAt.getUTCMonth(), after.getUTCFullYear() * 12 + after.getUTCMonth());
-    const lastMonth = limit.getUTCFullYear() * 12 + limit.getUTCMonth();
-    const ordinal = Math.floor((rule.startsAt.getUTCDate() - 1) / 7);
+    const last = zonedTime(new Date(limit), timeZone);
+    const firstMonth = Math.max(start.year * 12 + start.month - 1, afterLocal.year * 12 + afterLocal.month - 1);
+    const lastMonth = last.year * 12 + last.month - 1;
+    const ordinal = Math.floor((start.day - 1) / 7);
     for (let month = firstMonth; month <= lastMonth; month++) {
-      const date = new Date(rule.startsAt);
-      date.setUTCFullYear(Math.floor(month / 12), month % 12, 1);
-      const offset = (rule.startsAt.getUTCDay() - date.getUTCDay() + 7) % 7;
-      date.setUTCDate(1 + offset + ordinal * 7);
-      if (date.getUTCMonth() === month % 12 && date >= rule.startsAt && date > after && date <= limit) dates.push(date);
+      const first = start.with({ year: Math.floor(month / 12), month: month % 12 + 1, day: 1 });
+      const local = first.add({ days: (start.dayOfWeek - first.dayOfWeek + 7) % 7 + ordinal * 7 });
+      const date = new Date(local.toZonedDateTime(timeZone).epochMilliseconds);
+      if (local.month === first.month && date >= rule.startsAt && date > after && date.getTime() <= limit) dates.push(date);
     }
     return dates;
   }
-  const interval = (rule.frequency === "fortnightly" ? 14 : 7) * 24 * 60 * 60 * 1000;
-  const first = Math.max(0, Math.floor((after.getTime() - rule.startsAt.getTime()) / interval) + 1);
-  for (let time = rule.startsAt.getTime() + first * interval; time <= limit.getTime(); time += interval) {
-    dates.push(new Date(time));
+  const interval = rule.frequency === "fortnightly" ? 14 : 7;
+  const first = Math.max(0, Math.floor(start.toPlainDate().until(afterLocal.toPlainDate(), { largestUnit: "days" }).days / interval));
+  for (let index = first; ; index++) {
+    const date = new Date(start.add({ days: index * interval }).toZonedDateTime(timeZone).epochMilliseconds);
+    if (date.getTime() > limit) break;
+    if (date > after) dates.push(date);
   }
   return dates;
 }

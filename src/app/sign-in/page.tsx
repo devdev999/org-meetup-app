@@ -8,6 +8,7 @@ const SIGN_IN_FAILURES: Record<SignInFailure, string> = {
   expired: "That sign-in took too long. Please start again.",
   rejected: "Your Organisation's login did not accept that sign-in. Please start again.",
   "unknown-organisation": "That Organisation is not set up on this platform.",
+  "not-configured": "Your Organisation's sign-in is awaiting setup. Contact your Organisation Admin.",
   "no-email":
     "Your Organisation's login did not tell us your email address, so we cannot find you. Ask your Organisation Admin.",
   "unverified-email":

@@ -1,3 +1,5 @@
+import { calendarDayStart, formatTime, localDate } from "../../calendar";
+import { deploymentTimeZone } from "./deployment-settings";
 import { and, eq, gt, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import { z } from "zod";
 import { requireActiveMember, withActiveMember, type Actor } from "./actor";
@@ -47,11 +49,11 @@ export async function postAvailability(deps: Deps, actor: Actor, input: PostAvai
     if (!parsed.success) invalid("Choose an Activity, a Place setting and a valid window.");
     const data = parsed.data;
     const now = deps.clock.now();
-    const endOfDay = new Date(now);
-    endOfDay.setUTCHours(24, 0, 0, 0);
-    if (data.startsAt.toISOString().slice(0, 10) !== now.toISOString().slice(0, 10)
+    const timeZone = await deploymentTimeZone(db);
+    const endOfDay = calendarDayStart(localDate(now, timeZone), timeZone, 1);
+    if (localDate(data.startsAt, timeZone) !== localDate(now, timeZone)
       || data.startsAt >= data.endsAt || data.endsAt <= now || data.endsAt > endOfDay) {
-      invalid("Choose a window today in UTC that has not ended.");
+      invalid(`Choose a window today in ${timeZone} that has not ended.`);
     }
     const [current] = await db.select().from(members)
       .where(and(eq(members.organisationId, actor.organisationId), eq(members.id, actor.memberId))).for("update");
@@ -146,7 +148,8 @@ export async function availabilityMeetup(deps: Deps, actor: Actor, input: Availa
 
 async function recordOverlaps(db: Queryable, organisationId: string, now: Date): Promise<void> {
   const open = await openAvailabilities(db, organisationId, now);
-  const day = now.toISOString().slice(0, 10);
+  const timeZone = await deploymentTimeZone(db);
+  const day = localDate(now, timeZone);
   const recorded = await db.select({ first: availabilityNoticePairs.firstMemberId, second: availabilityNoticePairs.secondMemberId })
     .from(availabilityNoticePairs).where(and(eq(availabilityNoticePairs.organisationId, organisationId), eq(availabilityNoticePairs.day, day)));
   const seen = new Set(recorded.map((pair) => `${pair.first}:${pair.second}`));
@@ -165,7 +168,7 @@ async function recordOverlaps(db: Queryable, organisationId: string, now: Date):
           organisationId, firstMemberId: firstMemberId!, secondMemberId: secondMemberId!, day,
         }).onConflictDoNothing().returning();
         if (!created) continue;
-        const window = `${suggestion.startsAt.toISOString().slice(0, 16).replace("T", " ")} to ${suggestion.endsAt.toISOString().slice(11, 16)} UTC`;
+        const window = `${formatTime(suggestion.startsAt, timeZone)} to ${formatTime(suggestion.endsAt, timeZone)}`;
         const place = suggestion.place.kind === "physical" ? suggestion.place.siteName : "Online";
         for (const [recipient, other] of [[first.member, second.member], [second.member, first.member]]) {
           const message = `${other!.name.trim().split(/\s+/)[0]} is free for ${suggestion.activity.name}, ${window}, ${place}. Your Availability overlaps. Open Availability in the app to plan a Meetup.`;
@@ -183,11 +186,9 @@ export async function processAvailability(deps: Deps): Promise<void> {
       await db.select({ id: organisations.id }).from(organisations).where(eq(organisations.id, organisationId)).for("update");
       const now = deps.clock.now();
       await expireIneligibleAvailabilities(db, organisationId, now);
-      const dayStart = new Date(now);
-      dayStart.setUTCHours(0, 0, 0, 0);
       await db.update(availabilities).set({ expiredAt: now }).where(and(
         eq(availabilities.organisationId, organisationId), isNull(availabilities.expiredAt),
-        or(lte(availabilities.endsAt, now), lt(availabilities.startsAt, dayStart)),
+        lte(availabilities.endsAt, now),
       ));
       await recordOverlaps(db, organisationId, now);
     });

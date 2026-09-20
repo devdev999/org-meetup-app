@@ -7,7 +7,7 @@ import { createMeetupOrEvent, participationFor } from "./meetup-or-event";
 const h = harness();
 
 async function setup(kind: "meetup" | "event") {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });
   const bo = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", name: "Bo", email: "bo@example.test" });
   const link = await ana.beginTelegramLink();
@@ -117,9 +117,7 @@ test.each(["meetup", "event"] as const)("the %s Attendance callback confirms eve
 
 test("returning to a previous Event Host issues a new prompt and keeps the older button unusable", async () => {
   const { ana, bo, occurrence } = await setup("event");
-  const adminClaims = { sub: "admin", email: "admin@example.test", name: "Admin" };
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminClaims });
-  const admin = await (await signInAndAcknowledgeAs(h, "ministry-a", adminClaims)).organisationAdmin();
+  const admin = await h.organisationAdmin();
   h.clock.set(new Date("2026-09-18T11:00:00Z"));
   await h.app.processAttendance();
   const old = (await ana.inbox()).find((notice) => notice.kind === "attendance-prompt")!;
@@ -161,7 +159,7 @@ test("Attendance confirmations and amendments notify Participants without exposi
 
 test("an unticked former Host receives no new private Event details in Attendance notices", async () => {
   const anaClaims = { sub: "ana", name: "Ana", email: "ana@example.test" };
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: anaClaims });
+  await h.setupOrganisation({ ...ministryA, organisationAdmin: anaClaims });
   const ana = await signInAndAcknowledgeAs(h, "ministry-a", anaClaims);
   const bo = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "bo", name: "Bo", email: "bo@example.test" });
   const cy = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "cy", name: "Cy", email: "cy@example.test" });

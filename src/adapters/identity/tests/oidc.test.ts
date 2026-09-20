@@ -22,7 +22,7 @@ afterAll(async () => {
 const settingsFor = (issuer: StubIssuer): OidcSettings => ({
   issuer: issuer.issuer,
   clientId: issuer.clientId,
-  clientSecret: issuer.clientSecret,
+  credentialRef: "stub",
 });
 
 const request: AuthorizationRequest = {
@@ -32,15 +32,15 @@ const request: AuthorizationRequest = {
   codeVerifier: randomBytes(32).toString("base64url"),
 };
 
-const identity = () => new OidcIdentity({ allowInsecureRequests: true });
+const identity = () => new OidcIdentity({ allowInsecureRequests: true, credentials: { stub: stub.clientSecret } });
 
 const ana = { sub: "ana-1", email: "ana@ministry-a.example" };
 
 /** Runs the whole flow against an issuer and returns the claims the adapter produced. */
-async function signInThrough(issuer: StubIssuer, adapter = identity()) {
-  const authorizationUrl = await adapter.authorizationUrl(settingsFor(issuer), request);
+async function signInThrough(issuer: StubIssuer, adapter = identity(), settings = settingsFor(issuer)) {
+  const authorizationUrl = await adapter.authorizationUrl(settings, request);
   const callbackUrl = issuer.answer(authorizationUrl, { idToken: ana });
-  return adapter.claimsFromCallback(settingsFor(issuer), {
+  return adapter.claimsFromCallback(settings, {
     callbackUrl,
     redirectUri: request.redirectUri,
     expectedState: request.state,
@@ -64,6 +64,22 @@ test("sends the browser to the issuer's authorization endpoint with PKCE, state 
     code_challenge_method: "S256",
   });
   expect(url.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]{43}$/);
+});
+
+test("a missing credential prevents sign-in until a restarted adapter receives the installed secret", async () => {
+  const settings = settingsFor(stub);
+  const missing = new OidcIdentity({ allowInsecureRequests: true });
+  expect(missing.isConfigured(settings)).toBe(false);
+  await expect(missing.authorizationUrl(settings, request)).rejects.toMatchObject({ name: "IdentityError" });
+  const restarted = new OidcIdentity({ allowInsecureRequests: true, credentials: { stub: stub.clientSecret } });
+  expect(restarted.isConfigured(settings)).toBe(true);
+  expect(await signInThrough(stub, restarted)).toMatchObject(ana);
+});
+
+test("a changed credential reference does not reuse the previous client's authentication", async () => {
+  const adapter = new OidcIdentity({ allowInsecureRequests: true, credentials: { stub: stub.clientSecret, replacement: "wrong-secret" } });
+  expect(await signInThrough(stub, adapter)).toMatchObject(ana);
+  await expect(signInThrough(stub, adapter, { ...settingsFor(stub), credentialRef: "replacement" })).rejects.toMatchObject({ name: "IdentityError" });
 });
 
 test("turns the issuer's callback into the ID token's claims, filled in from userinfo", async () => {
@@ -137,7 +153,7 @@ test("refuses a code exchange with the wrong PKCE verifier", async () => {
 });
 
 test("an issuer that cannot be discovered is reported, not swallowed", async () => {
-  const unreachable: OidcSettings = { issuer: "http://127.0.0.1:1", clientId: "x", clientSecret: null };
+  const unreachable: OidcSettings = { issuer: "http://127.0.0.1:1", clientId: "x", credentialRef: null };
 
   await expect(identity().authorizationUrl(unreachable, request)).rejects.toMatchObject({ name: "IdentityError" });
 });

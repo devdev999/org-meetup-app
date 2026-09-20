@@ -17,7 +17,7 @@ async function member(name: string, site = "Harbour House", organisation = "mini
 }
 
 async function setup() {
-  await h.app.bootstrap({ ...ministryA, organisation: { ...ministryA.organisation, sites: ["Harbour House", "Annex"] } });
+  await h.setupOrganisation({ ...ministryA, organisation: { ...ministryA.organisation, sites: ["Harbour House", "Annex"] } });
   return member("Ana");
 }
 
@@ -154,7 +154,7 @@ test("cancelled Meetups stay visible to former waitlisted Members after a Site c
   const cy = await member("Cy");
   const di = await member("Di");
   const outsider = await member("Eli", "Annex");
-  await h.app.bootstrap({ ...ministryB, organisation: { ...ministryB.organisation, sites: ["Harbour House"] } });
+  await h.setupOrganisation({ ...ministryB, organisation: { ...ministryB.organisation, sites: ["Harbour House"] } });
   const other = await member("Cy", "Harbour House", "ministry-b");
   const meetup = await host.createMeetup(await inputFor(host));
   await bo.joinMeetup(meetup.id);
@@ -202,7 +202,7 @@ test("only Members in scope see open Meetups and only the Host sees invite-only 
 
 test("Meetup queries, commands, choices and inbox stay inside the actor's Organisation", async () => {
   const host = await setup();
-  await h.app.bootstrap({ ...ministryB, organisation: { ...ministryB.organisation, sites: ["Harbour House"] } });
+  await h.setupOrganisation({ ...ministryB, organisation: { ...ministryB.organisation, sites: ["Harbour House"] } });
   const other = await member("Bo", "Harbour House", "ministry-b");
   const input = await inputFor(host);
   const foreignInput = await inputFor(other);
@@ -306,7 +306,7 @@ test("Hosts cannot demote Participants through a capacity edit or hand over to t
 
 test("Meetup commands and queries require acknowledgement and refuse a retained Departed actor", async () => {
   const adminPerson = { email: "admin@example.test", name: "Organisation Admin" };
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson, organisation: { ...ministryA.organisation, sites: ["Harbour House"] } });
+  await h.setupOrganisation({ ...ministryA, organisationAdmin: adminPerson, organisation: { ...ministryA.organisation, sites: ["Harbour House"] } });
   const adminMember = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "admin", ...adminPerson });
   await adminMember.updateProfile({ department: null, site: "Harbour House" });
   const input = await inputFor(adminMember);
