@@ -103,6 +103,7 @@ test("admins reject with a note, create an Event during extraction failure, invi
     await expect(page.getByText("You joined this Event.", { exact: true })).toBeVisible();
     await admin.goto("/admin/events");
     const published = admin.getByRole("article").filter({ has: admin.getByRole("heading", { name: "walk", exact: true }) });
+    await published.getByRole("button", { name: "Reassign Event Host", exact: true }).click();
     await published.getByRole("combobox", { name: "New Event Host", exact: true }).selectOption({ label: "Dan Proposer" });
     await published.getByRole("button", { name: "Reassign Event Host", exact: true }).click();
     await expect(published.getByText("Event Host reassigned.", { exact: true })).toBeVisible();

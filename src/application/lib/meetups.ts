@@ -8,7 +8,7 @@ import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
 import { interestChoiceSchema, type Interest, type InterestChoice } from "./interests";
 import { relevantInterests, saveRelevantInterests } from "./meetup-interests";
-import { recordNotices, supersedeDeliveries } from "./notifications";
+import { gatheringNoticeText, recordNotices, supersedeDeliveries } from "./notifications";
 import { activities, departments, eventProposals, gatheringMembers, gatheringRsvps, gatherings, invites, members, notices, organisations, recurrenceInterests, recurrenceMembers, recurrences, sites } from "./schema";
 import { availabilityOverlapSchema, findAvailabilityOverlap, type AvailabilityOverlap } from "./availability";
 import { readRecurrences, recurrenceSchema, saveRsvp, type Recurrence, type RecurrenceInput } from "./recurrence-records";
@@ -239,6 +239,7 @@ export async function publishGathering(db: Queryable, actor: Actor, row: typeof 
     const interests = await relevantInterests(db, actor.organisationId, row.id);
     if (interests.length) await db.insert(recurrenceInterests).values(interests.map(({ interestId }) => ({ organisationId: actor.organisationId, recurrenceId: series.id, interestId })));
   }
+  if (!invitedMemberIds.length) return;
   const meetup = (await readMeetup(db, actor, row.id, host.siteId, now))!;
   for (const memberId of invitedMemberIds) await saveInvite(db, actor, meetup, memberId, host.name, now, { fromSuggestion: true });
 }
@@ -375,11 +376,9 @@ export async function noticeRecipients(db: Queryable, organisationId: string, me
 
 export async function notify(db: Queryable, organisationId: string, meetup: GatheringSummary, recipients: string[], kind: Notice["kind"], message: string, now: Date) {
   const place = meetup.place.kind === "physical" ? `${meetup.place.spot}, ${meetup.place.siteName}` : meetup.place.url;
-  const time = `${meetup.startsAt.toISOString().slice(0, 16).replace("T", " ")} UTC`;
   const externalPlace = meetup.place.kind === "physical" ? place : "Online";
-  const line = (at: string) => `${message} ${meetup.activity.name}, ${time}, ${at}.`;
   await recordNotices(db, organisationId, recipients, {
-    gatheringId: meetup.id, kind, message: line(place), externalMessage: line(externalPlace),
+    gatheringId: meetup.id, kind, ...gatheringNoticeText({ message, activity: meetup.activity.name, startsAt: meetup.startsAt, place, externalPlace }),
   }, now);
 }
 
@@ -545,7 +544,7 @@ export async function answerInvite(deps: Deps, actor: Actor, id: string, answer:
     }
     if (answer === "accept" && meetup.recurrence) await saveRsvp(db, actor, meetup.id, "going");
     await db.update(invites).set({ state }).where(and(eq(invites.organisationId, actor.organisationId), eq(invites.id, id)));
-    let message = `${firstName(current.name)} ${state} your Invite.`;
+    let message = `${firstName(current.name)} ${state} your Invite${meetup.kind === "event" ? " to this Event" : ""}.`;
     if (answer === "decline" && membership === "waitlisted") message += " They remain on the waitlist.";
     if (answer === "decline" && membership === "participant") message += " They remain a Participant.";
     await notify(db, actor.organisationId, meetup, [meetup.host.memberId],
@@ -592,7 +591,6 @@ export async function editMeetup(deps: Deps, actor: Actor, id: string, input: Ed
     if (data.relevantInterests) await saveRelevantInterests(db, actor.organisationId, id, data.relevantInterests, now);
     const updated = (await readMeetup(db, actor, id, current.siteId, now))!;
     if (changed) {
-      await supersedeDeliveries(db, actor.organisationId, id, "invite-received", now);
       await supersedeDeliveries(db, actor.organisationId, id, "meetup-edited", now);
       await notify(db, actor.organisationId, updated,
         (await noticeRecipients(db, actor.organisationId, meetup.id)).filter((memberId) => memberId !== actor.memberId),

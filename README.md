@@ -88,7 +88,7 @@ Invitees accept or decline in the app or through Telegram buttons. Accepting tak
 
 Pending invitees receive time, Place, handover and cancellation notices. Cancellation expires pending Invites immediately. The worker expires unanswered Invites at the current start time, checking every minute, and answers are refused from that time even before the worker runs. An Invite does not expire at an old start time after the Host reschedules. Accepted and declined Invites retain their states.
 
-Time, duration and Place edits supersede pending external Invite and edit deliveries. The latest edit notice carries the current details and keeps Telegram Accept and Decline buttons for a pending Invite. Earlier inbox notices remain as history.
+Time, duration and Place edits supersede older pending edit deliveries. Invite retries keep their own delivery preferences and use the current Activity, time, Place and Host. Both Invite and edit notices keep Telegram Accept and Decline buttons for a pending Invite. Earlier inbox notices remain as history.
 
 ### Delivery
 

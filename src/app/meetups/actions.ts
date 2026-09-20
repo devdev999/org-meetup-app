@@ -58,17 +58,18 @@ function refreshMeetups(meetupId: string, kind: "meetups" | "events" = "meetups"
 export async function saveMeetup(meetupId: string | null, form: FormData, mode: "meetup" | "event" | "event-direct" = "meetup"): Promise<MeetupActionState> {
   const { member } = await requireMemberPastWelcome();
   let savedId: string;
-  const eventInput = () => ({ ...meetupInput(form), capacity: formText(form.get("capacity")) ? Number(form.get("capacity")) : null });
   try {
+    const fields = meetupInput(form);
+    const eventFields = { ...fields, capacity: formText(form.get("capacity")) ? fields.capacity : null };
     if (meetupId) {
-      if (mode === "meetup") await member.editMeetup(meetupId, meetupInput(form));
-      else await member.editEvent(meetupId, eventInput());
+      if (mode === "meetup") await member.editMeetup(meetupId, fields);
+      else await member.editEvent(meetupId, eventFields);
       savedId = meetupId;
     } else {
       const frequency = form.get("frequency");
       if (frequency !== null && !["once", "weekly", "fortnightly", "monthly"].includes(String(frequency))) return { error: "Choose a valid repeat schedule." };
       const input: CreateMeetupInput = {
-        ...meetupInput(form),
+        ...fields,
         activityId: formText(form.get("activityId")) ?? "",
         audience: audienceInput(form),
         recurrence: frequency === "weekly" || frequency === "fortnightly" || frequency === "monthly"
@@ -80,8 +81,8 @@ export async function saveMeetup(meetupId: string | null, form: FormData, mode: 
         } : undefined,
       };
       const meetup = mode === "meetup" ? await member.createMeetup(input)
-        : mode === "event-direct" ? await (await member.organisationAdmin()).createEvent({ ...input, ...eventInput() })
-          : await member.proposeEvent({ ...input, ...eventInput() });
+        : mode === "event-direct" ? await (await member.organisationAdmin()).createEvent({ ...input, capacity: eventFields.capacity })
+          : await member.proposeEvent({ ...input, capacity: eventFields.capacity });
       savedId = meetup.id;
     }
   } catch (error) {

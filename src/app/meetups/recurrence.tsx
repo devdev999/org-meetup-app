@@ -8,7 +8,7 @@ export function RecurrenceDetails({ series }: { series: Recurrence }) {
   const schedule = series.frequency === "monthly" ? `Monthly on the ${ordinal} ${weekday}` : `${series.frequency === "weekly" ? "Weekly" : "Fortnightly"} on ${weekday}`;
   return <>
     <p>{schedule} at {date.toISOString().slice(11, 16)} UTC{series.endsOn ? `, through ${series.endsOn}` : ""}.</p>
-    <p>Series Host: {series.host.name}. {series.capacity === null ? `${series.standingCount} standing Participants. No capacity limit.` : `${series.standingCount} of ${series.capacity} standing places filled.`}</p>
+    <p>Series Host: {series.host.name}. {series.capacity === null ? `${series.standingCount} standing Participant${series.standingCount === 1 ? "" : "s"}. No capacity limit.` : `${series.standingCount} of ${series.capacity} standing places filled.`}</p>
     {series.isStanding && <p>You are a standing Participant.</p>}
     {series.stopped ? <p>This series has stopped.</p> : series.ended && <p>This series has ended.</p>}
     {series.canStop ? <>

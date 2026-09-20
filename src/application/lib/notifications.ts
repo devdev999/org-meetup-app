@@ -1,14 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, lte, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
+import { alias } from "drizzle-orm/pg-core";
 import { requireActiveMember, VISIBLE_MEMBER_STATUSES, withActiveMember, type Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
 import { NOTICE_KINDS, type NoticeKind } from "./notice-kinds";
-import { gatheringRsvps, gatherings, invites, members, noticeDeliveries, noticePreferences, notices, recurrenceMembers, telegramLinks } from "./schema";
+import { activities, gatheringRsvps, gatherings, invites, members, noticeDeliveries, noticePreferences, notices, recurrenceMembers, sites, telegramLinks } from "./schema";
 
 export interface NoticePreference { kind: NoticeKind; telegram: boolean; email: boolean }
+
+export function gatheringNoticeText(input: { message: string; activity: string; startsAt: Date; place: string; externalPlace: string }) {
+  const time = `${input.startsAt.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  const line = (place: string) => `${input.message} ${input.activity}, ${time}, ${place}.`;
+  return { message: line(input.place), externalMessage: line(input.externalPlace) };
+}
 
 const URGENT_KINDS: NoticeKind[] = ["meetup-joined", "meetup-promoted", "meetup-cancelled", "meetup-edited", "invite-received", "invite-accepted", "availability-overlap", "rsvp-prompt"];
 
@@ -107,6 +114,8 @@ const digestNoticeJoin = and(eq(notices.organisationId, noticeDeliveries.organis
 
 interface DeliveryJob { where: SQL | undefined; send: () => Promise<void> }
 
+const hosts = alias(members, "notice_hosts");
+
 async function claimLease(db: Queryable, where: SQL | undefined, now: Date) {
   const claimToken = randomUUID();
   await db.update(noticeDeliveries).set({ claimToken, availableAt: new Date(now.getTime() + LEASE_MS) }).where(where);
@@ -155,9 +164,12 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
     const where = deliveryWhere(candidate);
     const [delivery] = await db.select().from(noticeDeliveries).where(and(where, duePredicate("immediate", now))).for("update", { skipLocked: true });
     if (!delivery) return null;
-    const [row] = await db.select({ notice: notices, member: members, meetup: gatherings }).from(notices)
+    const [row] = await db.select({ notice: notices, member: members, meetup: gatherings, activityName: activities.name, siteName: sites.name, hostName: hosts.name }).from(notices)
       .innerJoin(members, and(eq(members.organisationId, notices.organisationId), eq(members.id, notices.memberId)))
       .leftJoin(gatherings, and(eq(gatherings.organisationId, notices.organisationId), eq(gatherings.id, notices.gatheringId)))
+      .leftJoin(activities, and(eq(activities.organisationId, gatherings.organisationId), eq(activities.id, gatherings.activityId)))
+      .leftJoin(sites, and(eq(sites.organisationId, gatherings.organisationId), eq(sites.id, gatherings.placeSiteId)))
+      .leftJoin(hosts, and(eq(hosts.organisationId, gatherings.organisationId), eq(hosts.id, gatherings.hostMemberId)))
       .where(and(eq(notices.organisationId, delivery.organisationId), eq(notices.id, delivery.noticeId)));
     const [preference] = row ? await db.select().from(noticePreferences).where(and(
       eq(noticePreferences.organisationId, delivery.organisationId), eq(noticePreferences.memberId, row.member.id), eq(noticePreferences.kind, row.notice.kind),
@@ -174,14 +186,21 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
       .innerJoin(recurrenceMembers, and(eq(recurrenceMembers.organisationId, gatheringRsvps.organisationId), eq(recurrenceMembers.memberId, gatheringRsvps.memberId), eq(recurrenceMembers.recurrenceId, row.meetup.recurrenceId!)))
       .where(and(eq(gatheringRsvps.organisationId, row.notice.organisationId), eq(gatheringRsvps.gatheringId, row.meetup.id), eq(gatheringRsvps.memberId, row.member.id), eq(gatheringRsvps.promptedAt, row.notice.createdAt))) : [];
     const owned = await claimLease(db, where, now);
+    const content = row?.notice.kind === "invite-received" && row.meetup && row.activityName && row.hostName
+      ? gatheringNoticeText({
+        message: `${row.hostName.split(/\s+/)[0]} invited you to ${row.meetup.kind === "event" ? "an Event" : "a Meetup"}.`,
+        activity: row.activityName, startsAt: row.meetup.startsAt,
+        place: row.meetup.placeKind === "physical" ? `${row.meetup.placeSpot}, ${row.siteName}` : row.meetup.placeUrl!,
+        externalPlace: row.meetup.placeKind === "physical" ? `${row.meetup.placeSpot}, ${row.siteName}` : "Online",
+      }) : row?.notice;
     const send = async () => {
       if (!row || !VISIBLE_MEMBER_STATUSES.includes(row.member.status) || !channelEnabled(preference, delivery.channel)) return;
       if (row.notice.kind === "rsvp-prompt" && (!canAnswer || !rsvp)) return;
       if (delivery.channel === "email") {
-        await deps.email.sendMessage({ id: row.notice.id, to: row.member.email, subject: row.notice.kind === "availability-overlap" ? "Availability overlap" : row.meetup?.kind === "event" ? "Event notice" : "Meetup notice", text: row.notice.message });
+        await deps.email.sendMessage({ id: row.notice.id, to: row.member.email, subject: row.notice.kind === "availability-overlap" ? "Availability overlap" : row.meetup?.kind === "event" ? "Event notice" : "Meetup notice", text: content!.message });
       } else if (link) {
         await deps.telegram.sendMessage({
-          chatId: link.chatId, text: row.notice.externalMessage,
+          chatId: link.chatId, text: content!.externalMessage,
           ...(canAnswer && row.notice.kind === "rsvp-prompt" ? row.meetup!.kind === "event" ? { rsvpEventId: row.meetup!.id } : { rsvpMeetupId: row.meetup!.id }
             : canAnswer && invite ? { inviteId: invite.id }
             : canAnswer && row.meetup?.audienceKind === "open" && !row.notice.kind.startsWith("invite-") ? row.meetup.kind === "event" ? { joinEventId: row.meetup.id } : { joinMeetupId: row.meetup.id } : {}),

@@ -46,16 +46,18 @@ test.each(["meetup", "event"] as const)("%s Host invites a Member privately and 
   expect(h.email.outbox[0]).toMatchObject({ subject: kind === "event" ? "Event notice" : "Meetup notice", text: expect.stringContaining(kind === "event" ? "Event" : "Meetup") });
 });
 
-test.each(["meetup", "event"] as const)("%s Place edits replace failed Invite deliveries while keeping the pending Invite answerable", async (kind) => {
+test.each(["meetup", "event"] as const)("%s Invite retries retain their preference and current Place after edits", async (kind) => {
   const host = participationFor(await setup(), kind);
   const bo = participationFor(await member("Bo"), kind);
   const meetup = await createMeetup(host, true, kind);
   const link = await bo.beginTelegramLink();
   await h.app.handleTelegram({ kind: "link", chatId: "102", code: new URL(link.url).searchParams.get("start")! });
   h.telegram.reset();
+  await bo.setNoticePreference({ kind: "meetup-edited", telegram: false, email: false });
   h.telegram.failure = new Error("Offline");
   h.email.failure = new Error("Offline");
   const invite = await host.invite(meetup.id, (await bo.profile()).memberId);
+  const originalNotice = (await bo.inbox())[0];
   const edit = { startsAt: meetup.startsAt, durationMinutes: meetup.durationMinutes, capacity: 2 };
   await host.edit(meetup.id, { ...edit, place: { kind: "virtual", url: "https://meet.example/intermediate-room" } });
   await host.edit(meetup.id, { ...edit, place: { kind: "virtual", url: "https://meet.example/new-room" } });
@@ -64,8 +66,27 @@ test.each(["meetup", "event"] as const)("%s Place edits replace failed Invite de
   h.clock.set(new Date("2026-09-18T09:02:00Z"));
   await h.app.deliverNotices();
   expect(h.email.outbox).toEqual([expect.objectContaining({ to: "bo@example.test", text: expect.stringContaining("https://meet.example/new-room") })]);
-  expect(h.telegram.outbox).toEqual([expect.objectContaining({ chatId: "102", inviteId: invite.id, text: expect.stringContaining("The Host changed the time or Place") })]);
+  expect(h.telegram.outbox).toEqual([expect.objectContaining({ chatId: "102", inviteId: invite.id, text: expect.stringContaining("invited you") })]);
+  expect(await bo.inbox()).toContainEqual(originalNotice);
   expect(await bo.answerInvite(invite.id, "accept")).toMatchObject({ membership: "participant" });
+});
+
+test("Event Invite answers name the Event in Telegram notices", async () => {
+  const host = participationFor(await setup(), "event");
+  const bo = await member("Bo");
+  const cy = await member("Cy");
+  const link = await host.beginTelegramLink();
+  await h.app.handleTelegram({ kind: "link", chatId: "101", code: new URL(link.url).searchParams.get("start")! });
+  const event = await createMeetup(host, true, "event");
+  const boInvite = await host.invite(event.id, (await bo.profile()).memberId);
+  const cyInvite = await host.invite(event.id, (await cy.profile()).memberId);
+  h.telegram.reset();
+  await bo.answerInvite(boInvite.id, "accept");
+  await cy.answerInvite(cyInvite.id, "decline");
+  expect(h.telegram.outbox.map((notice) => notice.text)).toEqual([
+    expect.stringContaining("Bo accepted your Invite to this Event."),
+    expect.stringContaining("Cy declined your Invite to this Event."),
+  ]);
 });
 
 test("only the invitee can answer, accepting seats them and declining records the answer once", async () => {
