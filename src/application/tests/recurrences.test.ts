@@ -452,3 +452,38 @@ test("rescheduling an occurrence replaces its pending prompt and uses the new fo
   await h.app.deliverNotices();
   expect(h.email.outbox.filter((notice) => notice.text.includes("2026-01-20 10:00 UTC"))).toHaveLength(2);
 });
+
+test("changing only an occurrence's Place replaces failed RSVP prompts without clearing answers", async () => {
+  const { ana, input } = await setup();
+  const bo = await member("bo");
+  const link = await bo.beginTelegramLink();
+  await h.app.handleTelegram({ kind: "link", chatId: "102", code: new URL(link.url).searchParams.get("start")! });
+  const first = await ana.createMeetup(input);
+  await bo.joinSeries(first.recurrence!.id);
+  await bo.answerRsvp(first.id, "going");
+  h.email.reset();
+  h.telegram.reset();
+  h.clock.set(new Date("2026-01-06T10:00:00Z"));
+  await h.app.processRecurrences();
+  h.email.failure = new Error("Email unavailable");
+  h.telegram.failure = new Error("Telegram unavailable");
+  await h.app.deliverNotices();
+  h.email.reset();
+  h.telegram.reset();
+  h.clock.set(new Date("2026-01-06T10:00:30Z"));
+  await ana.editMeetup(first.id, { ...input, place: { ...input.place, spot: "Side entrance" } });
+  expect(h.email.outbox).toEqual([expect.objectContaining({ to: "bo@example.test", text: "The Host changed the time or Place of this Meetup. walk, 2026-01-08 10:00 UTC, Side entrance, Harbour House." })]);
+  h.email.reset();
+  h.telegram.reset();
+  h.clock.set(new Date("2026-01-06T10:01:00Z"));
+  await h.app.processRecurrences();
+  await h.app.deliverNotices();
+  const prompt = "Are you going to this Meetup? walk, 2026-01-08 10:00 UTC, Side entrance, Harbour House.";
+  expect(h.email.outbox.map((notice) => notice.text)).toEqual([prompt, prompt]);
+  expect(h.telegram.outbox).toEqual([{ chatId: "102", text: prompt, rsvpMeetupId: first.id }]);
+  expect((await bo.viewMeetup(first.id))?.rsvp).toBe("going");
+  await h.app.processRecurrences();
+  await h.app.deliverNotices();
+  expect(h.email.outbox).toHaveLength(2);
+  expect(h.telegram.outbox).toHaveLength(1);
+});

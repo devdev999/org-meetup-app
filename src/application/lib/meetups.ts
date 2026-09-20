@@ -522,12 +522,13 @@ export async function editMeetup(deps: Deps, actor: Actor, id: string, input: Ed
     if (data.place.kind === "physical" && (meetup.place.kind !== "physical" || data.place.siteId !== meetup.place.siteId)) {
       await validSite(db, actor.organisationId, data.place.siteId);
     }
-    const changed = data.startsAt.getTime() !== meetup.startsAt.getTime() || data.durationMinutes !== meetup.durationMinutes
+    const timeOrPlaceChanged = data.startsAt.getTime() !== meetup.startsAt.getTime()
       || JSON.stringify(placeColumns(data.place)) !== JSON.stringify(placeColumns(meetup.place));
+    const changed = timeOrPlaceChanged || data.durationMinutes !== meetup.durationMinutes;
     await db.update(gatherings).set({
       startsAt: data.startsAt, durationMinutes: data.durationMinutes, ...placeColumns(data.place), capacity: data.capacity, description: data.description,
     }).where(meetupWhere(actor.organisationId, id));
-    if (meetup.recurrence && data.startsAt.getTime() !== meetup.startsAt.getTime()) {
+    if (meetup.recurrence && timeOrPlaceChanged) {
       await supersedeDeliveries(db, actor.organisationId, id, "rsvp-prompt", now);
       await db.update(gatheringRsvps).set({ promptedAt: null }).where(and(eq(gatheringRsvps.organisationId, actor.organisationId), eq(gatheringRsvps.gatheringId, id)));
     }
