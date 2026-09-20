@@ -47,8 +47,8 @@ export default async function OrganisationsPage() {
         </fieldset>
         <fieldset>
           <legend>First Organisation Admin</legend>
-          <label>Admin name<input name="adminName" required maxLength={120} /></label>
-          <label>Admin email<input name="adminEmail" type="email" required /></label>
+          <label>Organisation Admin name<input name="adminName" required maxLength={120} /></label>
+          <label>Organisation Admin email<input name="adminEmail" type="email" required /></label>
         </fieldset>
       </ActionForm>
     </section>

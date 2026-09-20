@@ -21,8 +21,8 @@ test("Platform Admin onboards Organisations, groups a Ministry and changes live 
     await page.getByLabel("OIDC issuer", { exact: true }).fill(`${baseURL}/dev-idp`);
     await page.getByLabel("OIDC client ID", { exact: true }).fill("browser-client");
     await page.getByLabel("Credential reference, optional", { exact: true }).fill(reference!);
-    await page.getByLabel("Admin name", { exact: true }).fill("New Agency Admin");
-    await page.getByLabel("Admin email", { exact: true }).fill(`admin@${slug}.example`);
+    await page.getByLabel("Organisation Admin name", { exact: true }).fill("New Agency Admin");
+    await page.getByLabel("Organisation Admin email", { exact: true }).fill(`admin@${slug}.example`);
     await page.getByRole("button", { name: "Create Organisation", exact: true }).click();
     const card = page.getByRole("listitem").filter({ has: page.getByRole("heading", { name, exact: true }) });
     await expect(card.getByText(reference ? "Sign-in awaiting OIDC credential" : "Ready for sign-in", { exact: true })).toBeVisible();

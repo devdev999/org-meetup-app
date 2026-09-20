@@ -1,5 +1,5 @@
 import { localDate } from "../../calendar";
-import { and, eq, exists, gt, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, eq, exists, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
