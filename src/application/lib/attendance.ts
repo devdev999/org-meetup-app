@@ -66,17 +66,17 @@ export async function attendance(deps: Deps, actor: Actor, id: string): Promise<
       .where(and(eq(gatherings.organisationId, actor.organisationId), eq(gatherings.id, id)));
     if (!row || row.gathering.status !== "scheduled" && row.gathering.status !== "completed") return undefined;
     const gathering = row.gathering;
+    const isHost = gathering.hostMemberId === actor.memberId;
     const people = await db.select({ memberId: members.id, name: members.name, status: gatheringMembers.status, answer: gatheringRsvps.answer }).from(gatheringMembers)
       .innerJoin(members, and(eq(members.organisationId, gatheringMembers.organisationId), eq(members.id, gatheringMembers.memberId)))
       .leftJoin(gatheringRsvps, and(eq(gatheringRsvps.organisationId, gatheringMembers.organisationId), eq(gatheringRsvps.gatheringId, gatheringMembers.gatheringId), eq(gatheringRsvps.memberId, gatheringMembers.memberId)))
-      .where(and(eq(gatheringMembers.organisationId, actor.organisationId), eq(gatheringMembers.gatheringId, id)));
+      .where(and(eq(gatheringMembers.organisationId, actor.organisationId), eq(gatheringMembers.gatheringId, id), isHost ? undefined : eq(gatheringMembers.memberId, actor.memberId)));
     const recorded = await db.select({ memberId: members.id, name: members.name, attended: attendanceMembers.attended }).from(attendanceMembers)
       .innerJoin(members, and(eq(members.organisationId, attendanceMembers.organisationId), eq(members.id, attendanceMembers.memberId)))
-      .where(and(eq(attendanceMembers.organisationId, actor.organisationId), eq(attendanceMembers.gatheringId, id)));
+      .where(and(eq(attendanceMembers.organisationId, actor.organisationId), eq(attendanceMembers.gatheringId, id), isHost ? undefined : eq(attendanceMembers.memberId, actor.memberId)));
     const present = recorded.filter((person) => person.attended);
     const own = people.find((person) => person.memberId === actor.memberId);
     const came = present.some((person) => person.memberId === actor.memberId);
-    const isHost = gathering.hostMemberId === actor.memberId;
     const [rsvp] = own || came || isHost ? [] : await db.select({ memberId: gatheringRsvps.memberId }).from(gatheringRsvps)
       .where(and(eq(gatheringRsvps.organisationId, actor.organisationId), eq(gatheringRsvps.gatheringId, id), eq(gatheringRsvps.memberId, actor.memberId)));
     if (!own && !came && !isHost && !rsvp) return undefined;
@@ -85,8 +85,8 @@ export async function attendance(deps: Deps, actor: Actor, id: string): Promise<
     const endsAt = new Date(gathering.startsAt.getTime() + gathering.durationMinutes * 60_000);
     const closesAt = new Date(endsAt.getTime() + 7 * 86_400_000);
     const going = own?.status === "participant" && (!gathering.recurrenceId || own.answer === "going");
-    const checklist = new Map([...people.filter((person) => person.status === "participant"), ...recorded,
-      { memberId: gathering.hostMemberId, name: row.hostName }].map((person) => [person.memberId, person]));
+    const checklist = isHost ? new Map([...people.filter((person) => person.status === "participant"), ...recorded,
+      { memberId: gathering.hostMemberId, name: row.hostName }].map((person) => [person.memberId, person])) : null;
     const [rating] = await db.select({ memberId: occurrenceRatings.memberId }).from(occurrenceRatings)
       .where(and(eq(occurrenceRatings.organisationId, actor.organisationId), eq(occurrenceRatings.gatheringId, id), eq(occurrenceRatings.memberId, actor.memberId)));
     return {
@@ -95,7 +95,7 @@ export async function attendance(deps: Deps, actor: Actor, id: string): Promise<
       canRate: own?.status === "participant" && deps.clock.now() >= endsAt && !rating, hasRated: !!rating,
       canConfirm: isHost && deps.clock.now() >= endsAt && deps.clock.now() < closesAt,
       outcome: !record?.confirmedAt ? "unknown" : came ? "attended" : going ? "no-show" : "not-recorded",
-      participants: isHost ? [...checklist.values()].map(({ memberId, name }) => ({ memberId, name, attended: present.some((person) => person.memberId === memberId) }))
+      participants: checklist ? [...checklist.values()].map(({ memberId, name }) => ({ memberId, name, attended: present.some((person) => person.memberId === memberId) }))
         .sort((a, b) => a.name.localeCompare(b.name) || a.memberId.localeCompare(b.memberId)) : null,
     };
   });
@@ -162,22 +162,28 @@ export async function confirmAttendancePrompt(deps: Deps, actor: Actor, noticeId
   });
 }
 
+function attendancePromptDue(now: Date) {
+  const end = sql`${gatherings.startsAt} + ${gatherings.durationMinutes} * interval '1 minute'`;
+  return and(eq(members.status, "active"), inArray(gatherings.status, ["scheduled", "completed"]),
+    sql`${end} <= ${now.toISOString()}::timestamptz`, sql`${end} + interval '7 days' > ${now.toISOString()}::timestamptz`,
+    isNull(attendanceRecords.confirmedAt), or(isNull(attendanceRecords.promptedHostMemberId), ne(attendanceRecords.promptedHostMemberId, gatherings.hostMemberId)));
+}
+
 export async function processAttendance(deps: Deps): Promise<void> {
   const pending = await deps.db.selectDistinct({ organisationId: gatherings.organisationId }).from(gatherings)
-    .where(inArray(gatherings.status, ["scheduled", "completed"]));
+    .innerJoin(members, and(eq(members.organisationId, gatherings.organisationId), eq(members.id, gatherings.hostMemberId)))
+    .leftJoin(attendanceRecords, and(eq(attendanceRecords.organisationId, gatherings.organisationId), eq(attendanceRecords.gatheringId, gatherings.id)))
+    .where(attendancePromptDue(deps.clock.now()));
   for (const { organisationId } of pending) {
     await deps.db.transaction(async (db) => {
       await db.select({ id: organisations.id }).from(organisations).where(eq(organisations.id, organisationId)).for("update");
       const now = deps.clock.now();
-      const end = sql`${gatherings.startsAt} + ${gatherings.durationMinutes} * interval '1 minute'`;
       const due = await db.select({ gathering: gatherings, activityName: activities.name, siteName: sites.name }).from(gatherings)
         .innerJoin(members, and(eq(members.organisationId, gatherings.organisationId), eq(members.id, gatherings.hostMemberId)))
         .innerJoin(activities, and(eq(activities.organisationId, gatherings.organisationId), eq(activities.id, gatherings.activityId)))
         .leftJoin(sites, and(eq(sites.organisationId, gatherings.organisationId), eq(sites.id, gatherings.placeSiteId)))
         .leftJoin(attendanceRecords, and(eq(attendanceRecords.organisationId, gatherings.organisationId), eq(attendanceRecords.gatheringId, gatherings.id)))
-        .where(and(eq(gatherings.organisationId, organisationId), eq(members.status, "active"), inArray(gatherings.status, ["scheduled", "completed"]),
-          sql`${end} <= ${now.toISOString()}::timestamptz`, sql`${end} + interval '7 days' > ${now.toISOString()}::timestamptz`,
-          isNull(attendanceRecords.confirmedAt), or(isNull(attendanceRecords.promptedHostMemberId), ne(attendanceRecords.promptedHostMemberId, gatherings.hostMemberId))));
+        .where(and(eq(gatherings.organisationId, organisationId), attendancePromptDue(now)));
       for (const { gathering, activityName, siteName } of due) {
         const place = gathering.placeKind === "physical" ? `${gathering.placeSpot}, ${siteName}` : gathering.placeUrl!;
         await recordNotices(db, organisationId, [gathering.hostMemberId], {
