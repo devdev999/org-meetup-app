@@ -6,6 +6,7 @@ import { InvalidInputError } from "./errors";
 import { activities, attendanceMembers, attendanceRecords, availabilities, departments, gatheringMembers, gatheringRsvps, gatherings, interests, memberInterests, members, sites, telegramLinks } from "./schema";
 import { ratings } from "./attendance";
 import { ratingsTable } from "./attendance-reports";
+import { meetupOrEvent } from "./meetups";
 import type { Report, ReportPeriod, ReportTable } from "./report-types";
 
 const participationBasis = "Current Active Members and current Departments and Sites; confirmed Attendance in the selected period.";
@@ -99,11 +100,11 @@ async function usageTables(db: Queryable, organisationId: string, period: Report
   const other = alias(availabilities, "other_availability");
   const overlapStart = sql`greatest(${availabilities.startsAt}, ${availabilities.createdAt}, ${other.startsAt}, ${other.createdAt})`;
   const overlapEnd = sql`least(${availabilities.endsAt}, ${availabilities.expiredAt}, ${other.endsAt}, ${other.expiredAt})`;
-  const [overlaps] = await db.select({ count: sql<number>`count(distinct (${availabilities.memberId}, ${other.memberId}, (${availabilities.startsAt} at time zone 'UTC')::date))::integer` })
+  const [overlaps] = await db.select({ count: sql<number>`count(*)::integer` })
     .from(availabilities).innerJoin(other, and(eq(other.organisationId, availabilities.organisationId), lt(availabilities.memberId, other.memberId),
       eq(availabilities.activityId, other.activityId), sql`${availabilities.siteId} is not distinct from ${other.siteId}`))
-    .where(and(eq(availabilities.organisationId, organisationId), gte(availabilities.startsAt, start), lt(availabilities.startsAt, end),
-      gte(other.startsAt, start), lt(other.startsAt, end), lt(overlapStart, overlapEnd), lte(overlapStart, sql`${now.toISOString()}::timestamptz`)));
+    .where(and(eq(availabilities.organisationId, organisationId), gte(overlapStart, sql`${start.toISOString()}::timestamptz`),
+      lt(overlapStart, sql`${end.toISOString()}::timestamptz`), lt(overlapStart, overlapEnd), lte(overlapStart, sql`${now.toISOString()}::timestamptz`)));
   const [linked] = await db.select({ count: sql<number>`count(*)::integer` }).from(telegramLinks)
     .innerJoin(members, and(eq(members.organisationId, telegramLinks.organisationId), eq(members.id, telegramLinks.memberId)))
     .where(and(eq(telegramLinks.organisationId, organisationId), eq(members.status, "active")));
@@ -118,8 +119,8 @@ async function usageTables(db: Queryable, organisationId: string, period: Report
     interestTable("shared-interests", "Most Shared Interests", "shares"),
     interestTable("sought-interests", "Most Sought Interests", "seeks"),
     interestTable("unmet-seeks", "Seeks with no Shares", "seeks", true),
-    { id: "availability", title: "Availability usage", basis: "Posts created in the selected period, including expired posts. Started overlaps count distinct Member pairs once per UTC day across matching Activities and Places, using posted windows and recorded expiry.",
-      columns: ["Posts", "Members posting", "Daily overlapping Member pairs"], rows: [[posts!.count, posts!.members, overlaps!.count]] },
+    { id: "availability", title: "Availability usage", basis: "Posts created in the selected period, including expired posts. Overlaps count pairs of posts by different Members with matching Activity and Place, using posted windows and recorded expiry. Each pair counts when its overlap starts in the selected period.",
+      columns: ["Posts", "Members posting", "Overlaps"], rows: [[posts!.count, posts!.members, overlaps!.count]] },
     { id: "telegram", title: "Telegram linkage", basis: "Current Active Members, independent of the selected period.",
       columns: ["Linked Members", "Active Members", "Linkage %"], rows: [[linked!.count, activeMembers, percentage(linked!.count, activeMembers)]] },
   ];
@@ -145,7 +146,7 @@ async function occurrenceTables(db: Queryable, organisationId: string, period: R
     const monday = new Date(gathering.startsAt);
     monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7);
     const week = monday.toISOString().slice(0, 10);
-    const kind = gathering.kind === "meetup" ? "Meetup" : "Event";
+    const kind = meetupOrEvent(gathering);
     const key = JSON.stringify([week, kind, gathering.activityId]);
     const row = weekly.get(key) ?? { week, kind, activity, count: 0 };
     row.count++;
@@ -167,7 +168,7 @@ async function occurrenceTables(db: Queryable, organisationId: string, period: R
       present += came.size;
       noShows += expected.filter((row) => !came.has(row.memberId)).length;
     }
-    return [kind === "meetup" ? "Meetup" : "Event", going, notGoing, unanswered, confirmedGoing, present, noShows, percentage(noShows, confirmedGoing)];
+    return [meetupOrEvent({ kind }), going, notGoing, unanswered, confirmedGoing, present, noShows, percentage(noShows, confirmedGoing)];
   });
   return [
     { id: "waitlists", title: "Waitlist frequency", basis: "Occurrences starting in the selected period that ever had a waitlist, including later promotions and removals. Frequency uses occurrences with known history; older unknown history is shown separately.",
@@ -176,7 +177,7 @@ async function occurrenceTables(db: Queryable, organisationId: string, period: R
         const selected = occurrences.filter(({ gathering }) => gathering.kind === kind);
         const known = selected.filter(({ gathering }) => gathering.hadWaitlist !== null).length;
         const waited = selected.filter(({ gathering }) => gathering.hadWaitlist === true).length;
-        return [kind === "meetup" ? "Meetup" : "Event", selected.length, known, waited, selected.length - known, percentage(waited, known)];
+        return [meetupOrEvent({ kind }), selected.length, known, waited, selected.length - known, percentage(waited, known)];
       }) },
     { id: "weekly-occurrences", title: "Meetups and Events per week", basis: "Scheduled or completed occurrences by start date. Weeks start Monday in UTC.",
       columns: ["Week starting", "Kind", "Activity", "Occurrences"],

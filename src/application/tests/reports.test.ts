@@ -188,7 +188,8 @@ test("Interest demand, Availability and Telegram figures use the documented popu
   expect(report.tables.find((table) => table.id === "shared-interests")!.rows).toEqual([["SQL", "Skill", 2]]);
   expect(report.tables.find((table) => table.id === "sought-interests")!.rows).toEqual([["Rust", "Skill", 2], ["SQL", "Skill", 1]]);
   expect(report.tables.find((table) => table.id === "unmet-seeks")!.rows).toEqual([["Rust", "Skill", 2]]);
-  expect(report.tables.find((table) => table.id === "availability")!.rows).toEqual([[4, 2, 1]]);
+  expect(report.tables.find((table) => table.id === "availability")!.rows).toEqual([[4, 2, 2]]);
+  expect((await admin.exportReport("availability", period)).content).toContain('"4","2","2"');
   expect(report.tables.find((table) => table.id === "telegram")!.rows).toEqual([[1, 4, 25]]);
 });
 
@@ -464,10 +465,12 @@ test("reports validate periods, isolate Organisations and recheck a retained adm
   const anaAdmin = await (await signInAndAcknowledgeAs(h, "ministry-a", anaPerson)).organisationAdmin();
   const adminId = (await olivia.profile()).memberId;
   await anaAdmin.suspendMember(adminId);
-  await expect(admin.reports(period)).rejects.toMatchObject({ name: "AccessDeniedError" });
-  await expect(admin.memberReport(adminId, period)).rejects.toMatchObject({ name: "AccessDeniedError" });
-  await expect(admin.exportReport("ratings", period)).rejects.toMatchObject({ name: "AccessDeniedError" });
-  await expect(admin.exportMemberReport(adminId, "member-counts", period)).rejects.toMatchObject({ name: "AccessDeniedError" });
+  for (const selected of [period, { from: "invalid", to: "2026-09-30" }]) {
+    await expect(admin.reports(selected)).rejects.toMatchObject({ name: "AccessDeniedError" });
+    await expect(admin.memberReport(adminId, selected)).rejects.toMatchObject({ name: "AccessDeniedError" });
+    await expect(admin.exportReport("ratings", selected)).rejects.toMatchObject({ name: "AccessDeniedError" });
+    await expect(admin.exportMemberReport(adminId, "member-counts", selected)).rejects.toMatchObject({ name: "AccessDeniedError" });
+  }
   await expect(admin.exportMemberAttendance(adminId)).rejects.toMatchObject({ name: "AccessDeniedError" });
   await expect(admin.exportRatings()).rejects.toMatchObject({ name: "AccessDeniedError" });
   await expect(admin.exportAuditLog()).rejects.toMatchObject({ name: "AccessDeniedError" });

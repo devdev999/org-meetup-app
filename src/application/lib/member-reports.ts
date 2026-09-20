@@ -5,6 +5,7 @@ import type { Queryable } from "./departments-and-sites";
 import { AccessDeniedError } from "./errors";
 import { isUuid } from "./input";
 import { memberInterestsFor } from "./interests";
+import { meetupOrEvent } from "./meetups";
 import { reportBounds, reportPeriod } from "./reports";
 import type { Report, ReportPeriod } from "./report-types";
 import { activities, availabilities, departments, flags, gatheringMembers, gatherings, members, sites } from "./schema";
@@ -43,7 +44,7 @@ export async function memberReport(db: Queryable, actor: Actor, memberId: string
         row.member.firstInterestDeclaredAt?.toISOString() ?? (row.member.hasDeclaredInterest ? "Unknown" : "Not declared"), row.member.lastActivityAt?.toISOString() ?? null]] },
     { id: "member-counts", title: "Participation counts", basis: "Non-cancelled occurrences starting in the selected period. Joined includes the Host when they hold a Participant place. Attended and no-show counts require confirmed Attendance.",
       columns: ["Kind", "Hosted", "Joined", "Attended", "No-shows"], rows: (["meetup", "event"] as const).map((kind) => [
-        kind === "meetup" ? "Meetup" : "Event", occurrences.filter((entry) => entry.kind === kind && entry.hostMemberId === memberId).length,
+        meetupOrEvent({ kind }), occurrences.filter((entry) => entry.kind === kind && entry.hostMemberId === memberId).length,
         occurrences.filter((entry) => entry.kind === kind && entry.membership === "participant").length,
         history.filter((entry) => entry.kind === kind && entry.outcome === "attended").length,
         history.filter((entry) => entry.kind === kind && entry.outcome === "no-show").length,

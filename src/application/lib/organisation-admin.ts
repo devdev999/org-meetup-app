@@ -5,7 +5,7 @@ import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { AccessDeniedError } from "./errors";
 import { isUuid } from "./input";
-import { organisationReport, reportPeriod } from "./reports";
+import { organisationReport } from "./reports";
 import type { Report, ReportPeriod } from "./report-types";
 import { memberReport } from "./member-reports";
 import { attendanceHistoryTable, ratingsTable } from "./attendance-reports";
@@ -110,11 +110,11 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
   }
   return {
     reports: (period) => authorised((db) => organisationReport(db, actor.organisationId, period, deps.clock.now())),
-    memberReport: async (memberId, period) => authorised((db) => memberReport(db, actor, memberId, period, deps.clock.now()), "member-report", { memberId, ...reportPeriod(period) }),
+    memberReport: (memberId, period) => authorised((db) => memberReport(db, actor, memberId, period, deps.clock.now()), "member-report", { memberId, ...period }),
     exportReport: async (table, period) => command(async (db) => exportReportTable(await organisationReport(db, actor.organisationId, period, deps.clock.now()), table),
-      "aggregate-report-export", { table, ...reportPeriod(period) }),
+      "aggregate-report-export", { table, ...period }),
     exportMemberReport: async (memberId, table, period) => command(async (db) => exportReportTable(await memberReport(db, actor, memberId, period, deps.clock.now()), table),
-      "member-report-export", { memberId, table, ...reportPeriod(period) }),
+      "member-report-export", { memberId, table, ...period }),
     exportAuditLog: () => command(async (db) => tableCsv(auditTable(await readAdminAudit(db, actor.organisationId))), "audit-log-export"),
     exportRatings: () => command(async (db) => tableCsv(ratingsTable(await ratings(db, actor.organisationId))), "ratings-export"),
     exportMemberAttendance: (memberId) => command(async (db) => tableCsv(attendanceHistoryTable(await memberAttendance(db, actor, memberId, deps.clock.now()))), "member-attendance-export", { memberId }),

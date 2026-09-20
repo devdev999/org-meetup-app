@@ -25,7 +25,7 @@ export function readAdminAudit(db: Queryable, organisationId?: string): Promise<
 
 export function auditTable(entries: AdminAuditEntry[]): ReportTable {
   return { id: "audit-log", title: "Audit log", basis: "Recorded data access and exports. Times are UTC.",
-    columns: ["Organisation", "Accessing admin", "Accessing admin Member ID", "Action", "Filters", "Time"],
+    columns: ["Organisation", "Accessed by", "Actor Member ID", "Action", "Filters", "Time"],
     rows: entries.map((entry) => [entry.organisationName, entry.actorName, entry.actorMemberId, entry.action, JSON.stringify(entry.filter), entry.createdAt.toISOString()]) };
 }
 
