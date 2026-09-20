@@ -12,7 +12,7 @@ function member(name: string) {
 }
 
 async function setup() {
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson,
+  await h.setupOrganisation({ ...ministryA, organisationAdmin: adminPerson,
     organisation: { ...ministryA.organisation, departments: ["Finance", "Legal"], sites: ["Harbour", "Hill"] } });
   const olivia = await signInAndAcknowledgeAs(h, "ministry-a", adminPerson);
   const admin = await olivia.organisationAdmin();
@@ -49,10 +49,10 @@ test("participation uses current Active Members and assignments while retaining 
   await bo!.updateProfile({ department: "Legal", site: "Hill" });
   const changed = await admin.reports(period);
   expect(changed.tables.find((table) => table.id === "participation-departments")!.rows).toEqual([
-    ["Finance", 1, 3, 33.33], ["Legal", 1, 1, 100], [null, 0, 1, 0],
+    ["Finance", 1, 3, 33.33], ["Legal", 1, 1, 100], [null, 0, 2, 0],
   ]);
   expect(changed.tables.find((table) => table.id === "participation-sites")!.rows).toEqual([
-    ["Harbour", 1, 3, 33.33], ["Hill", 1, 1, 100], [null, 0, 1, 0],
+    ["Harbour", 1, 3, 33.33], ["Hill", 1, 1, 100], [null, 0, 2, 0],
   ]);
 });
 
@@ -73,11 +73,11 @@ test("participation keeps named Not set groups separate from unassigned Members"
   const report = await admin.reports(period);
   for (const id of ["participation-departments", "participation-sites"]) {
     expect(report.tables.find((table) => table.id === id)!.rows).toEqual([
-      ["Not set", 1, 1, 100], [null, 0, 2, 0],
+      ["Not set", 1, 1, 100], [null, 0, 3, 0],
     ]);
     const csv = await admin.exportReport(id, period);
     expect(csv.content).toContain('"Not set","1","1","100"');
-    expect(csv.content).toContain('"","0","2","0"');
+    expect(csv.content).toContain('"","0","3","0"');
   }
 });
 
@@ -190,7 +190,7 @@ test("Interest demand, Availability and Telegram figures use the documented popu
   expect(report.tables.find((table) => table.id === "unmet-seeks")!.rows).toEqual([["Rust", "Skill", 2]]);
   expect(report.tables.find((table) => table.id === "availability")!.rows).toEqual([[4, 2, 2]]);
   expect((await admin.exportReport("availability", period)).content).toContain('"4","2","2"');
-  expect(report.tables.find((table) => table.id === "telegram")!.rows).toEqual([[1, 4, 25]]);
+  expect(report.tables.find((table) => table.id === "telegram")!.rows).toEqual([[1, 5, 20]]);
 });
 
 test("Availability overlaps survive missed worker runs and exclude future or nonconcurrent posts", async () => {
@@ -473,7 +473,7 @@ test("Platform Admin audit identifies accessing admins while omitting viewed Mem
   await admin.exportMemberReport(memberId, "member-counts", period);
   await olivia.searchMembers({ interest: "personal search value", department: "Private Department", site: "Private Site" });
   const otherPerson = { sub: "other-admin", name: "Other Admin", email: "admin@other.example" };
-  await h.app.bootstrap({ ...ministryB, organisationAdmin: otherPerson });
+  await h.setupOrganisation({ ...ministryB, organisationAdmin: otherPerson });
   const otherActor = await signInAndAcknowledgeAs(h, "ministry-b", otherPerson);
   const otherAdmin = await otherActor.organisationAdmin();
   await otherAdmin.memberReport((await otherActor.profile()).memberId, period);
@@ -506,7 +506,7 @@ test("Platform Admin audit identifies accessing admins while omitting viewed Mem
 
 test("reports validate periods, isolate Organisations and recheck a retained admin actor", async () => {
   const { admin, olivia } = await setup();
-  await h.app.bootstrap({ ...ministryB, organisationAdmin: { name: "Other", email: "other@example.test" } });
+  await h.setupOrganisation({ ...ministryB, organisationAdmin: { name: "Other", email: "other@example.test" } });
   const other = await signInAndAcknowledgeAs(h, "ministry-b", { sub: "other", name: "Other", email: "other@example.test" });
   await other.createMeetup({ activityId: (await other.meetupChoices()).activities[0]!.id,
     startsAt: new Date("2026-09-19T10:00:00Z"), durationMinutes: 60, capacity: 2,
@@ -518,11 +518,8 @@ test("reports validate periods, isolate Organisations and recheck a retained adm
   }
   await expect(admin.exportReport("member-profile", period)).rejects.toMatchObject({ code: "invalid-report" });
   await expect(admin.memberReport((await other.profile()).memberId, period)).rejects.toMatchObject({ name: "AccessDeniedError" });
-  const anaPerson = { sub: "ana", name: "Ana", email: "ana@example.test" };
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: anaPerson });
-  const anaAdmin = await (await signInAndAcknowledgeAs(h, "ministry-a", anaPerson)).organisationAdmin();
   const adminId = (await olivia.profile()).memberId;
-  await anaAdmin.suspendMember(adminId);
+  await admin.suspendMember(adminId);
   for (const selected of [period, { from: "invalid", to: "2026-09-30" }]) {
     await expect(admin.reports(selected)).rejects.toMatchObject({ name: "AccessDeniedError" });
     await expect(admin.memberReport(adminId, selected)).rejects.toMatchObject({ name: "AccessDeniedError" });

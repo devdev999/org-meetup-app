@@ -1,3 +1,4 @@
+import { deploymentTimeZone } from "./deployment-settings";
 import { and, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import type { Actor } from "./actor";
 import { readAttendanceHistory, readConnections } from "./attendance";
@@ -14,7 +15,8 @@ export async function memberReport(db: Queryable, actor: Actor, memberId: string
   if (!isUuid(memberId)) throw new AccessDeniedError();
   const period = reportPeriod(input);
   const selected = reportSelection(tableId, ["member-profile", "member-counts", "member-connections", "member-availability", "member-interests", "member-flags"]);
-  const range = reportBounds(period);
+  const timeZone = await deploymentTimeZone(db);
+  const range = reportBounds(period, timeZone);
   const [row] = await db.select({ member: members, department: departments.name, site: sites.name }).from(members)
     .leftJoin(departments, and(eq(departments.organisationId, members.organisationId), eq(departments.id, members.departmentId)))
     .leftJoin(sites, and(eq(sites.organisationId, members.organisationId), eq(sites.id, members.siteId)))
@@ -59,5 +61,5 @@ export async function memberReport(db: Queryable, actor: Actor, memberId: string
     { id: "member-flags", title: "Flags", basis: "Flags raised in the selected period. Received counts Flags directly about this Member.",
       columns: ["Raised", "Received"], rows: flagCounts ? [[flagCounts.raised, flagCounts.received]] : [] },
   ];
-  return { period, tables: tables.filter((table) => selected(table.id)) };
+  return { period, timeZone, tables: tables.filter((table) => selected(table.id)) };
 }

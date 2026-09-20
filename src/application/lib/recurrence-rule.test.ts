@@ -1,6 +1,12 @@
 import { expect, test } from "vitest";
 import { expandRecurrence } from "./recurrence-rule";
 
+test("a skipped recurring time shifts forward for one occurrence without shifting later weeks", () => {
+  const dates = expandRecurrence({ frequency: "weekly", startsAt: new Date("2026-03-01T07:30:00Z"), timeZone: "America/New_York" },
+    new Date("2026-03-02T00:00:00Z"), new Date("2026-03-16T00:00:00Z"));
+  expect(dates.map((date) => date.toISOString())).toEqual(["2026-03-08T07:30:00.000Z", "2026-03-15T06:30:00.000Z"]);
+});
+
 test("weekly recurrence preserves the weekday and time through the inclusive horizon", () => {
   const dates = expandRecurrence(
     { frequency: "weekly", startsAt: new Date("2026-01-29T10:00:00Z") },

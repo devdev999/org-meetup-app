@@ -6,7 +6,7 @@ import { harness } from "./harness";
 const h = harness();
 
 test("an email nobody knows signs in and becomes an Active Member of the issuer's Organisation", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
 
   const started = await h.app.beginSignIn({ organisationSlug: "ministry-a", redirectUri: REDIRECT_URI });
   expect(started.authorizationUrl).toMatch(/^https:\/\/idp\.ministry-a\.example\/authorize\?/);
@@ -29,7 +29,7 @@ test("an email nobody knows signs in and becomes an Active Member of the issuer'
 });
 
 test("a Provisioned Member who signs in becomes that Member, Active, keeping their roster name", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
 
   const pat = await signInAndAcknowledgeAs(h, "ministry-a", {
     sub: "pat-1",
@@ -46,7 +46,7 @@ test("a Provisioned Member who signs in becomes that Member, Active, keeping the
 });
 
 test("signing in again binds to the same Member", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
 
   const first = await signInForId(h, "ministry-a", ana);
   const second = await signInForId(h, "ministry-a", { ...ana, sub: "ana-new-device" });
@@ -55,7 +55,7 @@ test("signing in again binds to the same Member", async () => {
 });
 
 test("the first sign-in asks the Member to acknowledge what Organisation Admins can see, once", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const actor = await signInAs(h, "ministry-a", ana);
   expect(await actor.adminVisibilityNotice()).toEqual({
     name: "Ana Silva",
@@ -75,7 +75,7 @@ test("the first sign-in asks the Member to acknowledge what Organisation Admins 
 });
 
 test("a sign-in that takes longer than ten minutes is refused", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const started = await h.app.beginSignIn({ organisationSlug: "ministry-a", redirectUri: REDIRECT_URI });
   const callbackUrl = FakeIdentity.callbackUrl(started.authorizationUrl, ana);
 
@@ -88,7 +88,7 @@ test("a sign-in that takes longer than ten minutes is refused", async () => {
 });
 
 test("a callback that answers a different sign-in than the one this browser started is refused", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const thisBrowser = await h.app.beginSignIn({ organisationSlug: "ministry-a", redirectUri: REDIRECT_URI });
   const otherBrowser = await h.app.beginSignIn({ organisationSlug: "ministry-a", redirectUri: REDIRECT_URI });
   const callbackUrl = FakeIdentity.callbackUrl(otherBrowser.authorizationUrl, ana);
@@ -100,7 +100,7 @@ test("a callback that answers a different sign-in than the one this browser star
 });
 
 test("an Organisation nobody has heard of cannot be signed in to", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
 
   await expect(h.app.beginSignIn({ organisationSlug: "nowhere", redirectUri: REDIRECT_URI })).rejects.toMatchObject({
     name: "SignInError",
@@ -109,7 +109,7 @@ test("an Organisation nobody has heard of cannot be signed in to", async () => {
 });
 
 test("a login whose claims carry no email cannot be bound to a Member", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const started = await h.app.beginSignIn({ organisationSlug: "ministry-a", redirectUri: REDIRECT_URI });
   const callbackUrl = FakeIdentity.callbackUrl(started.authorizationUrl, { sub: "anon-1", name: "No Email" });
 
@@ -120,7 +120,7 @@ test("a login whose claims carry no email cannot be bound to a Member", async ()
 });
 
 test("a login whose issuer says the email is not verified is refused", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const started = await h.app.beginSignIn({ organisationSlug: "ministry-a", redirectUri: REDIRECT_URI });
   const callbackUrl = FakeIdentity.callbackUrl(started.authorizationUrl, { ...ana, email_verified: false });
 
@@ -131,7 +131,7 @@ test("a login whose issuer says the email is not verified is refused", async () 
 });
 
 test("a login that states no name shows the email as the name until a later login supplies one", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const nameless = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana-1", email: "ana.silva@ministry-a.example" });
   expect((await nameless.profile()).name).toBe("ana.silva@ministry-a.example");
 

@@ -1,5 +1,5 @@
 import type { Pool } from "pg";
-import { bootstrap, type BootstrapConfig } from "./lib/bootstrap";
+import { initializePlatform, type FirstPlatformAdminConfig } from "./lib/initialize-platform";
 import { connectDatabase } from "./lib/db";
 import type { Deps } from "./lib/deps";
 import { AccessDeniedError, AdminVisibilityNoticeRequiredError, InvalidInputError, type InvalidInputCode } from "./lib/errors";
@@ -31,6 +31,8 @@ import { processAvailability } from "./lib/availability";
 import { processRecurrences } from "./lib/recurring-meetups";
 import { processAttendance } from "./lib/attendance";
 import { reconcileMemberLifecycles } from "./lib/member-lifecycle";
+import { deploymentDefaults } from "./lib/deployment-settings-input";
+import { initializeDeploymentSettings, readDeploymentSettings, type DeploymentSettings } from "./lib/deployment-settings";
 
 export type { TelegramCommand, TelegramLink } from "./lib/telegram";
 export type { NotificationSettings, NoticePreference } from "./lib/notifications";
@@ -44,10 +46,14 @@ export type { Flag, FlagInput, ModerationOccurrence } from "./lib/moderation";
 export type { Report, ReportPeriod, ReportTable } from "./lib/report-types";
 export type { ReportCsv } from "./lib/report-csv";
 export type { PlatformAdminActions } from "./lib/platform-admin";
+export type { CreateOrganisationInput, PlatformOrganisation } from "./lib/platform-organisations";
+export type { FirstPlatformAdminConfig } from "./lib/initialize-platform";
+export type { Ministry } from "./lib/ministries";
+export type { DeploymentSettings } from "./lib/deployment-settings";
+export type { PlatformReportScope } from "./lib/platform-reports";
 export type {
   AdminVisibilityNotice,
   BeginSignInInput,
-  BootstrapConfig,
   CompleteSignInInput,
   InvalidInputCode,
   MemberActions,
@@ -97,6 +103,7 @@ export function isInvalidInputError(error: unknown): error is InvalidInputError 
 }
 
 export interface ApplicationDependencies {
+  deploymentDefaults?: Partial<DeploymentSettings>;
   pool: Pool;
   identity: IdentityPort;
   clock: Clock;
@@ -111,6 +118,9 @@ export interface ApplicationDependencies {
  * Organisation the application derives itself, never from input.
  */
 export interface Application {
+  initializeDeploymentSettings(): Promise<void>;
+  timeZone(): Promise<string>;
+  initializePlatform(config: FirstPlatformAdminConfig): Promise<void>;
   reconcileMemberLifecycles(): Promise<void>;
   processAttendance(): Promise<void>;
   processRecurrences(): Promise<void>;
@@ -119,8 +129,6 @@ export interface Application {
   deliverNotices(): Promise<void>;
   sendDailyDigests(): Promise<void>;
   handleTelegram(command: TelegramCommand): Promise<void>;
-  /** Seeds the first Organisation, its choices, its OIDC settings and the first Platform Admin. Idempotent. */
-  bootstrap(config: BootstrapConfig): Promise<void>;
   /** Anonymous: the Organisations a visitor can sign in to, in name order. */
   signInOptions(): Promise<SignInOption[]>;
   /** Anonymous: starts a sign-in with one Organisation's issuer. Throws `SignInError`. */
@@ -133,6 +141,7 @@ export interface Application {
 
 export function createApplication(dependencies: ApplicationDependencies): Application {
   const deps: Deps = {
+    deploymentDefaults: deploymentDefaults(dependencies.deploymentDefaults),
     db: connectDatabase(dependencies.pool),
     identity: dependencies.identity,
     clock: dependencies.clock,
@@ -141,6 +150,9 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     email: dependencies.email,
   };
   return {
+    initializeDeploymentSettings: () => initializeDeploymentSettings(deps.db, deps.deploymentDefaults),
+    timeZone: async () => (await readDeploymentSettings(deps.db, deps.deploymentDefaults)).timeZone,
+    initializePlatform: (config) => initializePlatform(deps, config),
     reconcileMemberLifecycles: () => reconcileMemberLifecycles(deps),
     processRecurrences: () => processRecurrences(deps),
     processAttendance: () => processAttendance(deps),
@@ -149,7 +161,6 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     deliverNotices: () => deliverNotices(deps),
     sendDailyDigests: () => sendDailyDigests(deps),
     handleTelegram: (command) => handleTelegram(deps, command),
-    bootstrap: (config) => bootstrap(deps, config),
     signInOptions: () => signInOptions(deps),
     beginSignIn: (input) => beginSignIn(deps, input),
     completeSignIn: (input) => completeSignIn(deps, input),

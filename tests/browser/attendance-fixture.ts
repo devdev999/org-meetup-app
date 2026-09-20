@@ -9,7 +9,7 @@ import { MemoryTelegram } from "../../src/adapters/telegram/memory";
 export async function seedAttendance(pool: Pool, appUrl: string) {
   const now = new Date();
   const clock = new ControllableClock(new Date(now.getTime() - 2 * 86_400_000));
-  const app = createApplication({ pool, clock, identity: new FakeIdentity(), ai: new MemoryAi(), email: new MemoryEmail(), telegram: new MemoryTelegram("test_bot") });
+  const app = createApplication({ pool, clock, identity: new FakeIdentity(), ai: new MemoryAi(), email: new MemoryEmail(), telegram: new MemoryTelegram() });
   async function signIn(person: { name: string; email: string }) {
     const started = await app.beginSignIn({ organisationSlug: "ministry-a", redirectUri: `${appUrl}/auth/callback` });
     const signed = await app.completeSignIn({ pending: started.pending, callbackUrl: FakeIdentity.callbackUrl(started.authorizationUrl, { ...person, sub: person.email }) });

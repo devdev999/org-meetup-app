@@ -4,10 +4,8 @@ import { availabilityCallback } from "./availability-callback";
 
 export class GrammyTelegram implements TelegramPort {
   private readonly api: Api;
-  readonly botUsername: string;
 
-  constructor(config: { token: string; botUsername: string; apiRoot?: string }) {
-    this.botUsername = config.botUsername;
+  constructor(config: { token: string; apiRoot?: string }) {
     this.api = new Api(config.token, { timeoutSeconds: 10, apiRoot: config.apiRoot });
   }
 

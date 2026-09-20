@@ -1,4 +1,5 @@
-import { and, eq, exists, gt, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import { localDate } from "../../calendar";
+import { and, eq, exists, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
@@ -7,6 +8,7 @@ import { gatheringRsvps, gatherings, invites, members, recurrenceMembers, recurr
 
 export type RecurrenceInput = Pick<RecurrenceRule, "frequency" | "endsOn">;
 export interface Recurrence extends RecurrenceRule {
+  timeZone: string;
   kind: typeof recurrences.$inferSelect.kind;
   id: string;
   host: { memberId: string; name: string };
@@ -41,7 +43,7 @@ export function visibleRecurrences(actor: Actor, siteId: string | null, kind?: R
 
 export function recurrencesWithFutureWork(db: Queryable, now: Date) {
   return or(
-    and(isNull(recurrences.stoppedAt), or(isNull(recurrences.endsOn), gte(recurrences.endsOn, now.toISOString().slice(0, 10)))),
+    and(isNull(recurrences.stoppedAt), or(isNull(recurrences.endsOn), sql`${recurrences.endsOn} >= (${now.toISOString()}::timestamptz at time zone ${recurrences.timeZone})::date`)),
     exists(db.select({ id: gatherings.id }).from(gatherings).where(and(
       eq(gatherings.organisationId, recurrences.organisationId), eq(gatherings.recurrenceId, recurrences.id),
       eq(gatherings.status, "scheduled"), gt(gatherings.startsAt, now),
@@ -62,9 +64,9 @@ export async function readRecurrences(db: Queryable, actor: Actor, ids: string[]
     const isStanding = participants.some((member) => member.memberId === actor.memberId);
     const isHost = recurrence.hostMemberId === actor.memberId;
     const stopped = recurrence.stoppedAt !== null;
-    const ended = recurrence.endsOn !== null && recurrence.endsOn < now.toISOString().slice(0, 10);
+    const ended = recurrence.endsOn !== null && recurrence.endsOn < localDate(now, recurrence.timeZone);
     return [recurrence.id, {
-      id: recurrence.id, kind: recurrence.kind, frequency: recurrence.frequency, startsAt: recurrence.startsAt, endsOn: recurrence.endsOn,
+      id: recurrence.id, kind: recurrence.kind, frequency: recurrence.frequency, startsAt: recurrence.startsAt, endsOn: recurrence.endsOn, timeZone: recurrence.timeZone,
       host: { memberId: recurrence.hostMemberId, name: hostName }, capacity: recurrence.capacity,
       standingCount: participants.length, isStanding, ended, stopped,
       canJoin: visible && !stopped && !ended && !isStanding && (recurrence.capacity === null || participants.length < recurrence.capacity),

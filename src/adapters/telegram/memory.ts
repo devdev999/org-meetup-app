@@ -7,8 +7,6 @@ export class MemoryTelegram implements TelegramPort {
   answerFailure: Error | undefined;
   sendDelay: Promise<void> | undefined;
 
-  constructor(readonly botUsername: string | null = null) {}
-
   async sendMessage(message: TelegramMessage): Promise<void> {
     await this.sendDelay;
     if (this.failure) throw this.failure;

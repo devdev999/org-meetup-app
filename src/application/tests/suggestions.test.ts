@@ -14,7 +14,7 @@ async function member(name: string, department = "Finance", site = "Harbour Hous
 }
 
 async function setup() {
-  await h.app.bootstrap(withDepartmentAndSiteClaims(ministryA));
+  await h.setupOrganisation(withDepartmentAndSiteClaims(ministryA));
   return member("Ana");
 }
 
@@ -44,7 +44,7 @@ test("a Host saves and edits a Meetup's relevant Interests without changing pers
 
 test("a Meetup cannot save another Organisation's canonical Interests", async () => {
   const host = await setup();
-  await h.app.bootstrap(withDepartmentAndSiteClaims(ministryB));
+  await h.setupOrganisation(withDepartmentAndSiteClaims(ministryB));
   const outsider = await member("Outside", "Legal", "Harbour House", "ministry-b");
   const foreign = (await outsider.interests())[0]!;
   await expect(host.createMeetup(await meetupInput(host, {
@@ -74,7 +74,7 @@ test("Invite Suggestions filter Active Members by Organisation and physical Site
   const di = await member("Di");
   const ev = await member("Ev");
   const fay = await member("Fay");
-  await h.app.bootstrap(withDepartmentAndSiteClaims(ministryB));
+  await h.setupOrganisation(withDepartmentAndSiteClaims(ministryB));
   await member("Outside", "Finance", "Harbour House", "ministry-b");
   const siteId = (await host.meetupChoices()).sites.find((site) => site.name === "Harbour House")!.id;
   const data = await meetupInput(host, { capacity: 2, place: { kind: "physical", siteId, spot: "Cafe" } });
@@ -89,7 +89,7 @@ test("Invite Suggestions filter Active Members by Organisation and physical Site
   expect(suggestions[0]).toMatchObject({ previousInviteId: previous.id, reasons: expect.arrayContaining(["From a different Department."]) });
   await expect(bo.inviteSuggestions(meetup.id)).rejects.toMatchObject({ name: "AccessDeniedError" });
   await host.editMeetup(meetup.id, { ...data, place: { kind: "virtual", url: "https://meet.example/coffee" } });
-  expect((await host.inviteSuggestions(meetup.id)).map((suggestion) => suggestion.member.name).sort()).toEqual(["Bo", "Cy", "Fay"]);
+  expect((await host.inviteSuggestions(meetup.id)).map((suggestion) => suggestion.member.name).sort()).toEqual(["Bo", "Cy", "Fay", "Pat Platform"]);
 });
 
 test.each(["Meetup Place", "Member Site"])("a stale physical Suggestion is refused after the %s changes", async (changed) => {
@@ -171,7 +171,7 @@ test("home Suggestions use saved Interests and include only open unjoined Meetup
   await bo.joinMeetup(joined.id);
   const annexId = (await annex.meetupChoices()).sites.find((site) => site.name === "Annex")!.id;
   await annex.createMeetup(await meetupInput(annex, { place: { kind: "physical", siteId: annexId, spot: "Cafe" } }));
-  await h.app.bootstrap(withDepartmentAndSiteClaims(ministryB));
+  await h.setupOrganisation(withDepartmentAndSiteClaims(ministryB));
   const outsider = await member("Outside", "Finance", "Harbour House", "ministry-b");
   await outsider.createMeetup(await meetupInput(outsider));
   const result = await bo.meetupSuggestions();
@@ -271,7 +271,7 @@ test("one extraction resolves distinct Aliases and collapses repeated canonical 
 
 test("extraction validates the Activity and canonicalises only within the actor's Organisation", async () => {
   const host = await setup();
-  await h.app.bootstrap(withDepartmentAndSiteClaims(ministryB));
+  await h.setupOrganisation(withDepartmentAndSiteClaims(ministryB));
   const outsider = await member("Outside", "Legal", "Annex", "ministry-b");
   const foreignData = await meetupInput(outsider);
   await expect(host.extractMeetupInterests({ activityId: foreignData.activityId, description: "Rust" })).rejects.toMatchObject({ code: "invalid-meetup" });
@@ -337,7 +337,7 @@ test("an invalid selected invitee rolls back creation and new relevant Interests
 
 test("Organisation Admin views of Suggestions are audited", async () => {
   const person = { sub: "olivia", name: "Olivia", email: "olivia@example.test" };
-  await h.app.bootstrap({ ...withDepartmentAndSiteClaims(ministryA), organisationAdmin: person });
+  await h.setupOrganisation({ ...withDepartmentAndSiteClaims(ministryA), organisationAdmin: person });
   const host = await signInAndAcknowledgeAs(h, "ministry-a", person);
   await member("Bo");
   await member("Cy", "Legal", "Annex");

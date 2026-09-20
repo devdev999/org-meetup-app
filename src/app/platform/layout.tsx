@@ -6,7 +6,7 @@ export default async function PlatformLayout({ children }: { children: ReactNode
   await requirePlatformAdmin();
   return <main className="admin-area">
     <h1>Platform Admin</h1>
-    <nav aria-label="Platform administration"><Link href="/platform/audit">Audit log</Link><Link href="/profile">My profile</Link></nav>
+    <nav aria-label="Platform administration"><Link href="/platform/organisations">Organisations</Link><Link href="/platform/ministries">Ministries</Link><Link href="/platform/settings">Settings</Link><Link href="/platform/reports">Reports</Link><Link href="/platform/audit">Audit log</Link><Link href="/profile">My profile</Link></nav>
     {children}
   </main>;
 }

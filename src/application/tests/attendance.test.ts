@@ -11,7 +11,7 @@ function member(name: string) {
 }
 
 async function setup() {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await member("Ana");
   const input: CreateMeetupInput = {
     activityId: (await ana.meetupChoices()).activities.find((activity) => activity.name === "coffee")!.id,
@@ -142,7 +142,7 @@ test("only the current Host can confirm eligible Members from the same Organisat
   const { ana, input } = await setup();
   const bo = await member("Bo");
   const cy = await member("Cy");
-  await h.app.bootstrap(ministryB);
+  await h.setupOrganisation(ministryB);
   const outside = await signInAndAcknowledgeAs(h, "ministry-b", { sub: "other", email: "other@example.test", name: "Other" });
   const occurrence = await ana.createMeetup({ ...input, capacity: 2 });
   await bo.joinMeetup(occurrence.id);
@@ -176,7 +176,7 @@ test("Members see their own Attendance history and Organisation Admins audit eac
   expect(await (await member("Outside")).attendanceHistory()).toEqual([]);
   expect(await cy.viewMember(boId)).toEqual({ memberId: boId, name: "Bo", department: null, site: null, interests: [] });
   const adminClaims = { sub: "admin", email: "admin@example.test", name: "Admin" };
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminClaims });
+  await h.setupOrganisation({ ...ministryA, organisationAdmin: adminClaims });
   const adminMember = await signInAndAcknowledgeAs(h, "ministry-a", adminClaims);
   const admin = await adminMember.organisationAdmin();
   expect(await admin.memberAttendance(boId)).toEqual(await bo.attendanceHistory());
@@ -188,7 +188,7 @@ test("Members see their own Attendance history and Organisation Admins audit eac
   expect(await admin.memberAttendance(boId)).toEqual([expect.objectContaining({ id: occurrence.id, outcome: "attended" })]);
   const platform = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "platform", ...ministryA.platformAdmin });
   await expect(platform.organisationAdmin()).rejects.toBeInstanceOf(AccessDeniedError);
-  await h.app.bootstrap(ministryB);
+  await h.setupOrganisation(ministryB);
   const foreign = await signInAndAcknowledgeAs(h, "ministry-b", { sub: "foreign", email: "foreign@example.test", name: "Foreign" });
   await expect(admin.memberAttendance((await foreign.profile()).memberId)).rejects.toBeInstanceOf(AccessDeniedError);
 });
@@ -213,9 +213,7 @@ test.each(["meetup", "event"] as const)("each %s Participant rates once per occu
   await expect(bo.rateOccurrence(first.id, 1)).rejects.toBeInstanceOf(InvalidInputError);
   expect(await bo.attendance(first.id)).toMatchObject({ canRate: false, hasRated: true });
   expect(await ana.attendance(first.id)).not.toHaveProperty("ratings");
-  const adminClaims = { sub: "ratings-admin", email: "ratings-admin@example.test", name: "Ratings Admin" };
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminClaims });
-  const admin = await (await signInAndAcknowledgeAs(h, "ministry-a", adminClaims)).organisationAdmin();
+  const admin = await h.organisationAdmin();
   expect(await admin.ratings()).toEqual([{ activity: { id: input.activityId, name: "coffee" }, ratingCount: 3, averageRating: 4 }]);
 });
 
@@ -223,9 +221,7 @@ test("an unseated Event Host must be ticked and retains private occurrence histo
   const { ana, input } = await setup();
   const bo = await member("Bo");
   const cy = await member("Cy");
-  const adminClaims = { sub: "admin", email: "admin@example.test", name: "Admin" };
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminClaims });
-  const admin = await (await signInAndAcknowledgeAs(h, "ministry-a", adminClaims)).organisationAdmin();
+  const admin = await h.organisationAdmin();
   const occurrence = await createMeetupOrEvent(h, ana, { ...input, audience: { kind: "invite-only" } }, "event");
   const boId = (await bo.profile()).memberId;
   const cyId = (await cy.profile()).memberId;
@@ -255,9 +251,7 @@ test.each(["web", "telegram"] as const)("a former unseated Event Host remains on
   const { ana, input } = await setup();
   const bo = await member("Bo");
   const cy = await member("Cy");
-  const adminClaims = { sub: "admin", email: "admin@example.test", name: "Admin" };
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminClaims });
-  const admin = await (await signInAndAcknowledgeAs(h, "ministry-a", adminClaims)).organisationAdmin();
+  const admin = await h.organisationAdmin();
   const occurrence = await createMeetupOrEvent(h, ana, { ...input, capacity: 2, audience: { kind: "invite-only" } }, "event");
   const anaId = (await ana.profile()).memberId;
   const boId = (await bo.profile()).memberId;
@@ -287,9 +281,7 @@ test("an unseated Event Host stays eligible for Attendance after handing over", 
   const { ana, input } = await setup();
   const bo = await member("Bo");
   const cy = await member("Cy");
-  const adminClaims = { sub: "admin", email: "admin@example.test", name: "Admin" };
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminClaims });
-  const admin = await (await signInAndAcknowledgeAs(h, "ministry-a", adminClaims)).organisationAdmin();
+  const admin = await h.organisationAdmin();
   const occurrence = await createMeetupOrEvent(h, ana, { ...input, capacity: 2, audience: { kind: "invite-only" } }, "event");
   const boId = (await bo.profile()).memberId;
   const cyId = (await cy.profile()).memberId;

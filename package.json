@@ -16,13 +16,14 @@
     "db:generate": "drizzle-kit generate",
     "db:setup": "tsx --env-file-if-exists=.env src/db/setup.ts",
     "typecheck": "next typegen && tsc --noEmit",
-    "lint:boundaries": "depcruise src",
+    "lint:boundaries": "depcruise src tests/browser",
     "test": "vitest run",
     "test:browser": "tsx tests/browser/run.ts",
     "test:watch": "vitest",
     "check": "pnpm typecheck && pnpm lint:boundaries && pnpm test"
   },
   "dependencies": {
+    "@js-temporal/polyfill": "0.5.1",
     "csv-parse": "7.0.2",
     "drizzle-orm": "0.45.2",
     "grammy": "1.46.0",

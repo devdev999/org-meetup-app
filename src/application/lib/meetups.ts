@@ -1,3 +1,5 @@
+import { localDate } from "../../calendar";
+import { deploymentTimeZone } from "./deployment-settings";
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, gt, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -176,7 +178,8 @@ export async function createGathering(db: Queryable, actor: Actor, input: Create
   if (!parsed.success) invalid(kind === "meetup" ? "Choose an Activity, a valid start time and Place, a duration from 1 to 1440 minutes and capacity from 2 to 30." : "Choose an Activity, a valid start time and Place, a duration from 1 to 1440 minutes and an optional positive capacity.");
   const data = parsed.data;
   if (data.startsAt <= now) invalid("Choose a future start time.");
-  if (data.recurrence?.endsOn && data.startsAt > new Date(`${data.recurrence.endsOn}T23:59:59.999Z`)) invalid("The series end must include its first occurrence.");
+  const timeZone = await deploymentTimeZone(db);
+  if (data.recurrence?.endsOn && localDate(data.startsAt, timeZone) > data.recurrence.endsOn) invalid("The series end must include its first occurrence.");
   const availabilityOverlap = data.availabilityOverlap;
   const overlap = availabilityOverlap ? await findAvailabilityOverlap(db, actor, availabilityOverlap, now, true) : undefined;
   if (availabilityOverlap && (!overlap || data.activityId !== overlap.activity.id
@@ -212,12 +215,12 @@ export async function createGathering(db: Queryable, actor: Actor, input: Create
   await saveRelevantInterests(db, actor.organisationId, created.id, data.relevantInterests ?? [], now);
   const selectedIds = [...new Set([...data.invitedMemberIds, ...(overlap ? [overlap.member.memberId] : [])])];
   if (proposed) {
-    await db.insert(eventProposals).values({ organisationId: actor.organisationId, eventId: created.id, proposerMemberId: actor.memberId, recurrence: data.recurrence, invitedMemberIds: selectedIds });
+    await db.insert(eventProposals).values({ organisationId: actor.organisationId, eventId: created.id, proposerMemberId: actor.memberId, recurrence: data.recurrence ? { ...data.recurrence, timeZone } : null, invitedMemberIds: selectedIds });
   } else await publishGathering(db, actor, created, data.recurrence, selectedIds, now);
   return created.id;
 }
 
-export async function publishGathering(db: Queryable, actor: Actor, row: typeof gatherings.$inferSelect, recurrence: RecurrenceInput | null | undefined, invitedMemberIds: string[], now: Date): Promise<void> {
+export async function publishGathering(db: Queryable, actor: Actor, row: typeof gatherings.$inferSelect, recurrence: (RecurrenceInput & { timeZone?: string }) | null | undefined, invitedMemberIds: string[], now: Date): Promise<void> {
   const host = await requireActiveMember(db, actor);
   if (row.startsAt <= now) invalid("Choose a future start time before publishing the Event.");
   const [activity] = await db.select({ id: activities.id }).from(activities)
@@ -225,12 +228,14 @@ export async function publishGathering(db: Queryable, actor: Actor, row: typeof 
   if (!activity) invalid("Choose a current Activity in your Organisation.");
   if (row.placeSiteId) await validSite(db, actor.organisationId, row.placeSiteId);
   if (row.audienceSiteId) await validSite(db, actor.organisationId, row.audienceSiteId);
+  const timeZone = recurrence?.timeZone ?? await deploymentTimeZone(db);
+  if (recurrence?.endsOn && localDate(row.startsAt, timeZone) > recurrence.endsOn) invalid("The series end must include its first occurrence.");
   const [series] = recurrence ? await db.insert(recurrences).values({
     organisationId: row.organisationId, kind: row.kind, hostMemberId: row.hostMemberId,
     activityId: row.activityId, startsAt: row.startsAt, durationMinutes: row.durationMinutes,
     placeKind: row.placeKind, placeSiteId: row.placeSiteId, placeSpot: row.placeSpot, placeUrl: row.placeUrl,
     capacity: row.capacity, description: row.description, audienceKind: row.audienceKind, audienceScope: row.audienceScope,
-    audienceSiteId: row.audienceSiteId, createdAt: now, ...recurrence,
+    audienceSiteId: row.audienceSiteId, createdAt: now, ...recurrence, timeZone,
   }).returning() : [];
   await db.update(gatherings).set({ status: "scheduled", recurrenceId: series?.id, scheduledStartsAt: series ? row.startsAt : undefined }).where(gatheringWhere(actor.organisationId, row.id));
   await db.insert(gatheringMembers).values({ organisationId: actor.organisationId, gatheringId: row.id, memberId: actor.memberId, status: "participant" });
@@ -379,7 +384,7 @@ export async function noticeRecipients(db: Queryable, organisationId: string, me
 export async function notify(db: Queryable, organisationId: string, gathering: GatheringSummary, recipients: string[], kind: Notice["kind"], message: string, now: Date) {
   const place = gathering.place.kind === "physical" ? `${gathering.place.spot}, ${gathering.place.siteName}` : gathering.place.url;
   await recordNotices(db, organisationId, recipients, {
-    gatheringId: gathering.id, kind, ...gatheringNoticeText({ message, activity: gathering.activity.name, startsAt: gathering.startsAt, place, placeKind: gathering.place.kind }),
+    gatheringId: gathering.id, kind, ...gatheringNoticeText({ timeZone: await deploymentTimeZone(db), message, activity: gathering.activity.name, startsAt: gathering.startsAt, place, placeKind: gathering.place.kind }),
   }, now);
 }
 

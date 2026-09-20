@@ -1,3 +1,4 @@
+import { localDate } from "../../calendar";
 import { and, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import { expireIneligibleAvailabilities } from "./availability-records";
 import type { Queryable } from "./departments-and-sites";
@@ -43,7 +44,7 @@ export async function removeFromFutureOccurrences(db: Queryable, organisationId:
   const seriesIds = series.map((entry) => entry.id);
   const stopped = await db.update(recurrences).set({ stoppedAt: now }).where(and(
     eq(recurrences.organisationId, organisationId), inArray(recurrences.id, seriesIds), inArray(recurrences.hostMemberId, memberIds), isNull(recurrences.stoppedAt),
-  )).returning({ id: recurrences.id, kind: recurrences.kind, endsOn: recurrences.endsOn });
+  )).returning({ id: recurrences.id, kind: recurrences.kind, endsOn: recurrences.endsOn, timeZone: recurrences.timeZone });
   await db.delete(recurrenceMembers).where(and(eq(recurrenceMembers.organisationId, organisationId), inArray(recurrenceMembers.recurrenceId, seriesIds), inArray(recurrenceMembers.memberId, memberIds)));
   const future = and(eq(gatherings.organisationId, organisationId), gt(gatherings.startsAt, now));
   const hosted = await db.select({ id: gatherings.id, hostMemberId: gatherings.hostMemberId, recurrenceId: gatherings.recurrenceId }).from(gatherings)
@@ -54,7 +55,7 @@ export async function removeFromFutureOccurrences(db: Queryable, organisationId:
   }
   const cancelledSeries = new Set(hosted.map((row) => row.recurrenceId));
   for (const series of stopped) {
-    if (cancelledSeries.has(series.id) || series.endsOn && series.endsOn < now.toISOString().slice(0, 10)) continue;
+    if (cancelledSeries.has(series.id) || series.endsOn && series.endsOn < localDate(now, series.timeZone)) continue;
     notified.add(await notifySeriesStopped(db, organisationId, series, now, `This recurring ${meetupOrEvent(series)} has stopped. No further occurrences will be created.`));
   }
   const futureIds = db.select({ id: gatherings.id }).from(gatherings).where(future);

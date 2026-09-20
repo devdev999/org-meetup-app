@@ -1,3 +1,4 @@
+import { extractionSettings } from "./deployment-settings";
 import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { InterestKind } from "../ports";
@@ -102,6 +103,7 @@ export async function resolveInterests(deps: Deps, actor: Actor, inputs: { phras
   const phrases = inputs.map((input) => parse(z.object({ phrase: phraseSchema, kind: kindSchema }), input,
     "Enter an Interest of up to 120 characters and choose Skill or Hobby."));
   if (!phrases.length || signal?.aborted) return [];
+  const settings = await extractionSettings(deps);
   const [catalog, aliases, counts] = await Promise.all([
     listInterests(deps, actor),
     deps.db.select({
@@ -126,7 +128,7 @@ export async function resolveInterests(deps: Deps, actor: Actor, inputs: { phras
     const result = knownAlias ? undefined : await deps.ai.resolveInterest({
       phrase,
       shortlist: shortlist.map(({ interestId, name, kind }) => ({ name, kind, count: counts.find((entry) => entry.interestId === interestId)?.count ?? 0 })),
-    }, signal).catch(() => undefined);
+    }, settings, signal).catch(() => undefined);
     if (result && "existingName" in result) {
       const existing = shortlist.find((interest) => interest.name.toLowerCase() === result.existingName.toLowerCase());
       if (existing) proposed = { interestId: existing.interestId };

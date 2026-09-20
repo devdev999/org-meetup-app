@@ -28,7 +28,7 @@ async function member(name = "Ana", organisation = "ministry-a") {
 }
 
 async function emailDelivery(mode: "immediate" | "digest") {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await member();
   const bo = await member("Bo");
   const meetup = await createMeetup(ana);
@@ -43,7 +43,7 @@ async function emailDelivery(mode: "immediate" | "digest") {
 }
 
 test("a Member links Telegram with a ten-minute code that can only be used once", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await member();
   const link = await ana.beginTelegramLink();
   expect(link.expiresAt).toEqual(new Date("2026-09-18T09:10:00Z"));
@@ -63,7 +63,7 @@ test("a Member links Telegram with a ten-minute code that can only be used once"
 });
 
 test("a join keeps the place name on Telegram and carries the meeting URL by email", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await member();
   const bo = await member("Bo");
   await linkTelegram(ana, "101");
@@ -80,7 +80,7 @@ test("a join keeps the place name on Telegram and carries the meeting URL by ema
 });
 
 test("Members control each channel per notice kind, including urgent notices, without losing their inbox", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await member();
   const bo = await member("Bo");
   await linkTelegram(ana, "101");
@@ -102,7 +102,7 @@ test("Members control each channel per notice kind, including urgent notices, wi
 });
 
 test("non-urgent notices arrive on Telegram immediately while email batches into the next daily digest", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await member();
   const bo = await member("Bo");
   const cy = await member("Cy");
@@ -129,7 +129,7 @@ test("non-urgent notices arrive on Telegram immediately while email batches into
 });
 
 test("an edit to the time or Place emails participants immediately", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await member();
   const bo = await member("Bo");
   const meetup = await createMeetup(ana);
@@ -146,7 +146,7 @@ test("an edit to the time or Place emails participants immediately", async () =>
 });
 
 test("a permanently failing channel backs off and dead-letters instead of retrying forever", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await member();
   const bo = await member("Bo");
   await linkTelegram(ana, "101");
@@ -168,7 +168,7 @@ test("a permanently failing channel backs off and dead-letters instead of retryi
 });
 
 test("a Telegram join commits and does not throw when answering the callback fails", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await member();
   const bo = await member("Bo");
   await linkTelegram(bo, "102");
@@ -179,7 +179,7 @@ test("a Telegram join commits and does not throw when answering the callback fai
 });
 
 test("a Telegram button joins as the linked Member and answers with the result", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await member();
   const bo = await member("Bo");
   await linkTelegram(bo, "102");
@@ -194,7 +194,7 @@ test("a Telegram button joins as the linked Member and answers with the result",
 });
 
 test("a failed delivery leaves the inbox intact and concurrent worker retries do not resend successful channels", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await member();
   const bo = await member("Bo");
   await linkTelegram(ana, "101");
@@ -261,7 +261,7 @@ test.each(["immediate", "digest"] as const)("an expired %s email attempt cannot 
 });
 
 test("a Telegram join answers the callback before waiting for notice delivery", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await member();
   const bo = await member("Bo");
   await linkTelegram(ana, "101");
@@ -283,7 +283,7 @@ test("a Telegram join answers the callback before waiting for notice delivery", 
 });
 
 test("disabling a channel before a retry or digest prevents delivery and keeps the notices", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await member();
   const bo = await member("Bo");
   await linkTelegram(ana, "101");
@@ -304,8 +304,8 @@ test("disabling a channel before a retry or digest prevents delivery and keeps t
 });
 
 test("link codes and Telegram callbacks preserve Organisation boundaries", async () => {
-  await h.app.bootstrap(ministryA);
-  await h.app.bootstrap(ministryB);
+  await h.setupOrganisation(ministryA);
+  await h.setupOrganisation(ministryB);
   const ana = await member();
   const other = await member("Bo", "ministry-b");
   const old = await ana.beginTelegramLink();
@@ -328,7 +328,7 @@ test("link codes and Telegram callbacks preserve Organisation boundaries", async
 
 test("notification settings and Telegram links require acknowledgement and an Active Member", async () => {
   const adminPerson = { name: "Admin", email: "admin@example.test" };
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson });
+  await h.setupOrganisation({ ...ministryA, organisationAdmin: adminPerson });
   const adminMember = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "admin", ...adminPerson });
   const ana = await signInAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });
   const operations = [

@@ -167,6 +167,11 @@ ul.options a {
   max-width: 72rem;
 }
 
+.organisation-details {
+  grid-template-columns: minmax(0, 10rem) minmax(0, 1fr);
+  overflow-wrap: anywhere;
+}
+
 .admin-area nav {
   display: flex;
   flex-wrap: wrap;

@@ -12,7 +12,7 @@ function member(name: string) {
 }
 
 async function setup() {
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson });
+  await h.setupOrganisation({ ...ministryA, organisationAdmin: adminPerson });
   const olivia = await signInAndAcknowledgeAs(h, "ministry-a", adminPerson);
   return { olivia, admin: await olivia.organisationAdmin(), ana: await member("Ana"), bo: await member("Bo") };
 }
@@ -66,7 +66,7 @@ test.each(["meetup", "event"] as const)("a Member can Flag a visible private %s 
 test("Flag submission and resolution validate input and stay inside the Organisation", async () => {
   const { admin, ana, bo } = await setup();
   const otherAdminPerson = { sub: "other-admin", email: "other-admin@example.test", name: "Other Admin" };
-  await h.app.bootstrap({ ...ministryB, organisationAdmin: otherAdminPerson });
+  await h.setupOrganisation({ ...ministryB, organisationAdmin: otherAdminPerson });
   const otherMember = await signInAndAcknowledgeAs(h, "ministry-b", otherAdminPerson);
   const otherAdmin = await otherMember.organisationAdmin();
   const target = { kind: "member" as const, id: (await bo.profile()).memberId };
@@ -154,7 +154,7 @@ test("moderation rechecks current admin access and rejects another Organisation,
   await ana.flag({ target: { kind: "member", id: boId }, reason: "A private concern." });
   const [flag] = await admin.flags();
   const otherPerson = { sub: "other-admin", name: "Other Admin", email: "other-admin@example.test" };
-  await h.app.bootstrap({ ...ministryB, organisationAdmin: otherPerson });
+  await h.setupOrganisation({ ...ministryB, organisationAdmin: otherPerson });
   const other = await (await signInAndAcknowledgeAs(h, "ministry-b", otherPerson)).organisationAdmin();
   expect(await other.upcomingOccurrences()).toEqual([]);
   await expect(other.cancelMeetup(occurrence.id)).rejects.toBeInstanceOf(AccessDeniedError);
@@ -164,10 +164,7 @@ test("moderation rechecks current admin access and rejects another Organisation,
   await expect(ana.flag({ target: { kind: "event", id: occurrence.id }, reason: "Wrong kind." })).rejects.toBeInstanceOf(AccessDeniedError);
   h.clock.set(new Date("2026-09-18T10:00:00Z"));
   await expect(admin.cancelMeetup(occurrence.id)).rejects.toBeInstanceOf(InvalidInputError);
-  const secondPerson = { sub: "second", name: "Second Admin", email: "second@example.test" };
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: secondPerson });
-  const second = await (await signInAndAcknowledgeAs(h, "ministry-a", secondPerson)).organisationAdmin();
-  await second.suspendMember((await olivia.profile()).memberId);
+  await admin.suspendMember((await olivia.profile()).memberId);
   for (const action of [
     () => admin.flags(), () => admin.resolveFlag(flag!.id, "Resolved."), () => admin.upcomingOccurrences(),
     () => admin.cancelMeetup(occurrence.id), () => admin.cancelEvent(occurrence.id),

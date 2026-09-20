@@ -1,3 +1,5 @@
+import { calendarDayStart, localDate } from "../../calendar";
+import { readDeploymentSettings, deploymentTimeZone } from "./deployment-settings";
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt } from "drizzle-orm";
 import { z } from "zod";
@@ -28,7 +30,8 @@ function hash(code: string): string {
 }
 
 export async function beginTelegramLink(deps: Deps, actor: Actor): Promise<TelegramLink> {
-  if (!deps.telegram.botUsername) throw new InvalidInputError("invalid-telegram-link", "Telegram linking is unavailable.");
+  const { telegramBotUsername } = await readDeploymentSettings(deps.db, deps.deploymentDefaults);
+  if (!telegramBotUsername) throw new InvalidInputError("invalid-telegram-link", "Telegram linking is unavailable.");
   const code = randomBytes(24).toString("base64url");
   const codeHash = hash(code);
   const expiresAt = new Date(deps.clock.now().getTime() + 10 * 60_000);
@@ -36,7 +39,7 @@ export async function beginTelegramLink(deps: Deps, actor: Actor): Promise<Teleg
     await db.insert(telegramLinkCodes).values({ ...actor, codeHash, expiresAt })
       .onConflictDoUpdate({ target: [telegramLinkCodes.organisationId, telegramLinkCodes.memberId], set: { codeHash, expiresAt } });
   });
-  return { url: `https://t.me/${deps.telegram.botUsername}?start=${code}`, expiresAt };
+  return { url: `https://t.me/${telegramBotUsername}?start=${code}`, expiresAt };
 }
 
 export async function unlinkTelegram(deps: Deps, actor: Actor): Promise<void> {
@@ -134,6 +137,7 @@ async function handleAvailabilityTelegram(deps: Deps, command: Extract<TelegramC
   if (actor) {
     try {
       const choices = await meetupChoices(deps, actor);
+      const timeZone = await deploymentTimeZone(deps.db);
       if (command.kind === "availability-menu") {
         message = {
           chatId: command.chatId, text: choices.activities.length ? "What are you free for? Choose an Activity." : "No Activities are available. Open the app to check with your Organisation Admin.",
@@ -145,7 +149,7 @@ async function handleAvailabilityTelegram(deps: Deps, command: Extract<TelegramC
         const issuedAt = new Date(Math.floor(deps.clock.now().getTime() / 1000) * 1000);
         const kinds = choices.sites.some((site) => site.id === choices.defaultSiteId) ? ["physical", "virtual"] as const : ["virtual"] as const;
         message = {
-          chatId: command.chatId, text: `${activity.name}: choose a window. Windows end by midnight UTC.`,
+          chatId: command.chatId, text: `${activity.name}: choose a window. Windows end by midnight ${timeZone}.`,
           buttons: kinds.flatMap((kind) => [30, 60].map((minutes) => [{
             text: `Now for ${minutes} minutes ${kind === "physical" ? "at my Site" : "virtually"}`,
             action: { kind: "availability-post" as const, activityId: activity.id, issuedAt, minutes, placeKind: kind },
@@ -159,8 +163,7 @@ async function handleAvailabilityTelegram(deps: Deps, command: Extract<TelegramC
         if (!selected.success || issued > now.getTime() || now.getTime() - issued >= 10 * 60_000) {
           throw new InvalidInputError("invalid-availability", "Window unavailable.");
         }
-        const endOfDay = new Date(issued);
-        endOfDay.setUTCHours(24, 0, 0, 0);
+        const endOfDay = calendarDayStart(localDate(selected.data.issuedAt, timeZone), timeZone, 1);
         await postAvailability(deps, actor, {
           activityId: selected.data.activityId, startsAt: selected.data.issuedAt, kind: selected.data.placeKind,
           endsAt: new Date(Math.min(issued + selected.data.minutes * 60_000, endOfDay.getTime())),

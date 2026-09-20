@@ -8,7 +8,7 @@ const h = harness();
 const member = (name: string) => signInAndAcknowledgeAs(h, "ministry-a", { sub: name, name, email: `${name.toLowerCase()}@example.test` });
 
 async function setup() {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const ana = await member("Ana");
   const input: CreateMeetupInput = {
     activityId: (await ana.meetupChoices()).activities.find((entry) => entry.name === "coffee")!.id,
@@ -74,7 +74,7 @@ test.each(["meetup", "event"] as const)("%s Suggestions count distinct connected
   await participationFor(bo, kind).join(stronger.id);
   await participationFor(cy, kind).join(stronger.id);
   if (kind === "event") {
-    const admin = await (await signInAndAcknowledgeAs(h, "ministry-a", { sub: "event-admin", email: "event-admin@example.test", name: "Event Admin" })).organisationAdmin();
+    const admin = await h.organisationAdmin();
     await admin.reassignEventHost(fresh.id, (await cy.profile()).memberId);
   }
   const suggestions = kind === "event"

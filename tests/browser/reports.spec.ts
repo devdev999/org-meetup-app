@@ -49,6 +49,7 @@ test("reports filter and export every table while Platform Admin audit hides vie
     const platform = await platformContext.newPage();
     await signIn(platform, "Pat Platform", "pat@ministry-a.example");
     await platform.getByRole("link", { name: "Open Platform Admin area", exact: true }).click();
+    await platform.getByRole("link", { name: "Audit log", exact: true }).click();
     await expect(platform.getByRole("heading", { name: "Audit log", exact: true })).toBeVisible();
     await expect(platform.getByRole("cell").filter({ hasText: "Olivia Admin" }).first()).toBeVisible();
     expect(await platform.locator("body").innerText()).not.toContain(memberId);

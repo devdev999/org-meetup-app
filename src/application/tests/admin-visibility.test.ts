@@ -5,7 +5,7 @@ import { harness } from "./harness";
 const h = harness();
 
 test("a Member must acknowledge the notice before using protected commands and queries", async () => {
-  await h.app.bootstrap(ministryA);
+  await h.setupOrganisation(ministryA);
   const memberId = await signInForId(h, "ministry-a", ana);
   const actor = await signInAs(h, "ministry-a", ana);
   const noticeRequired = { name: "AdminVisibilityNoticeRequiredError" };

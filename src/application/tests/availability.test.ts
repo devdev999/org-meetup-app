@@ -12,7 +12,7 @@ async function member(name: string, site = "Harbour House", organisation = "mini
 }
 
 async function setup() {
-  await h.app.bootstrap(withDepartmentAndSiteClaims(ministryA));
+  await h.setupOrganisation(withDepartmentAndSiteClaims(ministryA));
   const ana = await member("Ana");
   const bo = await member("Bo");
   const choices = await ana.meetupChoices();
@@ -26,7 +26,7 @@ async function setup() {
 test("open Availability is visible at the Member's Site, or across the Organisation when virtual", async () => {
   const { ana, bo, input } = await setup();
   const cy = await member("Cy", "Hill House");
-  await h.app.bootstrap(withDepartmentAndSiteClaims(ministryB));
+  await h.setupOrganisation(withDepartmentAndSiteClaims(ministryB));
   const outsider = await member("Di", "Harbour House", "ministry-b");
   const physical = await ana.postAvailability(input);
   expect(physical).toMatchObject({ activity: { name: "coffee" }, place: { kind: "physical", siteName: "Harbour House" } });
@@ -178,7 +178,7 @@ test("conversion rejects expired, foreign, unrelated and stale Site overlaps wit
   const cy = await member("Cy", "Hill House");
   expect(await cy.availabilityMeetup(availabilityOverlap)).toBeUndefined();
   await expect(cy.createMeetup(confirmation)).rejects.toMatchObject({ code: "invalid-availability" });
-  await h.app.bootstrap(withDepartmentAndSiteClaims(ministryB));
+  await h.setupOrganisation(withDepartmentAndSiteClaims(ministryB));
   const outsider = await member("Di", "Harbour House", "ministry-b");
   expect(await outsider.availabilityMeetup(availabilityOverlap)).toBeUndefined();
   await expect(ana.createMeetup({ ...confirmation, activityId: choices.activities.find((entry) => entry.name === "lunch")!.id })).rejects.toMatchObject({ code: "invalid-availability" });
@@ -207,7 +207,7 @@ test("posting requires acknowledgement, a current Activity and Site, and a live 
   await expect(waiting.availability()).rejects.toMatchObject({ name: "AdminVisibilityNoticeRequiredError" });
   await ana.updateProfile({ department: null, site: null });
   await expect(ana.postAvailability(input)).rejects.toMatchObject({ code: "invalid-availability" });
-  await h.app.bootstrap(ministryB);
+  await h.setupOrganisation(ministryB);
   const outsider = await member("Di", "Harbour House", "ministry-b");
   await expect(ana.postAvailability({ ...input, kind: "virtual", activityId: (await outsider.meetupChoices()).activities[0]!.id })).rejects.toMatchObject({ code: "invalid-availability" });
   expect((await ana.availability()).open).toEqual([]);
@@ -227,7 +227,7 @@ test("Availability ends at midnight and the worker cannot revive it", async () =
 
 test("Organisation Admin Availability views record access and retired Activities hide their posts", async () => {
   const adminPerson = { sub: "olivia", email: "olivia@ministry-a.example", name: "Olivia Admin", building: "Harbour House" };
-  await h.app.bootstrap({ ...withDepartmentAndSiteClaims(ministryA), organisationAdmin: adminPerson });
+  await h.setupOrganisation({ ...withDepartmentAndSiteClaims(ministryA), organisationAdmin: adminPerson });
   const actor = await signInAndAcknowledgeAs(h, "ministry-a", adminPerson);
   const bo = await member("Bo");
   const input: PostAvailabilityInput = {

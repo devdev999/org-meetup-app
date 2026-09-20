@@ -1,3 +1,4 @@
+import { localDate } from "../../calendar";
 import { and, eq, gt, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import { requireActiveMember, withActiveMember, type Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
@@ -41,7 +42,7 @@ export async function joinSeries(deps: Deps, actor: Actor, id: string): Promise<
   return withActiveMember(deps, actor, async (db, current) => {
     const now = deps.clock.now();
     const series = await requireSeries(db, actor, id, current.siteId);
-    if (series.stoppedAt || series.endsOn && now > new Date(`${series.endsOn}T23:59:59.999Z`)) throw new InvalidInputError("invalid-meetup", "This series has ended.");
+    if (series.stoppedAt || series.endsOn && localDate(now, series.timeZone) > series.endsOn) throw new InvalidInputError("invalid-meetup", "This series has ended.");
     const standing = await db.select({ memberId: recurrenceMembers.memberId }).from(recurrenceMembers)
       .where(and(eq(recurrenceMembers.organisationId, actor.organisationId), eq(recurrenceMembers.recurrenceId, id)));
     if (standing.some(({ memberId }) => memberId === actor.memberId)) return [];

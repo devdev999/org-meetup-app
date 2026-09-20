@@ -12,7 +12,7 @@ function member(name: string) {
 }
 
 async function setup() {
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson });
+  await h.setupOrganisation({ ...ministryA, organisationAdmin: adminPerson });
   const admin = await (await signInAndAcknowledgeAs(h, "ministry-a", adminPerson)).organisationAdmin();
   const ana = await member("Ana");
   const bo = await member("Bo");
@@ -24,7 +24,7 @@ async function setup() {
 }
 
 test.each(["suspension", "departure"] as const)("%s cancels hosted occurrences, releases future seats and preserves past Attendance", async (change) => {
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson });
+  await h.setupOrganisation({ ...ministryA, organisationAdmin: adminPerson });
   const admin = await (await signInAndAcknowledgeAs(h, "ministry-a", adminPerson)).organisationAdmin();
   const ana = await member("Ana");
   const bo = await member("Bo");
@@ -82,7 +82,7 @@ test.each(["suspension", "departure"] as const)("%s cancels hosted occurrences, 
 });
 
 test.each(["meetup", "event"] as const)("suspension stops hosted %s series and removes standing places without cancelling a reassigned occurrence", async (kind) => {
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson });
+  await h.setupOrganisation({ ...ministryA, organisationAdmin: adminPerson });
   const admin = await (await signInAndAcknowledgeAs(h, "ministry-a", adminPerson)).organisationAdmin();
   const ana = participationFor(await member("Ana"), kind);
   const bo = participationFor(await member("Bo"), kind);
@@ -155,7 +155,7 @@ test.each(["meetup", "event"] as const)("lifecycle cleanup preserves ended and a
 });
 
 test("reinstatement does not retry old external notices while the inbox history remains", async () => {
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson });
+  await h.setupOrganisation({ ...ministryA, organisationAdmin: adminPerson });
   const admin = await (await signInAndAcknowledgeAs(h, "ministry-a", adminPerson)).organisationAdmin();
   const ana = await member("Ana");
   const bo = await member("Bo");
@@ -185,7 +185,7 @@ test("reinstatement does not retry old external notices while the inbox history 
 });
 
 test("batch departures release moved occurrences after a series ends and expire pending Invites", async () => {
-  await h.app.bootstrap({ ...ministryA, organisationAdmin: adminPerson });
+  await h.setupOrganisation({ ...ministryA, organisationAdmin: adminPerson });
   const admin = await (await signInAndAcknowledgeAs(h, "ministry-a", adminPerson)).organisationAdmin();
   const ana = await member("Ana");
   const bo = await member("Bo");

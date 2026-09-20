@@ -5,6 +5,7 @@ import { applicationFromEnv } from "../../src/config/wiring";
 import { runMigrations } from "../../src/db/migrate";
 import { createTestDatabase } from "../../src/testing/test-database";
 import { seedAttendance } from "./attendance-fixture";
+import { organisationSetup } from "../../src/testing/organisation-setup";
 
 const database = await createTestDatabase();
 try {
@@ -18,12 +19,14 @@ try {
     AI_PROVIDER: "memory",
     TELEGRAM_PROVIDER: "memory",
     EMAIL_PROVIDER: "memory",
+    EMAIL_FROM: "browser-notices@example.test",
+    TIME_ZONE: "UTC",
   });
   await runMigrations(database.pool);
-  await applicationFromEnv(database.pool).bootstrap({
+  await organisationSetup({ app: applicationFromEnv(database.pool) }).setupOrganisation({
     organisation: { slug: "ministry-a", name: "Ministry A", departments: ["Finance", "Legal"], sites: ["Harbour House"] },
     oidc: {
-      issuer: `${process.env.APP_URL}/dev-idp`, clientId: "browser-smoke", clientSecret: null,
+      issuer: `${process.env.APP_URL}/dev-idp`, clientId: "browser-smoke", credentialRef: null,
       claimMapping: { email: "email", name: "name", department: "department", site: "site" },
     },
     platformAdmin: { email: "pat@ministry-a.example", name: "Pat Platform" },

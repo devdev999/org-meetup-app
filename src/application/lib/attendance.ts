@@ -1,3 +1,4 @@
+import { deploymentTimeZone } from "./deployment-settings";
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
@@ -146,7 +147,7 @@ async function saveAttendance(db: Queryable, actor: Actor, id: string, selection
   const place = gathering.placeKind === "physical" ? `${gathering.placeSpot}, ${entry.siteName}` : gathering.placeUrl!;
   await recordNotices(db, actor.organisationId, [gathering.hostMemberId, ...participants.map((person) => person.memberId), ...selected], {
     gatheringId: id, kind: "attendance-confirmed",
-    ...gatheringNoticeText({ message: `The Host ${record?.confirmedAt ? "amended" : "recorded"} Attendance for this ${meetupOrEvent(gathering)}.`,
+    ...gatheringNoticeText({ timeZone: await deploymentTimeZone(db), message: `The Host ${record?.confirmedAt ? "amended" : "recorded"} Attendance for this ${meetupOrEvent(gathering)}.`,
       activity: entry.activityName, startsAt: gathering.startsAt, place, placeKind: gathering.placeKind }),
   }, now);
 }
@@ -192,7 +193,7 @@ export async function processAttendance(deps: Deps): Promise<void> {
         const place = gathering.placeKind === "physical" ? `${gathering.placeSpot}, ${siteName}` : gathering.placeUrl!;
         await recordNotices(db, organisationId, [gathering.hostMemberId], {
           gatheringId: gathering.id, kind: "attendance-prompt",
-          ...gatheringNoticeText({ message: `Confirm who came to this ${meetupOrEvent(gathering)}.`, activity: activityName,
+          ...gatheringNoticeText({ timeZone: await deploymentTimeZone(db), message: `Confirm who came to this ${meetupOrEvent(gathering)}.`, activity: activityName,
             startsAt: gathering.startsAt, place, placeKind: gathering.placeKind }),
         }, now);
         await db.insert(attendanceRecords).values({ organisationId, gatheringId: gathering.id, promptedHostMemberId: gathering.hostMemberId })
@@ -228,13 +229,13 @@ export interface ActivityRating {
   averageRating: number;
 }
 
-export async function ratings(db: Queryable, organisationId: string, period?: { start: Date; end: Date }): Promise<ActivityRating[]> {
-  return db.select({ activity: { id: activities.id, name: activities.name }, ratingCount: sql<number>`count(*)::integer`, averageRating: sql<number>`avg(${occurrenceRatings.value})::double precision` })
+export async function ratings(db: Queryable, organisationId: string | string[], period?: { start: Date; end: Date }): Promise<ActivityRating[]> {
+  return db.select({ activity: { id: sql<string>`min(${activities.id}::text)`, name: activities.name }, ratingCount: sql<number>`count(*)::integer`, averageRating: sql<number>`avg(${occurrenceRatings.value})::double precision` })
     .from(occurrenceRatings)
     .innerJoin(gatherings, and(eq(gatherings.organisationId, occurrenceRatings.organisationId), eq(gatherings.id, occurrenceRatings.gatheringId)))
     .innerJoin(activities, and(eq(activities.organisationId, gatherings.organisationId), eq(activities.id, gatherings.activityId)))
-    .where(and(eq(occurrenceRatings.organisationId, organisationId), period ? and(gte(gatherings.startsAt, period.start), lt(gatherings.startsAt, period.end)) : undefined))
-    .groupBy(activities.id, activities.name).orderBy(activities.name, activities.id);
+    .where(and(inArray(occurrenceRatings.organisationId, typeof organisationId === "string" ? [organisationId] : organisationId), period ? and(gte(gatherings.startsAt, period.start), lt(gatherings.startsAt, period.end)) : undefined))
+    .groupBy(activities.name).orderBy(activities.name);
 }
 
 export async function connectedMemberIds(db: Queryable, actor: Actor): Promise<Set<string>> {

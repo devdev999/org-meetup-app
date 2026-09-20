@@ -6,7 +6,7 @@ const h = harness();
 const adminPerson = { sub: "olivia", email: "olivia@ministry-a.example", name: "Olivia Admin" };
 
 async function adminAndMember() {
-  await h.app.bootstrap({ ...withDepartmentAndSiteClaims(ministryA), organisationAdmin: adminPerson });
+  await h.setupOrganisation({ ...withDepartmentAndSiteClaims(ministryA), organisationAdmin: adminPerson });
   const actor = await signInAndAcknowledgeAs(h, "ministry-a", adminPerson);
   const member = await signInAndAcknowledgeAs(h, "ministry-a", { ...ana, ou: "Legal", building: "Harbour House" });
   const sql = (await member.interests()).find((interest) => interest.name === "SQL")!;
@@ -83,7 +83,7 @@ test.each(["Member", "Platform Admin"])("Member discovery by a %s without the Or
 test("Member discovery and its audit log stay inside the Organisation Admin's Organisation", async () => {
   const { actor, admin, memberId } = await adminAndMember();
   const otherPerson = { sub: "admin-b", email: "admin@ministry-b.example", name: "Other Admin" };
-  await h.app.bootstrap({ ...ministryB, organisationAdmin: otherPerson });
+  await h.setupOrganisation({ ...ministryB, organisationAdmin: otherPerson });
   const otherActor = await signInAndAcknowledgeAs(h, "ministry-b", otherPerson);
   const otherAdmin = await otherActor.organisationAdmin();
   const otherMemberId = (await otherActor.profile()).memberId;

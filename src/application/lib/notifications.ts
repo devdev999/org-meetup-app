@@ -1,3 +1,5 @@
+import { formatTime, zonedTime } from "../../calendar";
+import { readDeploymentSettings, emailSender, deploymentTimeZone } from "./deployment-settings";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, lte, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
@@ -11,27 +13,19 @@ import { activities, gatheringRsvps, gatherings, invites, members, noticeDeliver
 
 export interface NoticePreference { kind: NoticeKind; telegram: boolean; email: boolean }
 
-export function gatheringNoticeText(input: { message: string; activity: string; startsAt: Date; place: string; placeKind: "physical" | "virtual" }) {
-  const time = `${input.startsAt.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+export function gatheringNoticeText(input: { message: string; activity: string; startsAt: Date; place: string; placeKind: "physical" | "virtual"; timeZone: string }) {
+  const time = formatTime(input.startsAt, input.timeZone);
   const line = (place: string) => `${input.message} ${input.activity}, ${time}, ${place}.`;
   return { message: line(input.place), externalMessage: line(input.placeKind === "virtual" ? "Online" : input.place), messagePrefix: input.message };
 }
 
 const URGENT_KINDS: NoticeKind[] = ["meetup-joined", "meetup-promoted", "meetup-cancelled", "meetup-edited", "invite-received", "invite-accepted", "availability-overlap", "rsvp-prompt", "attendance-prompt"];
 
-const DIGEST_HOUR_UTC = 9;
 const BATCH = 100;
 const LEASE_MS = 60_000;
 const RENEW_EVERY_MS = 20_000;
 const RETRY_DELAY_MS = 60_000;
 const MAX_ATTEMPTS = 15;
-
-function nextDigest(now: Date): Date {
-  const next = new Date(now);
-  next.setUTCHours(DIGEST_HOUR_UTC, 0, 0, 0);
-  if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
-  return next;
-}
 
 function channelEnabled(preference: { telegram: boolean; email: boolean } | undefined, channel: "telegram" | "email"): boolean {
   if (!preference) return true;
@@ -53,7 +47,7 @@ export async function notificationSettings(deps: Deps, actor: Actor): Promise<No
       .from(noticePreferences).where(and(eq(noticePreferences.organisationId, actor.organisationId), eq(noticePreferences.memberId, actor.memberId))),
   ]);
   return {
-    telegramAvailable: deps.telegram.botUsername !== null, telegramLinked: Boolean(link),
+    telegramAvailable: (await readDeploymentSettings(deps.db, deps.deploymentDefaults)).telegramBotUsername !== null, telegramLinked: Boolean(link),
     preferences: NOTICE_KINDS.map((kind) => preferences.find((preference) => preference.kind === kind) ?? { kind, telegram: true, email: true }),
   };
 }
@@ -69,6 +63,13 @@ export async function setNoticePreference(deps: Deps, actor: Actor, input: Notic
   });
 }
 
+function nextMorning(value: Date, timeZone: string): Date {
+  const local = zonedTime(value, timeZone);
+  let morning = local.toPlainDate().toPlainDateTime("09:00").toZonedDateTime(timeZone);
+  if (morning.epochMilliseconds <= value.getTime()) morning = morning.add({ days: 1 });
+  return new Date(morning.epochMilliseconds);
+}
+
 export async function recordNotices(db: Queryable, organisationId: string, recipients: string[],
   input: Pick<typeof notices.$inferInsert, "gatheringId" | "kind" | "message" | "externalMessage" | "messagePrefix">, now: Date): Promise<void> {
   if (!recipients.length) return;
@@ -78,13 +79,13 @@ export async function recordNotices(db: Queryable, organisationId: string, recip
     .where(and(eq(telegramLinks.organisationId, organisationId), inArray(telegramLinks.memberId, memberIds)));
   const preferences = await db.select().from(noticePreferences)
     .where(and(eq(noticePreferences.organisationId, organisationId), inArray(noticePreferences.memberId, memberIds), eq(noticePreferences.kind, input.kind)));
+  const urgent = URGENT_KINDS.includes(input.kind);
+  const scheduledFor = urgent ? now : nextMorning(now, await deploymentTimeZone(db));
   const deliveries: Array<typeof noticeDeliveries.$inferInsert> = [];
   for (const notice of created) {
     const base = { organisationId, noticeId: notice.id, mode: "immediate" as const, scheduledFor: now, availableAt: now };
     const preference = preferences.find((entry) => entry.memberId === notice.memberId);
     if (channelEnabled(preference, "email")) {
-      const urgent = URGENT_KINDS.includes(notice.kind);
-      const scheduledFor = urgent ? now : nextDigest(now);
       deliveries.push({ ...base, channel: "email", mode: urgent ? "immediate" : "digest", scheduledFor, availableAt: scheduledFor });
     }
     if (channelEnabled(preference, "telegram") && links.some((link) => link.memberId === notice.memberId)) deliveries.push({ ...base, channel: "telegram" });
@@ -193,7 +194,7 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
     }
     const content = row?.notice.kind === "invite-received" && row.gathering && row.activityName && row.notice.messagePrefix
       ? gatheringNoticeText({
-        message: row.notice.messagePrefix,
+        timeZone: await deploymentTimeZone(db),        message: row.notice.messagePrefix,
         activity: row.activityName, startsAt: row.gathering.startsAt,
         place: row.gathering.placeKind === "physical" ? `${row.gathering.placeSpot}, ${row.siteName}` : row.gathering.placeUrl!,
         placeKind: row.gathering.placeKind,
@@ -203,7 +204,7 @@ async function claimImmediate(deps: Deps, candidate: Pick<typeof noticeDeliverie
       if (row.notice.kind === "rsvp-prompt" && (!canAnswer || !rsvp)) return;
       if (row.notice.kind === "attendance-prompt" && !canConfirmAttendance) return;
       if (delivery.channel === "email") {
-        await deps.email.sendMessage({ id: row.notice.id, to: row.member.email, subject: row.notice.kind === "availability-overlap" ? "Availability overlap" : row.gathering?.kind === "event" ? "Event notice" : "Meetup notice", text: content!.message });
+        await deps.email.sendMessage({ from: await emailSender(deps), id: row.notice.id, to: row.member.email, subject: row.notice.kind === "availability-overlap" ? "Availability overlap" : row.gathering?.kind === "event" ? "Event notice" : "Meetup notice", text: content!.message });
       } else if (link) {
         await deps.telegram.sendMessage({
           chatId: link.chatId, text: content!.externalMessage,
@@ -261,7 +262,7 @@ async function claimDigest(deps: Deps, group: { organisationId: string; memberId
       const hasEvents = enabled.some((row) => row.gatheringKind === "event");
       const hasMeetups = enabled.some((row) => row.gatheringKind === "meetup");
       await deps.email.sendMessage({
-        id: `digest:${group.organisationId}:${group.memberId}:${group.scheduledFor.toISOString()}`,
+        from: await emailSender(deps),        id: `digest:${group.organisationId}:${group.memberId}:${group.scheduledFor.toISOString()}`,
         to: member.email, subject: hasEvents ? hasMeetups ? "Daily Meetup and Event digest" : "Daily Event digest" : "Daily Meetup digest", text: enabled.map(({ notice }) => notice.message).join("\n\n"),
       });
     };

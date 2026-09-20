@@ -1,13 +1,14 @@
+import { zonedTime } from "../../calendar";
 import type { Recurrence } from "../../application/index";
 import { SeriesAction } from "./series-action";
 
 export function RecurrenceDetails({ series }: { series: Recurrence }) {
-  const date = new Date(series.startsAt);
-  const weekday = date.toLocaleDateString("en-GB", { weekday: "long", timeZone: "UTC" });
-  const ordinal = ["first", "second", "third", "fourth", "fifth"][Math.floor((date.getUTCDate() - 1) / 7)];
+  const date = zonedTime(series.startsAt, series.timeZone);
+  const weekday = date.toLocaleString("en-GB", { weekday: "long" });
+  const ordinal = ["first", "second", "third", "fourth", "fifth"][Math.floor((date.day - 1) / 7)];
   const schedule = series.frequency === "monthly" ? `Monthly on the ${ordinal} ${weekday}` : `${series.frequency === "weekly" ? "Weekly" : "Fortnightly"} on ${weekday}`;
   return <>
-    <p>{schedule} at {date.toISOString().slice(11, 16)} UTC{series.endsOn ? `, through ${series.endsOn}` : ""}.</p>
+    <p>{schedule} at {date.toPlainTime().toString({ smallestUnit: "minute" })} {series.timeZone}{series.endsOn ? `, through ${series.endsOn}` : ""}.</p>
     <p>Series Host: {series.host.name}. {series.capacity === null ? `${series.standingCount} standing Participant${series.standingCount === 1 ? "" : "s"}. No capacity limit.` : `${series.standingCount} of ${series.capacity} standing places filled.`}</p>
     {series.isStanding && <p>You are a standing Participant.</p>}
     {series.stopped ? <p>This series has stopped.</p> : series.ended && <p>This series has ended.</p>}

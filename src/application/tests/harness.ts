@@ -7,7 +7,8 @@ import { MemoryTelegram } from "../../adapters/telegram/memory";
 import { MemoryEmail } from "../../adapters/email/memory";
 import { runMigrations } from "../../db/migrate";
 import { createTestDatabase } from "../../testing/test-database";
-import { createApplication, type Application } from "../index";
+import { createApplication, type Application, type OrganisationAdminActions } from "../index";
+import { organisationSetup, type TestOrganisationConfig } from "./fixtures";
 
 /**
  * One real Postgres database per test file, created from scratch and migrated,
@@ -21,6 +22,8 @@ export interface Harness {
   ai: MemoryAi;
   telegram: MemoryTelegram;
   email: MemoryEmail;
+  setupOrganisation(config: TestOrganisationConfig): Promise<void>;
+  organisationAdmin(slug?: string): Promise<OrganisationAdminActions>;
 }
 
 export const START_OF_TEST = new Date("2026-09-18T09:00:00.000Z");
@@ -40,9 +43,9 @@ export function harness(): Harness {
     h.identity = new FakeIdentity();
     h.clock = new ControllableClock(START_OF_TEST);
     h.ai = new MemoryAi();
-    h.telegram = new MemoryTelegram("meetups_test_bot");
+    h.telegram = new MemoryTelegram();
     h.email = new MemoryEmail();
-    h.app = createApplication({ pool, identity: h.identity, clock: h.clock, ai: h.ai, telegram: h.telegram, email: h.email });
+    h.app = createApplication({ deploymentDefaults: { telegramBotUsername: "meetups_test_bot", emailFrom: "meetups@example.test" }, pool, identity: h.identity, clock: h.clock, ai: h.ai, telegram: h.telegram, email: h.email });
   });
 
   beforeEach(async () => {
@@ -51,6 +54,7 @@ export function harness(): Harness {
     h.ai.reset();
     h.telegram.reset();
     h.email.reset();
+    Object.assign(h, organisationSetup(h));
   });
 
   afterAll(async () => {

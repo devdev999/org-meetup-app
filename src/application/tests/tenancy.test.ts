@@ -9,8 +9,8 @@ const bo: RawClaims = { sub: "bo-1", email: "bo@ministry-a.example", name: "Bo C
 const cleo: RawClaims = { sub: "cleo-1", email: "cleo@ministry-b.example", name: "Cleo Marsh" };
 
 test("a Member sees another Member of their own Organisation and nothing of another Organisation's Member", async () => {
-  await h.app.bootstrap(ministryA);
-  await h.app.bootstrap(ministryB);
+  await h.setupOrganisation(ministryA);
+  await h.setupOrganisation(ministryB);
   const anaId = await signInForId(h, "ministry-a", ana);
   const cleoId = await signInForId(h, "ministry-b", cleo);
   const boActor = await signInAndAcknowledgeAs(h, "ministry-a", bo);
@@ -20,8 +20,8 @@ test("a Member sees another Member of their own Organisation and nothing of anot
 });
 
 test("the same email signing in with two Organisations' issuers is two separate Members", async () => {
-  await h.app.bootstrap(ministryA);
-  await h.app.bootstrap(ministryB);
+  await h.setupOrganisation(ministryA);
+  await h.setupOrganisation(ministryB);
 
   const inA = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   const inB = await signInAndAcknowledgeAs(h, "ministry-b", ana);
@@ -34,8 +34,8 @@ test("the same email signing in with two Organisations' issuers is two separate 
 });
 
 test("Departments and Sites are settings of one Organisation: never offered to, nor choosable by, another", async () => {
-  await h.app.bootstrap(ministryA);
-  await h.app.bootstrap(withDepartmentAndSiteClaims(ministryB));
+  await h.setupOrganisation(ministryA);
+  await h.setupOrganisation(withDepartmentAndSiteClaims(ministryB));
   const cleoActor = await signInAndAcknowledgeAs(h, "ministry-b", { ...cleo, ou: "Finance", building: "Harbour House" });
   const anaActor = await signInAndAcknowledgeAs(h, "ministry-a", ana);
 

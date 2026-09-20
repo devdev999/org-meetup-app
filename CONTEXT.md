@@ -113,7 +113,7 @@ _Avoid_: check-in, turnout
 ### Administration and safety
 
 **Platform Admin**:
-A person who runs the whole platform: creates Organisations and sees reporting across them.
+A Member of the platform owner's Organisation who creates Organisations, manages deployment settings and sees reporting across them.
 _Avoid_: super admin, root, operator
 
 **Organisation Admin**:

@@ -38,7 +38,7 @@ export interface PendingSignIn {
   startedAt: string;
 }
 
-export type SignInErrorCode = "unknown-organisation" | "expired" | "rejected" | "no-email" | "unverified-email" | "inactive-member";
+export type SignInErrorCode = "unknown-organisation" | "expired" | "rejected" | "no-email" | "unverified-email" | "inactive-member" | "not-configured";
 
 export class SignInError extends Error {
   constructor(
@@ -68,6 +68,7 @@ export async function beginSignIn(
   input: BeginSignInInput,
 ): Promise<{ authorizationUrl: string; pending: PendingSignIn }> {
   const { oidc } = await issuerOf(db, input.organisationSlug);
+  if (!identity.isConfigured(oidc)) throw new SignInError("not-configured", "The Organisation's sign-in credential is not installed.");
   const pending: PendingSignIn = {
     organisationSlug: input.organisationSlug,
     redirectUri: input.redirectUri,
@@ -228,7 +229,7 @@ async function issuerOf(db: Deps["db"], organisationSlug: string) {
       organisation: { id: organisations.id, slug: organisations.slug, name: organisations.name },
       issuer: organisationOidcSettings.issuer,
       clientId: organisationOidcSettings.clientId,
-      clientSecret: organisationOidcSettings.clientSecret,
+      credentialRef: organisationOidcSettings.credentialRef,
       claimMapping: organisationOidcSettings.claimMapping,
     })
     .from(organisations)
@@ -240,7 +241,7 @@ async function issuerOf(db: Deps["db"], organisationSlug: string) {
   }
   return {
     organisation: row.organisation,
-    oidc: { issuer: row.issuer, clientId: row.clientId, clientSecret: row.clientSecret },
+    oidc: { issuer: row.issuer, clientId: row.clientId, credentialRef: row.credentialRef },
     claimMapping: row.claimMapping,
   };
 }
