@@ -9,9 +9,11 @@ import { organisationAdmin, type OrganisationAdminActions } from "./organisation
 import { answerInvite, cancelMeetup, createMeetup, editMeetup, handOverMeetup, inbox, inviteChoices, inviteMember, joinMeetup, leaveMeetup, listMeetups, meetupChoices, viewMeetup, type CreateMeetupInput, type EditMeetupInput, type Invite, type InviteAnswer, type InviteChoices, type InviteSearch, type MeetupChoices, type MeetupDetail, type MeetupSummary, type Notice } from "./meetups";
 import { departments, interestAliases, interests, memberInterests, members, organisations, sites } from "./schema";
 import type { InterestKind } from "../ports";
-import { confirmInterest, listInterests, memberInterestList, resolveInterest, setInterestStance, type ConfirmInterestInput, type Interest, type InterestResolution, type MemberInterest, type Stance } from "./interests";
+import { confirmInterest, listInterests, memberInterestList, memberInterestsFor, resolveInterest, setInterestStance, type ConfirmInterestInput, type Interest, type InterestResolution, type MemberInterest, type Stance } from "./interests";
 import { beginTelegramLink, unlinkTelegram, type TelegramLink } from "./telegram";
 import { deliverSoon, notificationSettings, setNoticePreference, type NotificationSettings, type NoticePreference } from "./notifications";
+import { inviteSuggestions, meetupSuggestions, previewInviteSuggestions, type InviteSuggestion, type MeetupSuggestion, type PreviewInviteSuggestionsInput } from "./suggestions";
+import { extractMeetupInterests, type ExtractMeetupInterestsInput } from "./meetup-interests";
 
 export type MemberStatus = (typeof members.status.enumValues)[number];
 
@@ -81,7 +83,12 @@ export interface MemberActions {
   cancelMeetup(id: string): Promise<void>;
   handOverMeetup(id: string, participantMemberId: string): Promise<void>;
   inviteMember(meetupId: string, memberId: string): Promise<Invite>;
+  inviteSuggestedMember(meetupId: string, memberId: string, previousInviteId?: string): Promise<Invite>;
   inviteChoices(meetupId: string, input?: InviteSearch): Promise<InviteChoices>;
+  inviteSuggestions(meetupId: string): Promise<InviteSuggestion[]>;
+  previewInviteSuggestions(input: PreviewInviteSuggestionsInput): Promise<InviteSuggestion[]>;
+  meetupSuggestions(): Promise<MeetupSuggestion[]>;
+  extractMeetupInterests(input: ExtractMeetupInterestsInput, signal?: AbortSignal): Promise<InterestResolution[]>;
   answerInvite(inviteId: string, answer: "accept" | "decline"): Promise<InviteAnswer>;
   interests(): Promise<Interest[]>;
   myInterests(): Promise<MemberInterest[]>;
@@ -134,7 +141,11 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     notificationSettings: () => notificationSettings(deps, actor),
     setNoticePreference: (input) => setNoticePreference(deps, actor, input),
     meetupChoices: () => meetupChoices(deps, actor),
-    createMeetup: (input) => createMeetup(deps, actor, input),
+    createMeetup: async (input) => {
+      const meetup = await createMeetup(deps, actor, input);
+      if (meetup.invites?.length) await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: meetup.id });
+      return meetup;
+    },
     listMeetups: () => listMeetups(deps, actor),
     viewMeetup: (id) => viewMeetup(deps, actor, id),
     joinMeetup: (id) => withNotices(id, () => joinMeetup(deps, actor, id)),
@@ -144,7 +155,12 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     cancelMeetup: (id) => withNotices(id, () => cancelMeetup(deps, actor, id)),
     handOverMeetup: (id, participantMemberId) => withNotices(id, () => handOverMeetup(deps, actor, id, participantMemberId)),
     inviteMember: (id, memberId) => withNotices(id, () => inviteMember(deps, actor, id, memberId)),
+    inviteSuggestedMember: (id, memberId, previousInviteId) => withNotices(id, () => inviteMember(deps, actor, id, memberId, { previousInviteId, fromSuggestion: true })),
     inviteChoices: (id, input = {}) => afterNotice(() => inviteChoices(deps, actor, id, input), { action: "meetup-invite-choices", filter: { meetupId: id, name: input.name ?? "", page: String(input.page ?? 0) } }),
+    inviteSuggestions: (id) => afterNotice(() => inviteSuggestions(deps, actor, id), { action: "invite-suggestions", filter: { meetupId: id } }),
+    previewInviteSuggestions: (input) => afterNotice(() => previewInviteSuggestions(deps, actor, input), { action: "invite-suggestions-preview", filter: input?.place?.kind === "physical" ? { placeKind: input.place.kind, siteId: input.place.siteId } : { placeKind: input?.place?.kind } }),
+    meetupSuggestions: () => afterNotice(() => meetupSuggestions(deps, actor), { action: "meetup-suggestions", filter: {} }),
+    extractMeetupInterests: (input, signal) => afterNotice(() => extractMeetupInterests(deps, actor, input, signal)),
     answerInvite: async (id, answer) => {
       const result = await answerInvite(deps, actor, id, answer);
       await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: result.meetupId });
@@ -293,10 +309,6 @@ async function searchMembers({ db }: Deps, actor: Actor, input: MemberSearch): P
         .where(and(eq(memberInterests.organisationId, actor.organisationId), eq(memberInterests.memberId, members.id), or(ilike(interests.name, pattern), ilike(interestAliases.phrase, pattern))))) : undefined,
     )).orderBy(asc(members.name), asc(members.id));
   if (!rows.length) return [];
-  const declarations = await db.select({ memberId: memberInterests.memberId, interestId: interests.id, name: interests.name, kind: interests.kind, stance: memberInterests.stance })
-    .from(memberInterests)
-    .innerJoin(interests, and(eq(interests.organisationId, memberInterests.organisationId), eq(interests.id, memberInterests.interestId)))
-    .where(and(eq(memberInterests.organisationId, actor.organisationId), inArray(memberInterests.memberId, rows.map((row) => row.memberId))))
-    .orderBy(asc(interests.kind), asc(interests.name));
+  const declarations = await memberInterestsFor(db, actor.organisationId, rows.map((row) => row.memberId));
   return rows.map((row) => ({ ...row, interests: declarations.filter((declaration) => declaration.memberId === row.memberId).map(({ memberId: _, ...interest }) => interest) }));
 }

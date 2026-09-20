@@ -16,6 +16,11 @@ x-app-environment: &app-environment
   IDENTITY_PROVIDER: fake
   # The web image runs with NODE_ENV=production, which refuses the fake issuer unless a local run says so.
   ALLOW_FAKE_IDENTITY: "yes"
+  AI_PROVIDER: ${AI_PROVIDER:-memory}
+  AI_BASE_URL: ${AI_BASE_URL:-}
+  AI_API_KEY: ${AI_API_KEY:-}
+  AI_MODEL: ${AI_MODEL:-}
+  AI_EXTRACTION_MODEL: ${AI_EXTRACTION_MODEL:-}
   TELEGRAM_PROVIDER: ${TELEGRAM_PROVIDER:-memory}
   TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}

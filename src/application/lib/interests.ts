@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { InterestKind } from "../ports";
 import { requireActiveMember, VISIBLE_MEMBER_STATUSES, type Actor } from "./actor";
 import type { Database } from "./db";
+import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
 import { interests, interestAliases, memberInterests, members } from "./schema";
@@ -21,9 +22,11 @@ export interface InterestResolution {
   proposed: InterestSelection;
   shortlist: Interest[];
 }
-export interface ConfirmInterestInput {
+export interface InterestChoice {
   phrase: string;
   selection: InterestSelection;
+}
+export interface ConfirmInterestInput extends InterestChoice {
   stance: Stance;
 }
 
@@ -43,9 +46,11 @@ const selectionSchema = z.union([
   z.object({ interestId: z.uuid() }),
   z.object({ name: z.string().trim().min(1).max(120), kind: kindSchema }),
 ]);
-const confirmSchema = z.object({
+export const interestChoiceSchema = z.object({
   phrase: phraseSchema,
   selection: selectionSchema,
+});
+const confirmSchema = interestChoiceSchema.extend({
   stance: z.enum(["shares", "seeks"]),
 });
 
@@ -76,56 +81,70 @@ export function listInterests({ db }: Deps, actor: Actor): Promise<Interest[]> {
     .from(interests).where(eq(interests.organisationId, actor.organisationId)).orderBy(asc(interests.kind), asc(interests.name));
 }
 
-export function memberInterestList({ db }: Deps, actor: Actor, memberId = actor.memberId): Promise<MemberInterest[]> {
-  return db.select({ interestId: interests.id, name: interests.name, kind: interests.kind, stance: memberInterests.stance })
+export function memberInterestsFor(db: Queryable, organisationId: string, memberIds: string[]): Promise<(MemberInterest & { memberId: string })[]> {
+  if (!memberIds.length) return Promise.resolve([]);
+  return db.select({ memberId: memberInterests.memberId, interestId: interests.id, name: interests.name, kind: interests.kind, stance: memberInterests.stance })
     .from(memberInterests)
     .innerJoin(interests, and(eq(interests.organisationId, memberInterests.organisationId), eq(interests.id, memberInterests.interestId)))
-    .where(and(eq(memberInterests.organisationId, actor.organisationId), eq(memberInterests.memberId, memberId)))
+    .where(and(eq(memberInterests.organisationId, organisationId), inArray(memberInterests.memberId, memberIds)))
     .orderBy(asc(interests.kind), asc(interests.name));
 }
 
+export async function memberInterestList({ db }: Deps, actor: Actor, memberId = actor.memberId): Promise<MemberInterest[]> {
+  return (await memberInterestsFor(db, actor.organisationId, [memberId])).map(({ memberId: _, ...interest }) => interest);
+}
+
 export async function resolveInterest(deps: Deps, actor: Actor, input: { phrase: string; kind: InterestKind }): Promise<InterestResolution> {
-  const { phrase, kind } = parse(z.object({ phrase: phraseSchema, kind: kindSchema }), input,
-    "Enter an Interest of up to 120 characters and choose Skill or Hobby.");
-  const catalog = await listInterests(deps, actor);
-  const aliases = await deps.db.select({
-    interestId: interestAliases.interestId, phrase: interestAliases.phrase,
-    matchesPhrase: eq(interestAliases.phraseKey, aliasKey(phrase)),
-  })
-    .from(interestAliases).where(eq(interestAliases.organisationId, actor.organisationId));
-  const knownAlias = aliases.find((alias) => alias.matchesPhrase);
-  const ranked = catalog.map((interest) => ({
-    interest,
-    score: Math.max(similarity(phrase, interest.name), ...aliases.filter((alias) => alias.interestId === interest.interestId).map((alias) => similarity(phrase, alias.phrase))),
-  })).filter(({ score }) => score > MIN_SHORTLIST_SCORE).sort((a, b) => b.score - a.score || a.interest.name.localeCompare(b.interest.name));
-  const shortlist = ranked.slice(0, SHORTLIST_SIZE).map(({ interest }) => interest);
-  const closest = ranked[0];
-  let proposed: InterestSelection = closest && closest.score >= FALLBACK_PROPOSAL_SCORE ? { interestId: closest.interest.interestId } : { name: phrase.trim(), kind };
-  const counts = await deps.db.select({ interestId: memberInterests.interestId, count: count() }).from(memberInterests)
-    .innerJoin(members, and(eq(members.organisationId, memberInterests.organisationId), eq(members.id, memberInterests.memberId)))
-    .where(and(eq(memberInterests.organisationId, actor.organisationId), inArray(members.status, VISIBLE_MEMBER_STATUSES)))
-    .groupBy(memberInterests.interestId);
-  const result = await deps.ai.resolveInterest({
-    phrase,
-    shortlist: shortlist.map(({ interestId, name, kind }) => ({ name, kind, count: counts.find((entry) => entry.interestId === interestId)?.count ?? 0 })),
-  }).catch(() => undefined);
-  if (result && "existingName" in result) {
-    const existing = shortlist.find((interest) => interest.name.toLowerCase() === result.existingName.toLowerCase());
-    if (existing) proposed = { interestId: existing.interestId };
-  } else if (result) {
-    const valid = selectionSchema.safeParse(result);
-    if (valid.success) proposed = valid.data;
-  }
-  if (knownAlias) proposed = { interestId: knownAlias.interestId };
-  const selection = proposed;
-  const existing = "name" in selection
-    ? catalog.find((interest) => interest.name.toLowerCase() === selection.name.trim().toLowerCase())
-    : catalog.find((interest) => interest.interestId === selection.interestId);
-  if (existing) {
-    proposed = { interestId: existing.interestId };
-    if (!shortlist.some((interest) => interest.interestId === existing.interestId)) shortlist.unshift(existing);
-  }
-  return { phrase, proposed, shortlist };
+  return (await resolveInterests(deps, actor, [input]))[0]!;
+}
+
+export async function resolveInterests(deps: Deps, actor: Actor, inputs: { phrase: string; kind: InterestKind }[], signal?: AbortSignal): Promise<InterestResolution[]> {
+  const phrases = inputs.map((input) => parse(z.object({ phrase: phraseSchema, kind: kindSchema }), input,
+    "Enter an Interest of up to 120 characters and choose Skill or Hobby."));
+  if (!phrases.length || signal?.aborted) return [];
+  const [catalog, aliases, counts] = await Promise.all([
+    listInterests(deps, actor),
+    deps.db.select({
+      interestId: interestAliases.interestId, phrase: interestAliases.phrase,
+      matches: sql<boolean[]>`array[${sql.join(phrases.map(({ phrase }) => eq(interestAliases.phraseKey, aliasKey(phrase))), sql`, `)}]`,
+    }).from(interestAliases).where(eq(interestAliases.organisationId, actor.organisationId)),
+    deps.db.select({ interestId: memberInterests.interestId, count: count() }).from(memberInterests)
+      .innerJoin(members, and(eq(members.organisationId, memberInterests.organisationId), eq(members.id, memberInterests.memberId)))
+      .where(and(eq(memberInterests.organisationId, actor.organisationId), inArray(members.status, VISIBLE_MEMBER_STATUSES)))
+      .groupBy(memberInterests.interestId),
+  ]);
+  if (signal?.aborted) return [];
+  return Promise.all(phrases.map(async ({ phrase, kind }, index) => {
+    const knownAlias = aliases.find((alias) => alias.matches[index]);
+    const ranked = catalog.map((interest) => ({
+      interest,
+      score: Math.max(similarity(phrase, interest.name), ...aliases.filter((alias) => alias.interestId === interest.interestId).map((alias) => similarity(phrase, alias.phrase))),
+    })).filter(({ score }) => score > MIN_SHORTLIST_SCORE).sort((a, b) => b.score - a.score || a.interest.name.localeCompare(b.interest.name));
+    const shortlist = ranked.slice(0, SHORTLIST_SIZE).map(({ interest }) => interest);
+    const closest = ranked[0];
+    let proposed: InterestSelection = closest && closest.score >= FALLBACK_PROPOSAL_SCORE ? { interestId: closest.interest.interestId } : { name: phrase.trim(), kind };
+    const result = knownAlias ? undefined : await deps.ai.resolveInterest({
+      phrase,
+      shortlist: shortlist.map(({ interestId, name, kind }) => ({ name, kind, count: counts.find((entry) => entry.interestId === interestId)?.count ?? 0 })),
+    }, signal).catch(() => undefined);
+    if (result && "existingName" in result) {
+      const existing = shortlist.find((interest) => interest.name.toLowerCase() === result.existingName.toLowerCase());
+      if (existing) proposed = { interestId: existing.interestId };
+    } else if (result) {
+      const valid = selectionSchema.safeParse(result);
+      if (valid.success) proposed = valid.data;
+    }
+    if (knownAlias) proposed = { interestId: knownAlias.interestId };
+    const selection = proposed;
+    const existing = "name" in selection
+      ? catalog.find((interest) => interest.name.toLowerCase() === selection.name.trim().toLowerCase())
+      : catalog.find((interest) => interest.interestId === selection.interestId);
+    if (existing) {
+      proposed = { interestId: existing.interestId };
+      if (!shortlist.some((interest) => interest.interestId === existing.interestId)) shortlist.unshift(existing);
+    }
+    return { phrase, proposed, shortlist };
+  }));
 }
 
 function similarity(left: string, right: string): number {
@@ -149,36 +168,41 @@ export async function confirmInterest(deps: Deps, actor: Actor, input: ConfirmIn
     "Enter an Interest of up to 120 characters, choose its listing, and choose Shares or Seeks.");
   await deps.db.transaction(async (tx) => {
     await requireActiveMember(tx, actor);
-    let interestId: string;
-    if ("interestId" in selection) {
-      const [existing] = await tx.select({ id: interests.id }).from(interests)
-        .where(and(eq(interests.organisationId, actor.organisationId), eq(interests.id, selection.interestId)));
-      if (!existing) throw new InvalidInputError("unknown-interest", "Choose an Interest from your Organisation.");
-      interestId = existing.id;
-    } else {
-      const [interest] = await tx.insert(interests).values({
-        organisationId: actor.organisationId, name: selection.name, nameKey: selection.name.toLowerCase(), kind: selection.kind, createdAt: deps.clock.now(),
-      }).onConflictDoUpdate({ target: [interests.organisationId, interests.nameKey], set: { nameKey: selection.name.toLowerCase() } })
-        .returning({ id: interests.id, name: interests.name, kind: interests.kind });
-      if (interest!.name !== selection.name || interest!.kind !== selection.kind) {
-        throw new InvalidInputError("interest-name-conflict", "An Interest with this name already exists with a different spelling or kind. Preview again and confirm the existing Interest, or use another name.");
-      }
-      interestId = interest!.id;
-    }
-    const [alias] = await tx.insert(interestAliases).values({
-      organisationId: actor.organisationId, interestId, phrase, phraseKey: aliasKey(phrase), createdAt: deps.clock.now(),
-    }).onConflictDoUpdate({
-      target: [interestAliases.organisationId, interestAliases.phraseKey],
-      set: { phrase },
-      setWhere: eq(interestAliases.interestId, interestId),
-    }).returning({ interestId: interestAliases.interestId });
-    if (!alias) {
-      throw new InvalidInputError("alias-conflict", "This phrase already refers to another Interest. Confirm that Interest or use a different phrase.");
-    }
+    const interestId = await saveInterestChoice(tx, actor.organisationId, { phrase, selection }, deps.clock.now());
     await tx.insert(memberInterests).values({ organisationId: actor.organisationId, memberId: actor.memberId, interestId, stance })
       .onConflictDoUpdate({ target: [memberInterests.organisationId, memberInterests.memberId, memberInterests.interestId], set: { stance } });
   });
   return memberInterestList(deps, actor);
+}
+
+export async function saveCanonicalInterest(db: Queryable, organisationId: string, selection: InterestSelection, now: Date): Promise<string> {
+  if ("interestId" in selection) {
+    const [existing] = await db.select({ id: interests.id }).from(interests)
+      .where(and(eq(interests.organisationId, organisationId), eq(interests.id, selection.interestId)));
+    if (!existing) throw new InvalidInputError("unknown-interest", "Choose an Interest from your Organisation.");
+    return existing.id;
+  }
+  const [interest] = await db.insert(interests).values({
+    organisationId, name: selection.name, nameKey: selection.name.toLowerCase(), kind: selection.kind, createdAt: now,
+  }).onConflictDoUpdate({ target: [interests.organisationId, interests.nameKey], set: { nameKey: selection.name.toLowerCase() } })
+    .returning({ id: interests.id, name: interests.name, kind: interests.kind });
+  if (interest!.name !== selection.name || interest!.kind !== selection.kind) {
+    throw new InvalidInputError("interest-name-conflict", "An Interest with this name already exists with a different spelling or kind. Preview again and confirm the existing Interest, or use another name.");
+  }
+  return interest!.id;
+}
+
+export async function saveInterestChoice(db: Queryable, organisationId: string, { phrase, selection }: InterestChoice, now: Date): Promise<string> {
+  const interestId = await saveCanonicalInterest(db, organisationId, selection, now);
+  const [alias] = await db.insert(interestAliases).values({
+    organisationId, interestId, phrase, phraseKey: aliasKey(phrase), createdAt: now,
+  }).onConflictDoUpdate({
+    target: [interestAliases.organisationId, interestAliases.phraseKey],
+    set: { phrase },
+    setWhere: eq(interestAliases.interestId, interestId),
+  }).returning({ interestId: interestAliases.interestId });
+  if (!alias) throw new InvalidInputError("alias-conflict", "This phrase already refers to another Interest. Confirm that Interest or use a different phrase.");
+  return interestId;
 }
 
 export async function setInterestStance(deps: Deps, actor: Actor, input: { interestId: string; stance: Stance }): Promise<MemberInterest[]> {

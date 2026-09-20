@@ -96,6 +96,19 @@ label {
   font-weight: 500;
 }
 
+fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+}
+
+legend {
+  padding: 0 0.3rem;
+  font-weight: 600;
+}
+
 input, select, textarea {
   font: inherit;
   padding: 0.55rem 0.7rem;
@@ -219,6 +232,10 @@ th {
 .interest-list, .member-list, .meetup-list {
   list-style: none;
   padding: 0;
+}
+
+.member-list, .meetup-list {
+  overflow-wrap: anywhere;
 }
 
 .meetup-list > li {

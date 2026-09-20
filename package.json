@@ -18,6 +18,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "lint:boundaries": "depcruise src",
     "test": "vitest run",
+    "test:browser": "tsx tests/browser/run.ts",
     "test:watch": "vitest",
     "check": "pnpm typecheck && pnpm lint:boundaries && pnpm test"
   },
@@ -36,6 +37,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/node": "24.13.5",
     "@types/nodemailer": "8.0.2",
     "@types/pg": "8.23.1",

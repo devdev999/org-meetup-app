@@ -68,8 +68,12 @@ export interface AiInterestRequest {
 
 export type AiInterestResolution = { existingName: string } | { name: string; kind: InterestKind };
 
+export interface AiExtractionRequest { activity: string; description: string }
+export interface AiExtractedInterest { phrase: string; kind: InterestKind }
+
 export interface AiPort {
-  resolveInterest(input: AiInterestRequest): Promise<AiInterestResolution>;
+  resolveInterest(input: AiInterestRequest, signal?: AbortSignal): Promise<AiInterestResolution>;
+  extractInterests(input: AiExtractionRequest, signal?: AbortSignal): Promise<AiExtractedInterest[]>;
 }
 
 export interface TelegramMessage {

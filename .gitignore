@@ -7,6 +7,8 @@ node_modules/
 .next/
 dist/
 *.tsbuildinfo
+test-results/
+playwright-report/
 next-env.d.ts
 
 # Local environment

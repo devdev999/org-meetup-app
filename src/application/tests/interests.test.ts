@@ -19,17 +19,18 @@ test("a Member previews an Interest before confirming it with a Stance", async (
     .toEqual([{ ...rust, stance: "shares" }]);
 });
 
-test("a Member's override keeps their phrase as an Alias used when AI is unavailable", async () => {
+test("a Member's override resolves its saved Alias without another AI request", async () => {
   await h.app.bootstrap(ministryA);
   const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   const sql = (await member.interests()).find((interest) => interest.name === "SQL")!;
   const preview = await member.resolveInterest({ phrase: "database wizardry", kind: "skill" });
   await member.confirmInterest({ phrase: preview.phrase, selection: { interestId: sql.interestId }, stance: "seeks" });
-  h.ai.responses.push(new Error("AI unavailable"));
+  h.ai.reset();
 
   const later = await member.resolveInterest({ phrase: "database wizardry", kind: "skill" });
   expect(later.proposed).toEqual({ interestId: sql.interestId });
   expect(later.shortlist).toContainEqual(sql);
+  expect(h.ai.requests).toEqual([]);
   expect(await member.myInterests()).toEqual([{ ...sql, stance: "seeks" }]);
 });
 
@@ -37,7 +38,7 @@ test("the AI receives only Interest text, kinds and Member counts", async () => 
   await h.app.bootstrap(ministryA);
   const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   const sql = (await member.interests()).find((interest) => interest.name === "SQL")!;
-  await member.confirmInterest({ phrase: "sql", selection: { interestId: sql.interestId }, stance: "shares" });
+  await member.confirmInterest({ phrase: "database wizardry", selection: { interestId: sql.interestId }, stance: "shares" });
   await member.resolveInterest({ phrase: "sql", kind: "skill" });
 
   expect(h.ai.requests).toEqual([{ phrase: "sql", shortlist: [{ name: "SQL", kind: "skill", count: 1 }] }]);
@@ -126,7 +127,7 @@ test("a roster departure removes the Member from searches and profiles and revok
   const viewer = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "olivia", ...adminPerson });
   const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
   const sql = (await member.interests()).find((interest) => interest.name === "SQL")!;
-  await member.confirmInterest({ phrase: "SQL", selection: { interestId: sql.interestId }, stance: "shares" });
+  await member.confirmInterest({ phrase: "database wizardry", selection: { interestId: sql.interestId }, stance: "shares" });
   const memberId = (await member.profile()).memberId;
   expect(await viewer.searchMembers({ interest: "SQL" })).toHaveLength(1);
   const admin = await viewer.organisationAdmin();
