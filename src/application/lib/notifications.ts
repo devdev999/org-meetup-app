@@ -85,6 +85,16 @@ export async function recordNotices(db: Queryable, organisationId: string, recip
   if (deliveries.length) await db.insert(noticeDeliveries).values(deliveries);
 }
 
+export async function supersedeInviteDeliveries(db: Queryable, organisationId: string, gatheringId: string, memberId: string, now: Date): Promise<void> {
+  await db.update(noticeDeliveries).set({ finishedAt: now }).where(and(
+    eq(noticeDeliveries.organisationId, organisationId), isNull(noticeDeliveries.finishedAt),
+    inArray(noticeDeliveries.noticeId, db.select({ id: notices.id }).from(notices).where(and(
+      eq(notices.organisationId, organisationId), eq(notices.gatheringId, gatheringId),
+      eq(notices.memberId, memberId), eq(notices.kind, "invite-received"),
+    ))),
+  ));
+}
+
 function deliveryWhere(delivery: Pick<typeof noticeDeliveries.$inferSelect, "organisationId" | "noticeId" | "channel">) {
   return and(eq(noticeDeliveries.organisationId, delivery.organisationId), eq(noticeDeliveries.noticeId, delivery.noticeId), eq(noticeDeliveries.channel, delivery.channel));
 }

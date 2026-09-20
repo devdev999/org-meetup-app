@@ -156,7 +156,7 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     inviteMember: (id, memberId, previousInviteId) => withNotices(id, () => inviteMember(deps, actor, id, memberId, previousInviteId)),
     inviteChoices: (id, input = {}) => afterNotice(() => inviteChoices(deps, actor, id, input), { action: "meetup-invite-choices", filter: { meetupId: id, name: input.name ?? "", page: String(input.page ?? 0) } }),
     inviteSuggestions: (id) => afterNotice(() => inviteSuggestions(deps, actor, id), { action: "invite-suggestions", filter: { meetupId: id } }),
-    previewInviteSuggestions: (input) => afterNotice(() => previewInviteSuggestions(deps, actor, input), { action: "invite-suggestions-preview", filter: input.place.kind === "physical" ? { placeKind: input.place.kind, siteId: input.place.siteId } : { placeKind: input.place.kind } }),
+    previewInviteSuggestions: (input) => afterNotice(() => previewInviteSuggestions(deps, actor, input), { action: "invite-suggestions-preview", filter: input?.place?.kind === "physical" ? { placeKind: input.place.kind, siteId: input.place.siteId } : { placeKind: input?.place?.kind } }),
     meetupSuggestions: () => afterNotice(() => meetupSuggestions(deps, actor), { action: "meetup-suggestions", filter: {} }),
     extractMeetupInterests: (input) => afterNotice(() => extractMeetupInterests(deps, actor, input)),
     answerInvite: async (id, answer) => {

@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Interest, InterestChoice } from "../../application";
-import { extractInterests } from "./actions";
+import type { Interest, InterestChoice, InterestResolution } from "../../application";
 
 function choiceKey({ selection }: InterestChoice) {
   return "interestId" in selection ? selection.interestId : selection.name.toLowerCase();
@@ -21,21 +20,26 @@ export function MeetupInterests({ catalog, activityId, description, initialInter
   const [status, setStatus] = useState("");
   useEffect(() => {
     if (initialInterests !== undefined) return;
-    let active = true;
+    const controller = new AbortController();
     setAutomatic([]);
     setStatus(activityId ? "Finding relevant Interests. You can create the Meetup while this runs." : "Choose an Activity to find relevant Interests.");
     const timer = setTimeout(async () => {
       if (!activityId) return;
       try {
-        const result = await extractInterests({ activityId, description });
-        if (!active) return;
+        const response = await fetch("/api/meetup-interests", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ activityId, description }), signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("Automatic Interests are unavailable.");
+        const result: { proposals: InterestResolution[] } = await response.json();
+        if (controller.signal.aborted) return;
         setAutomatic(result.proposals.map((proposal) => ({ phrase: proposal.phrase, selection: proposal.proposed })));
         setStatus(result.proposals.length ? "Review these Interests before creating your Meetup." : "No automatic Interests were added. Choose manually or create without them.");
       } catch {
-        if (active) setStatus("Automatic Interests are unavailable. Choose manually or create without them.");
+        if (!controller.signal.aborted) setStatus("Automatic Interests are unavailable. Choose manually or create without them.");
       }
     }, 500);
-    return () => { active = false; clearTimeout(timer); };
+    return () => { controller.abort(); clearTimeout(timer); };
   }, [activityId, description, initialInterests]);
   const selected = useMemo(() => [...new Map([...manual, ...automatic.filter((choice) => !excluded.includes(choiceKey(choice))
     && !manual.some((entry) => choiceKey(entry) === choiceKey(choice)))].map((choice) => [choiceKey(choice), choice])).values()].slice(0, 20), [manual, automatic, excluded]);

@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import type { InterestChoice, InviteSuggestion } from "../../application";
-import { previewInvites, sendInvite, type MeetupActionState } from "./actions";
+import { sendInvite, type MeetupActionState } from "./actions";
 
 export function InviteSuggestions({ meetupId, suggestions }: { meetupId: string; suggestions: InviteSuggestion[] }) {
   const [state, action, pending] = useActionState<MeetupActionState, FormData>(async (_previous, form) => {
@@ -37,21 +37,27 @@ export function DraftInviteSuggestions({ seed, placeKind, siteId, interests }: {
   const [selected, setSelected] = useState<InviteSuggestion["member"][]>([]);
   const [status, setStatus] = useState("");
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
     setSuggestions([]);
     setStatus(placeKind === "physical" && !siteId ? "Choose a Site to see Suggestions." : "Finding Members to invite...");
     const timer = setTimeout(async () => {
       if (placeKind === "physical" && !siteId) return;
       try {
-        const result = await previewInvites({ seed, place: placeKind === "physical" ? { kind: "physical", siteId } : { kind: "virtual" }, relevantInterests: interests });
-        if (!active) return;
-        setSuggestions(result.suggestions);
-        setStatus(result.error ?? (result.suggestions.length ? "" : "No eligible Members to suggest."));
+        const response = await fetch("/api/invite-suggestions", {
+          method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
+          body: JSON.stringify({ seed, place: placeKind === "physical" ? { kind: "physical", siteId } : { kind: "virtual" }, relevantInterests: interests }),
+        });
+        const result: { suggestions?: InviteSuggestion[]; error?: string } = await response.json();
+        if (!response.ok) throw new Error(result.error);
+        if (controller.signal.aborted) return;
+        const next = result.suggestions ?? [];
+        setSuggestions(next);
+        setStatus(next.length ? "" : "No eligible Members to suggest.");
       } catch {
-        if (active) setStatus("Suggestions are unavailable. You can create this Meetup and invite Members later.");
+        if (!controller.signal.aborted) setStatus("Suggestions are unavailable. You can create this Meetup and invite Members later.");
       }
     }, 300);
-    return () => { active = false; clearTimeout(timer); };
+    return () => { controller.abort(); clearTimeout(timer); };
   }, [seed, placeKind, siteId, interests]);
   return (
     <fieldset>

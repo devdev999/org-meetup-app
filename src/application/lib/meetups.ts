@@ -8,7 +8,7 @@ import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
 import { interestChoiceSchema, type Interest, type InterestChoice } from "./interests";
 import { relevantInterests, saveRelevantInterests } from "./meetup-interests";
-import { recordNotices } from "./notifications";
+import { recordNotices, supersedeInviteDeliveries } from "./notifications";
 import { activities, departments, gatheringMembers, gatherings, invites, members, notices, organisations, sites } from "./schema";
 
 export type MeetupPlace = { kind: "physical"; siteId: string; spot: string } | { kind: "virtual"; url: string };
@@ -356,6 +356,7 @@ async function saveInvite(db: Queryable, actor: Actor, meetup: MeetupSummary & P
     .where(and(eq(invites.organisationId, actor.organisationId), eq(invites.gatheringId, meetup.id), eq(invites.memberId, memberId)));
   if (existing && (existing.state === "pending" || previousInviteId !== existing.id)) return { ...existing, meetupId: meetup.id, member };
   if (meetup.participants.some((person) => person.memberId === memberId)) invalid("This Member is already a Participant.");
+  if (existing) await supersedeInviteDeliveries(db, actor.organisationId, meetup.id, memberId, now);
   const [created] = existing
     ? await db.update(invites).set({ id: randomUUID(), state: "pending", createdAt: now })
       .where(and(eq(invites.organisationId, actor.organisationId), eq(invites.id, existing.id))).returning()

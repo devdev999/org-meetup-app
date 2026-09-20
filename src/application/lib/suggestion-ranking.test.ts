@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { rankInvitees, rankMeetups, type InviteRankingCandidate } from "../index";
+import { rankInvitees, rankMeetups, type InviteRankingCandidate } from "./suggestion-ranking";
 
 const sql = { interestId: "sql", name: "SQL", kind: "skill" as const };
 const running = { interestId: "running", name: "Running", kind: "hobby" as const };

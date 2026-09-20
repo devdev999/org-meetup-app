@@ -110,6 +110,28 @@ test("a Suggestion can send a fresh Invite after decline without replaying old a
   expect((await bo.inbox()).filter((notice) => notice.kind === "invite-received")).toHaveLength(2);
 });
 
+test("a retried notice for an old Invite cannot carry buttons for a renewed Invite", async () => {
+  const host = await setup();
+  const bo = await member("Bo");
+  const link = await bo.beginTelegramLink();
+  await h.app.handleTelegram({ kind: "link", chatId: "101", code: new URL(link.url).searchParams.get("start")! });
+  h.telegram.reset();
+  h.telegram.failure = new Error("Telegram unavailable");
+  const data = await input(host);
+  const meetup = await host.createMeetup(data);
+  const boId = (await bo.profile()).memberId;
+  const original = await host.inviteMember(meetup.id, boId);
+  await bo.answerInvite(original.id, "decline");
+  await host.editMeetup(meetup.id, { ...data, startsAt: new Date("2026-09-21T11:00:00Z") });
+  h.telegram.failure = undefined;
+  const renewed = await host.inviteMember(meetup.id, boId, original.id);
+  expect(h.telegram.outbox).toEqual([expect.objectContaining({ inviteId: renewed.id, text: expect.stringContaining("2026-09-21 11:00") })]);
+  h.clock.advance(60_000);
+  await h.app.deliverNotices();
+  expect(h.telegram.outbox.filter((message) => message.inviteId === renewed.id)).toHaveLength(1);
+  expect(h.telegram.outbox.find((message) => message.text.includes("2026-09-19 10:00"))?.inviteId).toBeUndefined();
+});
+
 test("home Suggestions use saved Interests and include only open unjoined Meetups in scope within fourteen days", async () => {
   const host = await setup();
   const bo = await member("Bo");

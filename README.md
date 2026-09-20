@@ -171,7 +171,7 @@ External dependencies are ports with two adapters each. Identity claims come fro
 
 ### Tests
 
-Tests cross the application's interface as a specific actor and assert on what that actor can observe. They never read tables. Each test file gets its own freshly migrated database (`src/testing/test-database.ts`, wired by `src/application/tests/harness.ts`); tables are truncated between tests. Set `TEST_DATABASE_URL` to point tests at a different Postgres (default `postgres://postgres:postgres@localhost:5439/postgres`).
+Application tests cross the interface as a specific actor and assert on what that actor can observe. They never read tables. The pure Suggestion ranker stays private, with focused tests beside it under `lib/`, as the parent spec requires. Each actor test file gets its own freshly migrated database (`src/testing/test-database.ts`, wired by `src/application/tests/harness.ts`); tables are truncated between tests. Set `TEST_DATABASE_URL` to point tests at a different Postgres (default `postgres://postgres:postgres@localhost:5439/postgres`).
 
 Wiring smoke tests cover the production OIDC adapter against a stub issuer, a Telegram webhook through the application and reply, and heartbeat and digest jobs through the real queue. Telegram and SMTP adapter tests use local protocol servers and send no real messages.
 

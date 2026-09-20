@@ -7,9 +7,6 @@ import {
   isInvalidInputError,
   type EditMeetupInput,
   type MeetupAudience,
-  type ExtractMeetupInterestsInput,
-  type PreviewInviteSuggestionsInput,
-  type InviteSuggestion,
 } from "../../application/index";
 import { formText } from "../../web/forms";
 import { requireMemberPastWelcome } from "../../web/session";
@@ -124,24 +121,6 @@ export async function sendInvite(meetupId: string, form: FormData): Promise<Meet
     return { message: invite.state === "pending" ? "Invite sent." : `This Invite is already ${invite.state}.` };
   } catch (error) {
     return actionError(error);
-  }
-}
-
-export async function extractInterests(input: ExtractMeetupInterestsInput) {
-  const { member } = await requireMemberPastWelcome();
-  try {
-    return { proposals: await member.extractMeetupInterests(input) };
-  } catch (error) {
-    return { proposals: [], ...actionError(error) };
-  }
-}
-
-export async function previewInvites(input: PreviewInviteSuggestionsInput): Promise<MeetupActionState & { suggestions: InviteSuggestion[] }> {
-  const { member } = await requireMemberPastWelcome();
-  try {
-    return { suggestions: await member.previewInviteSuggestions(input) };
-  } catch (error) {
-    return { suggestions: [], ...actionError(error) };
   }
 }
 

@@ -75,7 +75,8 @@ export async function meetupSuggestions(deps: Deps, actor: Actor): Promise<Meetu
   }))).slice(0, 20);
   const results = await Promise.all(ranked.map(async ({ meetupId, reasons }) => {
     const detail = await readMeetup(deps.db, actor, meetupId, current.siteId, now);
-    if (!detail || detail.status !== "scheduled" || detail.audience.kind !== "open" || detail.membership !== null) return undefined;
+    if (!detail || detail.status !== "scheduled" || detail.audience.kind !== "open" || detail.membership !== null
+      || detail.startsAt <= now || detail.startsAt > until) return undefined;
     const { participants, waitlist, ...meetup } = detail;
     return { meetup, reasons };
   }));

@@ -124,7 +124,7 @@ export function MeetupForm({
         <textarea name="description" rows={4} maxLength={5000} value={description} onChange={(event) => setDescription(event.target.value)} />
       </label>
       <MeetupInterests catalog={interests} activityId={activityId} description={description} initialInterests={meetup?.relevantInterests} onChange={setRelevantInterests} />
-      {!meetup && suggestionSeed && <DraftInviteSuggestions seed={suggestionSeed} placeKind={placeKind} siteId={siteId} interests={relevantInterests} />}
+      {!meetup && suggestionSeed && <DraftInviteSuggestions key={`${placeKind}:${siteId}`} seed={suggestionSeed} placeKind={placeKind} siteId={siteId} interests={relevantInterests} />}
       {state.error && <p className="error" role="alert">{state.error}</p>}
       <button type="submit" disabled={pending}>{pending ? "Saving..." : meetup ? "Save changes" : "Create Meetup"}</button>
     </form>
