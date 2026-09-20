@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ensureDepartment, ensureSite, nameKey, type Queryable } from "./departments-and-sites";
 import { InvalidInputError } from "./errors";
+import { removeFromFutureOccurrences } from "./member-lifecycle";
 import { departments, members, sites } from "./schema";
 
 export interface RosterRow {
@@ -98,7 +99,7 @@ export async function commitRoster(
   rows: RosterRow[],
   revision: string,
   now: Date,
-): Promise<void> {
+): Promise<string[]> {
   await db.select({ id: members.id }).from(members).where(eq(members.organisationId, organisationId)).for("update");
   const preview = await previewRoster(db, organisationId, rows);
   if (preview.revision !== revision) {
@@ -128,7 +129,7 @@ export async function commitRoster(
   if (preview.departures.length > 0) {
     await db
       .update(members)
-      .set({ status: "departed", updatedAt: now })
+      .set({ status: "departed", statusBeforeSuspension: null, updatedAt: now })
       .where(
         and(
           eq(members.organisationId, organisationId),
@@ -138,7 +139,9 @@ export async function commitRoster(
           ),
         ),
       );
+    return removeFromFutureOccurrences(db, organisationId, preview.departures.map((member) => member.memberId), now);
   }
+  return [];
 }
 
 async function rosterFields(db: Queryable, organisationId: string, row: RosterRow, now: Date) {

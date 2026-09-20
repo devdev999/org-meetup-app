@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, date, foreignKey, index, integer, jsonb, pgEnum, pgTable, primaryKey, serial, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, foreignKey, index, integer, jsonb, pgEnum, pgTable, primaryKey, serial, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type { NoticeKind } from "./notice-kinds";
 import type { RecurrenceRule } from "./recurrence-rule";
 
@@ -120,6 +120,7 @@ export const members = pgTable(
     email: text().notNull(),
     name: text().notNull(),
     status: memberStatus().notNull(),
+    statusBeforeSuspension: text().$type<"provisioned" | "active">(),
     departmentId: uuid(),
     siteId: uuid(),
     departmentCorrectedByMember: boolean().notNull().default(false),
@@ -136,6 +137,7 @@ export const members = pgTable(
   (table) => [
     uniqueIndex("members_organisation_email_unique").on(table.organisationId, table.email),
     unique("members_organisation_id_id_unique").on(table.organisationId, table.id),
+    check("members_before_suspension_check", sql`${table.statusBeforeSuspension} is null or ${table.statusBeforeSuspension} in ('provisioned', 'active')`),
     foreignKey({
       name: "members_department_same_organisation_fk",
       columns: [table.organisationId, table.departmentId],
@@ -151,6 +153,28 @@ export const members = pgTable(
 
 /** Something an Organisation Admin should look at, raised by the application. */
 export const organisationAdminNoticeKind = pgEnum("organisation_admin_notice_kind", ["unknown_login"]);
+
+export const flags = pgTable("flags", {
+  id: uuid().primaryKey().defaultRandom(),
+  organisationId: uuid().notNull().references(() => organisations.id),
+  reporterMemberId: uuid().notNull(),
+  targetKind: text().$type<"member" | "meetup" | "event">().notNull(),
+  targetMemberId: uuid(),
+  gatheringId: uuid(),
+  reason: text().notNull(),
+  state: text().$type<"open" | "resolved">().notNull().default("open"),
+  createdAt: timestamptz().notNull(),
+  resolutionNote: text(),
+  resolvedAt: timestamptz(),
+  resolvedByMemberId: uuid(),
+}, (table) => [
+  index("flags_queue_idx").on(table.organisationId, table.state, table.createdAt),
+  check("flags_target_check", sql`(${table.targetKind} = 'member' and ${table.targetMemberId} is not null and ${table.gatheringId} is null) or (${table.targetKind} in ('meetup', 'event') and ${table.targetMemberId} is null and ${table.gatheringId} is not null)`),
+  foreignKey({ columns: [table.organisationId, table.reporterMemberId], foreignColumns: [members.organisationId, members.id] }),
+  foreignKey({ columns: [table.organisationId, table.targetMemberId], foreignColumns: [members.organisationId, members.id] }),
+  foreignKey({ columns: [table.organisationId, table.gatheringId], foreignColumns: [gatherings.organisationId, gatherings.id] }),
+  foreignKey({ columns: [table.organisationId, table.resolvedByMemberId], foreignColumns: [members.organisationId, members.id] }),
+]);
 
 export const adminAuditEntries = pgTable("admin_audit_entries", {
   id: uuid().primaryKey().defaultRandom(),

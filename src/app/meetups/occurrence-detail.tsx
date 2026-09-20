@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Attendance, EventDetail, MeetupDetail } from "../../application";
 import { AttendancePanel } from "../attendance/panel";
+import { FlagForm } from "../flags/form";
 import { MeetupTime } from "./meetup-time";
 import { MeetupAction } from "./meetup-action";
 import { InviteAnswerForm } from "./invite-form";
@@ -119,6 +120,7 @@ export function OccurrenceDetail({ meetup, attendance }: { meetup: MeetupDetail 
             : <ul>{meetup.invites.map((invite) => <li key={invite.id}>{invite.member.name}: {invite.state}</li>)}</ul>}
         </section>
       )}
+      <FlagForm target={{ kind, id: meetup.id }} />
     </main>
   );
 }

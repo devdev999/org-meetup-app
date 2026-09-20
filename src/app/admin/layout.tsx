@@ -11,6 +11,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
         <Link href="/admin/roster">Roster</Link>
         <Link href="/admin/lists">Departments, Sites and Activities</Link>
         <Link href="/admin/events">Events</Link>
+        <Link href="/admin/moderation">Moderation</Link>
         <Link href="/admin/attendance">Attendance and ratings</Link>
         <Link href="/admin/notices">Unknown logins</Link>
         <Link href="/admin/audit">Audit log</Link>

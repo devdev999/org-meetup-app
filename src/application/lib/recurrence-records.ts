@@ -1,4 +1,4 @@
-import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { and, eq, exists, gt, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
@@ -37,6 +37,16 @@ export function visibleRecurrences(actor: Actor, siteId: string | null, kind?: R
     and(eq(recurrences.audienceKind, "open"), or(eq(recurrences.audienceScope, "organisation"), siteId ? eq(recurrences.audienceSiteId, siteId) : undefined)),
     sql`exists (select 1 from ${invites} inner join ${gatherings} on ${gatherings.organisationId} = ${invites.organisationId} and ${gatherings.id} = ${invites.gatheringId} where ${gatherings.organisationId} = ${recurrences.organisationId} and ${gatherings.recurrenceId} = ${recurrences.id} and ${invites.memberId} = ${actor.memberId} and ${invites.state} = 'accepted')`,
   ));
+}
+
+export function recurrencesWithFutureWork(db: Queryable, now: Date) {
+  return or(
+    and(isNull(recurrences.stoppedAt), or(isNull(recurrences.endsOn), gte(recurrences.endsOn, now.toISOString().slice(0, 10)))),
+    exists(db.select({ id: gatherings.id }).from(gatherings).where(and(
+      eq(gatherings.organisationId, recurrences.organisationId), eq(gatherings.recurrenceId, recurrences.id),
+      eq(gatherings.status, "scheduled"), gt(gatherings.startsAt, now),
+    ))),
+  );
 }
 
 export async function readRecurrences(db: Queryable, actor: Actor, ids: string[], siteId: string | null, now: Date): Promise<Map<string, Recurrence>> {

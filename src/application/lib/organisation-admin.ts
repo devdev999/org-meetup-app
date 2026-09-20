@@ -7,8 +7,9 @@ import { AccessDeniedError } from "./errors";
 import { isUuid } from "./input";
 import { ratings, readAttendanceHistory, type ActivityRating, type AttendanceHistoryEntry } from "./attendance";
 import { approveEvent, createEvent, managedEvents, readEventProposals, reassignEventHost, rejectEvent, type EventProposal, type ManagedEvent } from "./events";
-import type { CreateEventInput, EventDetail } from "./meetups";
+import type { CreateEventInput, EventDetail, GatheringKind } from "./meetups";
 import { deliverSoon } from "./notifications";
+import { cancelManagedOccurrence, changeMemberAccess, readFlags, resolveFlag, upcomingOccurrences, type Flag, type ModerationOccurrence } from "./moderation";
 import {
   commitRoster,
   previewRoster,
@@ -28,6 +29,13 @@ import {
 } from "./organisation-lists";
 
 export interface OrganisationAdminActions {
+  upcomingOccurrences(): Promise<ModerationOccurrence[]>;
+  flags(state?: Flag["state"]): Promise<Flag[]>;
+  resolveFlag(id: string, note: string): Promise<void>;
+  cancelMeetup(id: string): Promise<void>;
+  cancelEvent(id: string): Promise<void>;
+  suspendMember(id: string): Promise<void>;
+  reinstateMember(id: string): Promise<void>;
   memberAttendance(memberId: string): Promise<AttendanceHistoryEntry[]>;
   ratings(): Promise<ActivityRating[]>;
   createEvent(input: CreateEventInput): Promise<EventDetail>;
@@ -80,7 +88,23 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
       return result;
     });
   }
+  async function cancel(id: string, kind: GatheringKind): Promise<void> {
+    await authorised((db) => cancelManagedOccurrence(db, actor, id, kind, deps.clock.now()));
+    await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: id });
+  }
   return {
+    upcomingOccurrences: () => authorised((db) => upcomingOccurrences(db, actor.organisationId, deps.clock.now()), "moderation-occurrences"),
+    suspendMember: async (id) => {
+      const ids = await authorised((db) => changeMemberAccess(db, actor, id, "suspend", deps.clock.now()));
+      for (const gatheringId of ids) await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId });
+    },
+    reinstateMember: async (id) => {
+      await authorised((db) => changeMemberAccess(db, actor, id, "reinstate", deps.clock.now()));
+    },
+    cancelMeetup: (id) => cancel(id, "meetup"),
+    cancelEvent: (id) => cancel(id, "event"),
+    flags: (state = "open") => authorised((db) => readFlags(db, actor.organisationId, state), "flags", { state }),
+    resolveFlag: (id, note) => authorised((db) => resolveFlag(db, actor, id, note, deps.clock.now())),
     ratings: () => authorised((db) => ratings(db, actor.organisationId)),
     memberAttendance: (memberId) => authorised(async (db) => {
       if (!isUuid(memberId)) throw new AccessDeniedError();
@@ -106,8 +130,10 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
     },
     roster: () => authorised((db) => readRoster(db, actor.organisationId), "roster"),
     previewRoster: (rows) => authorised((db) => previewRoster(db, actor.organisationId, rows), "roster-preview"),
-    commitRoster: (rows, revision) =>
-      authorised((db) => commitRoster(db, actor.organisationId, rows, revision, deps.clock.now())),
+    commitRoster: async (rows, revision) => {
+      const ids = await authorised((db) => commitRoster(db, actor.organisationId, rows, revision, deps.clock.now()));
+      for (const gatheringId of ids) await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId });
+    },
     lists: () => authorised((db) => organisationLists(db, actor.organisationId)),
     createListEntry: (kind, name) =>
       authorised((db) => saveListEntry(db, actor.organisationId, kind, undefined, name, deps.clock.now())),

@@ -282,6 +282,8 @@ Migration `0015` adds Event proposals and the unused sharing relationship, and m
 
 Migration `0017` adds Attendance confirmations, per-occurrence checklists and ratings. It preserves existing occurrences, proposals, participation, RSVP answers and notices. Stop the web and worker before migrating, then restart both at this release. Older versions cannot handle the new notice kinds and Telegram actions. Once Attendance notices exist, deploy a forward fix instead of rolling back.
 
+Migration `0018` adds Flags and the prior Member status needed for reinstatement. Database setup also completes lifecycle cleanup for Members already Departed or Suspended before the upgrade. It cancels their upcoming hosted occurrences, stops their series, removes future places and queues notices for the worker. Past Attendance and Connections remain intact. Repeating setup is safe. Run the complete setup command before restarting the web and worker; applying SQL alone does not perform this cleanup.
+
 For an existing local Compose stack, leave Postgres running and run these steps in order. Continue only when each command succeeds:
 
 ```sh

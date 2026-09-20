@@ -630,10 +630,10 @@ export async function cancelMeetup(deps: Deps, actor: Actor, id: string, kind: G
   });
 }
 
-export async function cancelOccurrence(db: Queryable, organisationId: string, gathering: GatheringSummary, now: Date): Promise<void> {
+export async function cancelOccurrence(db: Queryable, organisationId: string, gathering: GatheringSummary, now: Date, message = `The Host cancelled this ${meetupOrEvent(gathering)}.`): Promise<void> {
   const recipients = [gathering.host.memberId, ...await noticeRecipients(db, organisationId, gathering.id)];
   await db.update(gatherings).set({ status: "cancelled" }).where(gatheringWhere(organisationId, gathering.id));
   await db.update(invites).set({ state: "expired" }).where(and(eq(invites.organisationId, organisationId), eq(invites.gatheringId, gathering.id), eq(invites.state, "pending")));
-  await notify(db, organisationId, gathering, recipients, "meetup-cancelled", `The Host cancelled this ${meetupOrEvent(gathering)}.`, now);
+  await notify(db, organisationId, gathering, recipients, "meetup-cancelled", message, now);
   await db.delete(gatheringMembers).where(and(membershipWhere(organisationId, gathering.id), eq(gatheringMembers.status, "waitlisted")));
 }

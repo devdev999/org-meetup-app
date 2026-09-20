@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireMemberPastWelcome } from "../../../web/session";
 import { InterestGroups } from "../../_components/interest-groups";
+import { FlagForm } from "../../flags/form";
 
 export default async function MemberPage({ params }: { params: Promise<{ memberId: string }> }) {
   const { member } = await requireMemberPastWelcome();
@@ -18,6 +19,7 @@ export default async function MemberPage({ params }: { params: Promise<{ memberI
       </dl>
       <h2>Interests</h2>
       <InterestGroups interests={profile.interests} />
+      <FlagForm target={{ kind: "member", id: profile.memberId }} />
     </main>
   );
 }
