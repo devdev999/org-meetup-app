@@ -1,6 +1,7 @@
 import { and, asc, eq, exists, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { requireActiveMember, VISIBLE_MEMBER_STATUSES, withActiveMember, type Actor } from "./actor";
 import { recordAdminView, type AdminView } from "./admin-audit";
+import { expireIneligibleAvailabilities } from "./availability-records";
 import { findDepartment, findSite, listDepartmentsAndSites, type Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { InvalidInputError } from "./errors";
@@ -337,6 +338,7 @@ async function updateProfile(deps: Deps, actor: Actor, input: UpdateProfileInput
       siteCorrectedByMember: sql`${members.siteCorrectedByMember} or (${members.siteId} is distinct from ${siteId}::uuid)`,
       updatedAt: deps.clock.now(),
     }).where(self(actor));
+    if (siteId !== current.siteId) await expireIneligibleAvailabilities(db, actor.organisationId, deps.clock.now());
     return profile({ db }, actor);
   });
 }

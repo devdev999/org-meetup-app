@@ -136,7 +136,7 @@ Register the public HTTPS URL `<APP_URL>/api/telegram` with Telegram's [setWebho
 
 ## Availability
 
-Open **Availability** from home, your profile or Meetups to post an Activity and a window today. Physical posts use your current Site. Virtual posts are visible across your Organisation. Only open windows from Active Members appear. A changed or retired Site hides its physical posts, and retired Activities disappear. The page refreshes while open and removes posts when their windows end.
+Open **Availability** from home, your profile or Meetups to post an Activity and a window today. Physical posts use your current Site. Virtual posts are visible across your Organisation. Only open windows from Active Members appear. Suspension or departure closes a Member's posts. A Site change or retirement closes affected physical posts, and retiring an Activity closes its posts. Earlier overlaps remain in reports. The page refreshes while open and removes posts when their windows end.
 
 Matching Activities with intersecting windows at the same Site, or both virtual, produce Suggestions for both Members. Each pair receives one overlap notice per UTC day, even across multiple posts or Activities. The inbox always receives it. Enabled Telegram and email notices send immediately through the existing delivery queue and retry policy. The worker checks newly open windows and expires ended windows every minute.
 
@@ -297,6 +297,8 @@ Migration `0017` adds Attendance confirmations, per-occurrence checklists and ra
 Migration `0018` adds Flags and the prior Member status needed for reinstatement. Database setup also completes lifecycle cleanup for Members already Departed or Suspended before the upgrade. It cancels their upcoming hosted occurrences, stops their series, removes future places and queues notices for the worker. Past Attendance and Connections remain intact. Repeating setup is safe. Run the complete setup command before restarting the web and worker; applying SQL alone does not perform this cleanup.
 
 Migration `0019` adds reporting facts for first Interest declaration, last activity and retained waitlist history. It preserves unknown legacy dates and histories instead of inventing them. Stop the web and worker, run complete database setup, then restart both. Keep versions together so commands continue recording these facts. The migration retains existing Member, occurrence, Attendance and moderation data.
+
+Migration `0020` indexes retained Availability for reports. Complete setup closes outstanding posts that have lost Member, Site or Activity eligibility. For posts already ineligible before this release, setup records the closure at upgrade time. Earlier eligibility changes cannot be reconstructed. Repeating setup preserves the first recorded closure.
 
 For an existing local Compose stack, leave Postgres running and run these steps in order. Continue only when each command succeeds:
 

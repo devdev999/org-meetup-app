@@ -221,6 +221,61 @@ test("Availability overlaps survive missed worker runs and exclude future or non
   expect(await usage()).toEqual([[4, 3, 1]]);
 });
 
+test.each(["suspension", "departure", "profile Site change", "roster Site change", "Site retirement", "Activity retirement"] as const)(
+  "Availability stops contributing future overlaps after %s while past overlaps remain", async (change) => {
+  const { admin } = await setup();
+  const ana = await member("Ana");
+  const bo = await member("Bo");
+  const anaId = (await ana.profile()).memberId;
+  const activityId = (await ana.meetupChoices()).activities[0]!.id;
+  for (const person of [ana, bo]) {
+    await person.updateProfile({ department: null, site: "Harbour" });
+    for (const minute of ["00", "10"]) await person.postAvailability({ activityId, kind: "physical",
+      startsAt: new Date(`2026-09-18T09:${minute}:00Z`), endsAt: new Date(`2026-09-18T09:${minute}:30Z`) });
+  }
+  h.clock.set(new Date("2026-09-18T09:05:00Z"));
+  if (change === "suspension") await admin.suspendMember(anaId);
+  if (change === "profile Site change") await ana.updateProfile({ department: null, site: "Hill" });
+  if (change === "departure" || change === "roster Site change") {
+    const roster = await admin.roster();
+    const revised = change === "departure" ? roster.filter((row) => row.memberId !== anaId)
+      : roster.map((row) => row.memberId === anaId ? { ...row, site: "Hill" } : row);
+    await admin.commitRoster(revised, (await admin.previewRoster(revised)).revision);
+  }
+  if (change === "Site retirement") await admin.retireListEntry("site", (await admin.lists()).sites.find((site) => site.name === "Harbour")!.id);
+  if (change === "Activity retirement") await admin.retireListEntry("activity", activityId);
+  h.clock.set(new Date("2026-09-18T09:10:15Z"));
+  expect((await bo.availability()).suggestions).toHaveLength(0);
+  expect((await admin.reports(period)).tables.find((table) => table.id === "availability")!.rows).toEqual([[4, 2, 1]]);
+  expect((await admin.exportReport("availability", period)).content).toContain('"4","2","1"');
+  if (change === "suspension") {
+    await admin.reinstateMember(anaId);
+    expect((await bo.availability()).suggestions).toHaveLength(0);
+  }
+});
+
+test("Site changes and retirement preserve virtual Availability", async () => {
+  const { admin } = await setup();
+  const ana = await member("Ana");
+  const bo = await member("Bo");
+  const activityId = (await ana.meetupChoices()).activities[0]!.id;
+  for (const person of [ana, bo]) {
+    await person.updateProfile({ department: null, site: "Harbour" });
+    await person.postAvailability({ activityId, kind: "virtual",
+      startsAt: new Date("2026-09-18T09:10:00Z"), endsAt: new Date("2026-09-18T09:20:00Z") });
+  }
+  h.clock.set(new Date("2026-09-18T09:05:00Z"));
+  await ana.updateProfile({ department: null, site: "Hill" });
+  const roster = (await admin.roster()).map((row) => row.name === "Bo" ? { ...row, site: "Hill" } : row);
+  await admin.commitRoster(roster, (await admin.previewRoster(roster)).revision);
+  await admin.retireListEntry("site", (await admin.lists()).sites.find((site) => site.name === "Hill")!.id);
+  await h.app.reconcileMemberLifecycles();
+  h.clock.set(new Date("2026-09-18T09:10:15Z"));
+  await h.app.processAvailability();
+  expect((await bo.availability()).suggestions).toHaveLength(1);
+  expect((await admin.reports(period)).tables.find((table) => table.id === "availability")!.rows).toEqual([[2, 2, 1]]);
+});
+
 test.each(["suspension", "departure"] as const)("activation requires Interest and Attendance within the original window after %s", async (change) => {
   h.clock.set(new Date("2026-09-01T09:00:00Z"));
   const { admin, olivia } = await setup();
@@ -300,6 +355,9 @@ test("the individual report retains occurrence counts, Connections, Availability
   expect(report.tables.find((table) => table.id === "member-counts")!.rows).toEqual([
     ["Meetup", 2, 2, 2, 0], ["Event", 0, 1, 0, 1],
   ]);
+  const counts = parse((await admin.exportMemberReport(anaId, "member-counts", period)).content, { bom: true, relax_column_count: true });
+  expect(counts).toContainEqual(["Meetup", "2", "2", "2", "0"]);
+  expect(counts).toContainEqual(["Event", "0", "1", "0", "1"]);
   expect(report.tables.find((table) => table.id === "member-connections")!.rows).toEqual([["Bo", 2]]);
   expect(report.tables.find((table) => table.id === "member-interests")!.rows).toEqual([["Rust", "Skill", "Seeks"]]);
   expect(report.tables.find((table) => table.id === "member-flags")!.rows).toEqual([[1, 1]]);

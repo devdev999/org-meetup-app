@@ -111,9 +111,9 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
   return {
     reports: (period) => authorised((db) => organisationReport(db, actor.organisationId, period, deps.clock.now())),
     memberReport: (memberId, period) => authorised((db) => memberReport(db, actor, memberId, period, deps.clock.now()), "member-report", { memberId, ...period }),
-    exportReport: async (table, period) => command(async (db) => exportReportTable(await organisationReport(db, actor.organisationId, period, deps.clock.now()), table),
+    exportReport: async (table, period) => command(async (db) => exportReportTable(await organisationReport(db, actor.organisationId, period, deps.clock.now(), table), table),
       "aggregate-report-export", { table, ...period }),
-    exportMemberReport: async (memberId, table, period) => command(async (db) => exportReportTable(await memberReport(db, actor, memberId, period, deps.clock.now()), table),
+    exportMemberReport: async (memberId, table, period) => command(async (db) => exportReportTable(await memberReport(db, actor, memberId, period, deps.clock.now(), table), table),
       "member-report-export", { memberId, table, ...period }),
     exportAuditLog: () => command(async (db) => tableCsv(auditTable(await readAdminAudit(db, actor.organisationId))), "audit-log-export"),
     exportRatings: () => command(async (db) => tableCsv(ratingsTable(await ratings(db, actor.organisationId))), "ratings-export"),
@@ -159,7 +159,7 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
       command((db) => saveListEntry(db, actor.organisationId, kind, undefined, name, deps.clock.now())),
     renameListEntry: (kind, id, name) =>
       command((db) => saveListEntry(db, actor.organisationId, kind, id, name, deps.clock.now())),
-    retireListEntry: (kind, id) => command((db) => retireListEntry(db, actor.organisationId, kind, id)),
+    retireListEntry: (kind, id) => command((db) => retireListEntry(db, actor.organisationId, kind, id, deps.clock.now())),
     unknownLoginNotices: () =>
       authorised(
         (db) =>

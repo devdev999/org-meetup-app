@@ -274,6 +274,7 @@ export const availabilities = pgTable("availabilities", {
   createdAt: timestamptz().notNull(),
 }, (table) => [
   index("availabilities_open_idx").on(table.organisationId, table.endsAt).where(sql`${table.expiredAt} is null`),
+  index("availabilities_report_idx").on(table.organisationId, table.endsAt, table.startsAt),
   foreignKey({ columns: [table.organisationId, table.memberId], foreignColumns: [members.organisationId, members.id] }),
   foreignKey({ columns: [table.organisationId, table.activityId], foreignColumns: [activities.organisationId, activities.id] }),
   foreignKey({ columns: [table.organisationId, table.siteId], foreignColumns: [sites.organisationId, sites.id] }),

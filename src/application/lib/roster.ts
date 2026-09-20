@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { createHash } from "node:crypto";
+import { expireIneligibleAvailabilities } from "./availability-records";
 import { z } from "zod";
 import { ensureDepartment, ensureSite, nameKey, type Queryable } from "./departments-and-sites";
 import { InvalidInputError } from "./errors";
@@ -139,9 +140,9 @@ export async function commitRoster(
           ),
         ),
       );
-    return removeFromFutureOccurrences(db, organisationId, preview.departures.map((member) => member.memberId), now);
   }
-  return [];
+  await expireIneligibleAvailabilities(db, organisationId, now);
+  return removeFromFutureOccurrences(db, organisationId, preview.departures.map((member) => member.memberId), now);
 }
 
 async function rosterFields(db: Queryable, organisationId: string, row: RosterRow, now: Date) {

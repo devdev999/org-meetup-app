@@ -1,19 +1,24 @@
 import { and, eq, gt, inArray, isNull, or } from "drizzle-orm";
+import { expireIneligibleAvailabilities } from "./availability-records";
 import type { Queryable } from "./departments-and-sites";
 import type { Deps } from "./deps";
 import { cancelOccurrence, firstName, meetupOrEvent, notify, promoteWaitlist, readGatherings } from "./meetups";
 import { notifySeriesStopped } from "./recurring-meetups";
 import { recurrencesWithFutureWork } from "./recurrence-records";
-import { attendanceMembers, gatheringMembers, gatheringRsvps, gatherings, invites, members, noticeDeliveries, notices, organisations, recurrenceMembers, recurrences } from "./schema";
+import { attendanceMembers, availabilities, gatheringMembers, gatheringRsvps, gatherings, invites, members, noticeDeliveries, notices, organisations, recurrenceMembers, recurrences } from "./schema";
 
 export async function reconcileMemberLifecycles(deps: Deps): Promise<void> {
   const inactive = inArray(members.status, ["departed", "suspended"]);
-  const affected = await deps.db.selectDistinct({ organisationId: members.organisationId }).from(members).where(inactive);
+  const affected = await deps.db.select({ organisationId: organisations.id }).from(organisations).where(or(
+    inArray(organisations.id, deps.db.select({ id: members.organisationId }).from(members).where(inactive)),
+    inArray(organisations.id, deps.db.select({ id: availabilities.organisationId }).from(availabilities).where(isNull(availabilities.expiredAt))),
+  ));
   for (const { organisationId } of affected) {
     await deps.db.transaction(async (db) => {
       await db.select({ id: organisations.id }).from(organisations).where(eq(organisations.id, organisationId)).for("update");
       const current = await db.select({ id: members.id }).from(members).where(and(eq(members.organisationId, organisationId), inactive));
       await removeFromFutureOccurrences(db, organisationId, current.map((member) => member.id), deps.clock.now());
+      await expireIneligibleAvailabilities(db, organisationId, deps.clock.now());
     });
   }
 }
