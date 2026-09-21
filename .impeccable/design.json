@@ -1,0 +1,688 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-21T17:42:24Z",
+  "title": "Design system: Organisation Meetups prototype comparison",
+  "extensions": {
+    "scope": {
+      "route": "/prototype/ui",
+      "status": "Three provisional comparison styles. No production direction approved.",
+      "productionAuthority": "src/app/globals.css",
+      "sourceCommit": "a57c7ac"
+    },
+    "sources": [
+      "src/app/prototype/ui/prototype.css",
+      "src/app/prototype/ui/prototype.tsx",
+      "src/app/prototype/ui/components.tsx",
+      "src/app/prototype/ui/discovery.tsx",
+      "src/app/prototype/ui/member-screens.tsx",
+      "src/app/prototype/ui/admin-screens.tsx"
+    ],
+    "colorMeta": {
+      "atrium-ink": {
+        "role": "primary",
+        "displayName": "Atrium ink",
+        "tonalRamp": [
+          "oklch(15% 0.00780 84.59)",
+          "oklch(26% 0.00780 84.59)",
+          "oklch(38% 0.00780 84.59)",
+          "oklch(49% 0.00780 84.59)",
+          "oklch(61% 0.00780 84.59)",
+          "oklch(72% 0.00780 84.59)",
+          "oklch(84% 0.00780 84.59)",
+          "oklch(95% 0.00780 84.59)"
+        ]
+      },
+      "atrium-muted": {
+        "role": "neutral",
+        "displayName": "Atrium muted",
+        "tonalRamp": [
+          "oklch(15% 0.01261 95.31)",
+          "oklch(26% 0.01261 95.31)",
+          "oklch(38% 0.01261 95.31)",
+          "oklch(49% 0.01261 95.31)",
+          "oklch(61% 0.01261 95.31)",
+          "oklch(72% 0.01261 95.31)",
+          "oklch(84% 0.01261 95.31)",
+          "oklch(95% 0.01261 95.31)"
+        ]
+      },
+      "atrium-ground": {
+        "role": "neutral",
+        "displayName": "Atrium ground",
+        "tonalRamp": [
+          "oklch(15% 0.02346 80.66)",
+          "oklch(26% 0.02346 80.66)",
+          "oklch(38% 0.02346 80.66)",
+          "oklch(49% 0.02346 80.66)",
+          "oklch(61% 0.02346 80.66)",
+          "oklch(72% 0.02346 80.66)",
+          "oklch(84% 0.02346 80.66)",
+          "oklch(95% 0.02346 80.66)"
+        ]
+      },
+      "atrium-paper": {
+        "role": "neutral",
+        "displayName": "Atrium paper",
+        "tonalRamp": [
+          "oklch(15% 0.00537 95.10)",
+          "oklch(26% 0.00537 95.10)",
+          "oklch(38% 0.00537 95.10)",
+          "oklch(49% 0.00537 95.10)",
+          "oklch(61% 0.00537 95.10)",
+          "oklch(72% 0.00537 95.10)",
+          "oklch(84% 0.00537 95.10)",
+          "oklch(95% 0.00537 95.10)"
+        ]
+      },
+      "atrium-panel": {
+        "role": "neutral",
+        "displayName": "Atrium panel",
+        "tonalRamp": [
+          "oklch(15% 0.00802 98.88)",
+          "oklch(26% 0.00802 98.88)",
+          "oklch(38% 0.00802 98.88)",
+          "oklch(49% 0.00802 98.88)",
+          "oklch(61% 0.00802 98.88)",
+          "oklch(72% 0.00802 98.88)",
+          "oklch(84% 0.00802 98.88)",
+          "oklch(95% 0.00802 98.88)"
+        ]
+      },
+      "atrium-line": {
+        "role": "neutral",
+        "displayName": "Atrium line",
+        "tonalRamp": [
+          "oklch(15% 0.01232 96.44)",
+          "oklch(26% 0.01232 96.44)",
+          "oklch(38% 0.01232 96.44)",
+          "oklch(49% 0.01232 96.44)",
+          "oklch(61% 0.01232 96.44)",
+          "oklch(72% 0.01232 96.44)",
+          "oklch(84% 0.01232 96.44)",
+          "oklch(95% 0.01232 96.44)"
+        ]
+      },
+      "atrium-selected": {
+        "role": "neutral",
+        "displayName": "Atrium selected",
+        "tonalRamp": [
+          "oklch(15% 0.02209 92.52)",
+          "oklch(26% 0.02209 92.52)",
+          "oklch(38% 0.02209 92.52)",
+          "oklch(49% 0.02209 92.52)",
+          "oklch(61% 0.02209 92.52)",
+          "oklch(72% 0.02209 92.52)",
+          "oklch(84% 0.02209 92.52)",
+          "oklch(95% 0.02209 92.52)"
+        ]
+      },
+      "atrium-focus": {
+        "role": "neutral",
+        "displayName": "Atrium focus",
+        "tonalRamp": [
+          "oklch(15% 0.05979 86.75)",
+          "oklch(26% 0.05979 86.75)",
+          "oklch(38% 0.05979 86.75)",
+          "oklch(49% 0.05979 86.75)",
+          "oklch(61% 0.05979 86.75)",
+          "oklch(72% 0.05979 86.75)",
+          "oklch(84% 0.05979 86.75)",
+          "oklch(95% 0.05979 86.75)"
+        ]
+      },
+      "fieldwork-ink": {
+        "role": "neutral",
+        "displayName": "Fieldwork ink",
+        "tonalRamp": [
+          "oklch(15% 0.03684 164.79)",
+          "oklch(26% 0.03684 164.79)",
+          "oklch(38% 0.03684 164.79)",
+          "oklch(49% 0.03684 164.79)",
+          "oklch(61% 0.03684 164.79)",
+          "oklch(72% 0.03684 164.79)",
+          "oklch(84% 0.03684 164.79)",
+          "oklch(95% 0.03684 164.79)"
+        ]
+      },
+      "fieldwork-muted": {
+        "role": "neutral",
+        "displayName": "Fieldwork muted",
+        "tonalRamp": [
+          "oklch(15% 0.03623 153.43)",
+          "oklch(26% 0.03623 153.43)",
+          "oklch(38% 0.03623 153.43)",
+          "oklch(49% 0.03623 153.43)",
+          "oklch(61% 0.03623 153.43)",
+          "oklch(72% 0.03623 153.43)",
+          "oklch(84% 0.03623 153.43)",
+          "oklch(95% 0.03623 153.43)"
+        ]
+      },
+      "fieldwork-ground": {
+        "role": "neutral",
+        "displayName": "Fieldwork ground",
+        "tonalRamp": [
+          "oklch(15% 0.01141 128.59)",
+          "oklch(26% 0.01141 128.59)",
+          "oklch(38% 0.01141 128.59)",
+          "oklch(49% 0.01141 128.59)",
+          "oklch(61% 0.01141 128.59)",
+          "oklch(72% 0.01141 128.59)",
+          "oklch(84% 0.01141 128.59)",
+          "oklch(95% 0.01141 128.59)"
+        ]
+      },
+      "fieldwork-paper": {
+        "role": "neutral",
+        "displayName": "Fieldwork paper",
+        "tonalRamp": [
+          "oklch(15% 0.00817 121.63)",
+          "oklch(26% 0.00817 121.63)",
+          "oklch(38% 0.00817 121.63)",
+          "oklch(49% 0.00817 121.63)",
+          "oklch(61% 0.00817 121.63)",
+          "oklch(72% 0.00817 121.63)",
+          "oklch(84% 0.00817 121.63)",
+          "oklch(95% 0.00817 121.63)"
+        ]
+      },
+      "fieldwork-panel": {
+        "role": "neutral",
+        "displayName": "Fieldwork panel",
+        "tonalRamp": [
+          "oklch(15% 0.01716 128.67)",
+          "oklch(26% 0.01716 128.67)",
+          "oklch(38% 0.01716 128.67)",
+          "oklch(49% 0.01716 128.67)",
+          "oklch(61% 0.01716 128.67)",
+          "oklch(72% 0.01716 128.67)",
+          "oklch(84% 0.01716 128.67)",
+          "oklch(95% 0.01716 128.67)"
+        ]
+      },
+      "fieldwork-line": {
+        "role": "neutral",
+        "displayName": "Fieldwork line",
+        "tonalRamp": [
+          "oklch(15% 0.02120 134.10)",
+          "oklch(26% 0.02120 134.10)",
+          "oklch(38% 0.02120 134.10)",
+          "oklch(49% 0.02120 134.10)",
+          "oklch(61% 0.02120 134.10)",
+          "oklch(72% 0.02120 134.10)",
+          "oklch(84% 0.02120 134.10)",
+          "oklch(95% 0.02120 134.10)"
+        ]
+      },
+      "fieldwork-accent": {
+        "role": "primary",
+        "displayName": "Fieldwork accent",
+        "tonalRamp": [
+          "oklch(15% 0.05054 161.64)",
+          "oklch(26% 0.05054 161.64)",
+          "oklch(38% 0.05054 161.64)",
+          "oklch(49% 0.05054 161.64)",
+          "oklch(61% 0.05054 161.64)",
+          "oklch(72% 0.05054 161.64)",
+          "oklch(84% 0.05054 161.64)",
+          "oklch(95% 0.05054 161.64)"
+        ]
+      },
+      "fieldwork-selected": {
+        "role": "neutral",
+        "displayName": "Fieldwork selected",
+        "tonalRamp": [
+          "oklch(15% 0.04035 124.14)",
+          "oklch(26% 0.04035 124.14)",
+          "oklch(38% 0.04035 124.14)",
+          "oklch(49% 0.04035 124.14)",
+          "oklch(61% 0.04035 124.14)",
+          "oklch(72% 0.04035 124.14)",
+          "oklch(84% 0.04035 124.14)",
+          "oklch(95% 0.04035 124.14)"
+        ]
+      },
+      "fieldwork-focus": {
+        "role": "neutral",
+        "displayName": "Fieldwork focus",
+        "tonalRamp": [
+          "oklch(15% 0.07522 163.67)",
+          "oklch(26% 0.07522 163.67)",
+          "oklch(38% 0.07522 163.67)",
+          "oklch(49% 0.07522 163.67)",
+          "oklch(61% 0.07522 163.67)",
+          "oklch(72% 0.07522 163.67)",
+          "oklch(84% 0.07522 163.67)",
+          "oklch(95% 0.07522 163.67)"
+        ]
+      },
+      "studio-ink": {
+        "role": "neutral",
+        "displayName": "Studio ink",
+        "tonalRamp": [
+          "oklch(15% 0.03430 298.90)",
+          "oklch(26% 0.03430 298.90)",
+          "oklch(38% 0.03430 298.90)",
+          "oklch(49% 0.03430 298.90)",
+          "oklch(61% 0.03430 298.90)",
+          "oklch(72% 0.03430 298.90)",
+          "oklch(84% 0.03430 298.90)",
+          "oklch(95% 0.03430 298.90)"
+        ]
+      },
+      "studio-muted": {
+        "role": "neutral",
+        "displayName": "Studio muted",
+        "tonalRamp": [
+          "oklch(15% 0.02587 302.53)",
+          "oklch(26% 0.02587 302.53)",
+          "oklch(38% 0.02587 302.53)",
+          "oklch(49% 0.02587 302.53)",
+          "oklch(61% 0.02587 302.53)",
+          "oklch(72% 0.02587 302.53)",
+          "oklch(84% 0.02587 302.53)",
+          "oklch(95% 0.02587 302.53)"
+        ]
+      },
+      "studio-ground": {
+        "role": "neutral",
+        "displayName": "Studio ground",
+        "tonalRamp": [
+          "oklch(15% 0.01242 301.28)",
+          "oklch(26% 0.01242 301.28)",
+          "oklch(38% 0.01242 301.28)",
+          "oklch(49% 0.01242 301.28)",
+          "oklch(61% 0.01242 301.28)",
+          "oklch(72% 0.01242 301.28)",
+          "oklch(84% 0.01242 301.28)",
+          "oklch(95% 0.01242 301.28)"
+        ]
+      },
+      "studio-paper": {
+        "role": "neutral",
+        "displayName": "Studio paper",
+        "tonalRamp": [
+          "oklch(15% 0.00170 67.80)",
+          "oklch(26% 0.00170 67.80)",
+          "oklch(38% 0.00170 67.80)",
+          "oklch(49% 0.00170 67.80)",
+          "oklch(61% 0.00170 67.80)",
+          "oklch(72% 0.00170 67.80)",
+          "oklch(84% 0.00170 67.80)",
+          "oklch(95% 0.00170 67.80)"
+        ]
+      },
+      "studio-panel": {
+        "role": "neutral",
+        "displayName": "Studio panel",
+        "tonalRamp": [
+          "oklch(15% 0.00696 304.24)",
+          "oklch(26% 0.00696 304.24)",
+          "oklch(38% 0.00696 304.24)",
+          "oklch(49% 0.00696 304.24)",
+          "oklch(61% 0.00696 304.24)",
+          "oklch(72% 0.00696 304.24)",
+          "oklch(84% 0.00696 304.24)",
+          "oklch(95% 0.00696 304.24)"
+        ]
+      },
+      "studio-line": {
+        "role": "neutral",
+        "displayName": "Studio line",
+        "tonalRamp": [
+          "oklch(15% 0.01838 303.39)",
+          "oklch(26% 0.01838 303.39)",
+          "oklch(38% 0.01838 303.39)",
+          "oklch(49% 0.01838 303.39)",
+          "oklch(61% 0.01838 303.39)",
+          "oklch(72% 0.01838 303.39)",
+          "oklch(84% 0.01838 303.39)",
+          "oklch(95% 0.01838 303.39)"
+        ]
+      },
+      "studio-accent": {
+        "role": "primary",
+        "displayName": "Studio accent",
+        "tonalRamp": [
+          "oklch(15% 0.05509 309.08)",
+          "oklch(26% 0.05509 309.08)",
+          "oklch(38% 0.05509 309.08)",
+          "oklch(49% 0.05509 309.08)",
+          "oklch(61% 0.05509 309.08)",
+          "oklch(72% 0.05509 309.08)",
+          "oklch(84% 0.05509 309.08)",
+          "oklch(95% 0.05509 309.08)"
+        ]
+      },
+      "studio-accent-ink": {
+        "role": "neutral",
+        "displayName": "Studio accent ink",
+        "tonalRamp": [
+          "oklch(15% 0.00000 0.00)",
+          "oklch(26% 0.00000 0.00)",
+          "oklch(38% 0.00000 0.00)",
+          "oklch(49% 0.00000 0.00)",
+          "oklch(61% 0.00000 0.00)",
+          "oklch(72% 0.00000 0.00)",
+          "oklch(84% 0.00000 0.00)",
+          "oklch(95% 0.00000 0.00)"
+        ]
+      },
+      "studio-selected": {
+        "role": "neutral",
+        "displayName": "Studio selected",
+        "tonalRamp": [
+          "oklch(15% 0.04078 301.26)",
+          "oklch(26% 0.04078 301.26)",
+          "oklch(38% 0.04078 301.26)",
+          "oklch(49% 0.04078 301.26)",
+          "oklch(61% 0.04078 301.26)",
+          "oklch(72% 0.04078 301.26)",
+          "oklch(84% 0.04078 301.26)",
+          "oklch(95% 0.04078 301.26)"
+        ]
+      },
+      "studio-focus": {
+        "role": "neutral",
+        "displayName": "Studio focus",
+        "tonalRamp": [
+          "oklch(15% 0.11376 301.13)",
+          "oklch(26% 0.11376 301.13)",
+          "oklch(38% 0.11376 301.13)",
+          "oklch(49% 0.11376 301.13)",
+          "oklch(61% 0.11376 301.13)",
+          "oklch(72% 0.11376 301.13)",
+          "oklch(84% 0.11376 301.13)",
+          "oklch(95% 0.11376 301.13)"
+        ]
+      },
+      "status-good-background": {
+        "role": "secondary",
+        "displayName": "Status good background",
+        "tonalRamp": [
+          "oklch(15% 0.01408 138.71)",
+          "oklch(26% 0.01408 138.71)",
+          "oklch(38% 0.01408 138.71)",
+          "oklch(49% 0.01408 138.71)",
+          "oklch(61% 0.01408 138.71)",
+          "oklch(72% 0.01408 138.71)",
+          "oklch(84% 0.01408 138.71)",
+          "oklch(95% 0.01408 138.71)"
+        ]
+      },
+      "status-good-ink": {
+        "role": "secondary",
+        "displayName": "Status good ink",
+        "tonalRamp": [
+          "oklch(15% 0.05908 142.02)",
+          "oklch(26% 0.05908 142.02)",
+          "oklch(38% 0.05908 142.02)",
+          "oklch(49% 0.05908 142.02)",
+          "oklch(61% 0.05908 142.02)",
+          "oklch(72% 0.05908 142.02)",
+          "oklch(84% 0.05908 142.02)",
+          "oklch(95% 0.05908 142.02)"
+        ]
+      },
+      "status-pending-background": {
+        "role": "secondary",
+        "displayName": "Status pending background",
+        "tonalRamp": [
+          "oklch(15% 0.04367 91.27)",
+          "oklch(26% 0.04367 91.27)",
+          "oklch(38% 0.04367 91.27)",
+          "oklch(49% 0.04367 91.27)",
+          "oklch(61% 0.04367 91.27)",
+          "oklch(72% 0.04367 91.27)",
+          "oklch(84% 0.04367 91.27)",
+          "oklch(95% 0.04367 91.27)"
+        ]
+      },
+      "status-pending-ink": {
+        "role": "secondary",
+        "displayName": "Status pending ink",
+        "tonalRamp": [
+          "oklch(15% 0.07303 84.99)",
+          "oklch(26% 0.07303 84.99)",
+          "oklch(38% 0.07303 84.99)",
+          "oklch(49% 0.07303 84.99)",
+          "oklch(61% 0.07303 84.99)",
+          "oklch(72% 0.07303 84.99)",
+          "oklch(84% 0.07303 84.99)",
+          "oklch(95% 0.07303 84.99)"
+        ]
+      },
+      "comparison-background": {
+        "role": "neutral",
+        "displayName": "Comparison background",
+        "tonalRamp": [
+          "oklch(15% 0.00230 145.51)",
+          "oklch(26% 0.00230 145.51)",
+          "oklch(38% 0.00230 145.51)",
+          "oklch(49% 0.00230 145.51)",
+          "oklch(61% 0.00230 145.51)",
+          "oklch(72% 0.00230 145.51)",
+          "oklch(84% 0.00230 145.51)",
+          "oklch(95% 0.00230 145.51)"
+        ]
+      },
+      "comparison-ink": {
+        "role": "neutral",
+        "displayName": "Comparison ink",
+        "tonalRamp": [
+          "oklch(15% 0.00408 121.56)",
+          "oklch(26% 0.00408 121.56)",
+          "oklch(38% 0.00408 121.56)",
+          "oklch(49% 0.00408 121.56)",
+          "oklch(61% 0.00408 121.56)",
+          "oklch(72% 0.00408 121.56)",
+          "oklch(84% 0.00408 121.56)",
+          "oklch(95% 0.00408 121.56)"
+        ]
+      }
+    },
+    "tonalRampPolicy": "Synthesized OKLCH swatch previews only. The application uses the exact colors in DESIGN.md, not these ramps.",
+    "typographyMeta": {
+      "atrium-display": {
+        "displayName": "Atrium display",
+        "purpose": "Desktop page heading for Atrium."
+      },
+      "fieldwork-display": {
+        "displayName": "Fieldwork display",
+        "purpose": "Desktop page heading for Fieldwork."
+      },
+      "studio-display": {
+        "displayName": "Studio display",
+        "purpose": "Desktop page heading for Studio."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section headings."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Item headings before component overrides."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default prototype text."
+      },
+      "button-label": {
+        "displayName": "Button label",
+        "purpose": "Shared primary and secondary action labels."
+      }
+    },
+    "fontAsset": {
+      "family": "Manrope preview",
+      "url": "/prototype-ui/manrope.ttf",
+      "declaredWeightRange": "200 800",
+      "display": "swap"
+    },
+    "shadows": [
+      {
+        "name": "comparison-toolbar",
+        "value": "0 10px 40px #17231838",
+        "purpose": "Fixed preview comparison controls only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "button-colors",
+        "value": "background-color 160ms ease-out, color 160ms ease-out",
+        "purpose": "Shared button state changes. Disabled by prefers-reduced-motion: reduce."
+      }
+    ],
+    "focus": {
+      "default": "2px solid var(--mock-focus)",
+      "offset": "4px",
+      "searchOffset": "2px",
+      "comparisonColor": "#e3dfc9"
+    },
+    "breakpoints": [
+      {
+        "name": "wide-atrium",
+        "value": "1600px",
+        "query": "min-width",
+        "purpose": "Increase Atrium top framing."
+      },
+      {
+        "name": "compact-desktop",
+        "value": "1180px",
+        "query": "max-width",
+        "purpose": "Reduce gaps, images, and Studio rail width."
+      },
+      {
+        "name": "stacked-content",
+        "value": "960px",
+        "query": "max-width",
+        "purpose": "Stack supporting layouts and enable minimum-width table scrolling."
+      },
+      {
+        "name": "mobile",
+        "value": "700px",
+        "query": "max-width",
+        "purpose": "Use full-width shells and navigation rows. Initially collapse comparison controls."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Atrium primary button",
+      "kind": "button",
+      "refersTo": "atrium-button-primary",
+      "description": "The primary action with the Atrium palette and radius.",
+      "html": "<button class=\"ds-atrium-primary\" type=\"button\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 5v14M5 12h14\"/></svg>Create a Meetup</button>",
+      "css": "@font-face{font-family:\"Manrope preview\";src:url(\"/prototype-ui/manrope.ttf\") format(\"truetype\");font-weight:200 800;font-style:normal;font-display:swap;}.ds-atrium-primary{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:44px;padding:11px 18px;font-family:\"Manrope preview\", sans-serif;font-size:12px;font-weight:600;line-height:1.55;cursor:pointer;transition:background-color 160ms ease-out,color 160ms ease-out;background:#292723;color:#fffefa;border:1px solid #292723;border-radius:6px;}.ds-atrium-primary:hover{filter:brightness(1.16);}.ds-atrium-primary:focus-visible{outline:2px solid #74633c;outline-offset:4px;}.ds-atrium-primary:disabled{cursor:default;opacity:.5;}@media(prefers-reduced-motion:reduce){.ds-atrium-primary{transition:none;}}"
+    },
+    {
+      "name": "Fieldwork primary button",
+      "kind": "button",
+      "refersTo": "fieldwork-button-primary",
+      "description": "The primary action with the Fieldwork palette and radius.",
+      "html": "<button class=\"ds-fieldwork-primary\" type=\"button\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 5v14M5 12h14\"/></svg>Create a Meetup</button>",
+      "css": "@font-face{font-family:\"Manrope preview\";src:url(\"/prototype-ui/manrope.ttf\") format(\"truetype\");font-weight:200 800;font-style:normal;font-display:swap;}.ds-fieldwork-primary{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:44px;padding:11px 18px;font-family:\"Manrope preview\", sans-serif;font-size:12px;font-weight:600;line-height:1.55;cursor:pointer;transition:background-color 160ms ease-out,color 160ms ease-out;background:#294c3b;color:#f7f9f3;border:1px solid #294c3b;border-radius:6px;}.ds-fieldwork-primary:hover{filter:brightness(1.16);}.ds-fieldwork-primary:focus-visible{outline:2px solid #2d6950;outline-offset:4px;}.ds-fieldwork-primary:disabled{cursor:default;opacity:.5;}@media(prefers-reduced-motion:reduce){.ds-fieldwork-primary{transition:none;}}"
+    },
+    {
+      "name": "Studio primary button",
+      "kind": "button",
+      "refersTo": "studio-button-primary",
+      "description": "The primary action with the Studio palette and radius.",
+      "html": "<button class=\"ds-studio-primary\" type=\"button\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 5v14M5 12h14\"/></svg>Create a Meetup</button>",
+      "css": "@font-face{font-family:\"Manrope preview\";src:url(\"/prototype-ui/manrope.ttf\") format(\"truetype\");font-weight:200 800;font-style:normal;font-display:swap;}.ds-studio-primary{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:44px;padding:11px 18px;font-family:\"Manrope preview\", sans-serif;font-size:12px;font-weight:600;line-height:1.55;cursor:pointer;transition:background-color 160ms ease-out,color 160ms ease-out;background:#51405f;color:#fff;border:1px solid #51405f;border-radius:3px;}.ds-studio-primary:hover{filter:brightness(1.16);}.ds-studio-primary:focus-visible{outline:2px solid #7558a0;outline-offset:4px;}.ds-studio-primary:disabled{cursor:default;opacity:.5;}@media(prefers-reduced-motion:reduce){.ds-studio-primary{transition:none;}}"
+    },
+    {
+      "name": "Secondary button",
+      "kind": "button",
+      "refersTo": "atrium-button-secondary",
+      "description": "The shared secondary treatment, shown in Atrium.",
+      "html": "<button class=\"ds-secondary\" type=\"button\">Save changes</button>",
+      "css": "@font-face{font-family:\"Manrope preview\";src:url(\"/prototype-ui/manrope.ttf\") format(\"truetype\");font-weight:200 800;font-style:normal;font-display:swap;}.ds-secondary{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:44px;padding:11px 18px;font-family:\"Manrope preview\", sans-serif;font-size:12px;font-weight:600;line-height:1.55;cursor:pointer;transition:background-color 160ms ease-out,color 160ms ease-out;background:transparent;color:#292723;border:1px solid #dfddd4;border-radius:6px;}.ds-secondary:hover{background:#e5e0d0;}.ds-secondary:focus-visible{outline:2px solid #74633c;outline-offset:4px;}.ds-secondary:disabled{cursor:default;opacity:.5;}@media(prefers-reduced-motion:reduce){.ds-secondary{transition:none;}}"
+    },
+    {
+      "name": "Search field",
+      "kind": "input",
+      "refersTo": "atrium-field",
+      "description": "The shared search wrapper owns the focus ring, shown in Atrium.",
+      "html": "<label class=\"ds-search\"><svg width=\"19\" height=\"19\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0\"/></svg><input type=\"search\" aria-label=\"Search Meetups\" placeholder=\"Find an Interest, Activity or Place\"/></label>",
+      "css": "@font-face{font-family:\"Manrope preview\";src:url(\"/prototype-ui/manrope.ttf\") format(\"truetype\");font-weight:200 800;font-style:normal;font-display:swap;}.ds-search{display:flex;align-items:center;gap:8px;min-width:0;padding-left:13px;border:1px solid #dfddd4;border-radius:6px;background:#fffefa;color:#292723;}.ds-search svg{flex:0 0 auto;}.ds-search input{width:100%;min-width:0;min-height:44px;padding:11px 13px;border:0;border-radius:6px;background:transparent;color:#292723;font-family:\"Manrope preview\", sans-serif;font-size:14px;line-height:1.55;}.ds-search input::placeholder{color:#68665e;opacity:1;}.ds-search:focus-within{outline:2px solid #74633c;outline-offset:2px;}.ds-search input:focus-visible{outline:0;}"
+    },
+    {
+      "name": "Studio navigation",
+      "kind": "nav",
+      "refersTo": "studio-navigation-active",
+      "description": "The directory rail has a violet current-page row and SVG icons.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Member navigation\"><button type=\"button\" aria-current=\"page\"><svg width=\"21\" height=\"21\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m3 10 9-7 9 7v10H3Z M9 20v-7h6v7\"/></svg><span>Discover</span></button><button type=\"button\"><svg width=\"21\" height=\"21\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M8 2v4m8-4v4M3 9h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2ZM7 13h3m4 0h3m-10 4h3\"/></svg><span>Meetups</span></button></nav>",
+      "css": "@font-face{font-family:\"Manrope preview\";src:url(\"/prototype-ui/manrope.ttf\") format(\"truetype\");font-weight:200 800;font-style:normal;font-display:swap;}.ds-nav{display:grid;gap:9px;width:215px;padding:28px 23px;background:#eeebf3;color:#342e41;border-right:1px solid #ddd8e5;}.ds-nav button{display:inline-flex;align-items:center;justify-content:flex-start;gap:13px;width:100%;padding:12px 10px;border:0;border-radius:3px;background:transparent;color:inherit;font-family:\"Manrope preview\", sans-serif;font-size:12px;font-weight:500;line-height:1.55;cursor:pointer;transition:background-color 160ms ease-out,color 160ms ease-out;}.ds-nav button[aria-current=\"page\"]{background:#dcd2ed;color:#443354;font-weight:700;}.ds-nav button:hover{background:#e2dcec;}.ds-nav button:focus-visible{outline:2px solid #7558a0;outline-offset:4px;}@media(prefers-reduced-motion:reduce){.ds-nav button{transition:none;}}"
+    },
+    {
+      "name": "Status labels",
+      "kind": "chip",
+      "refersTo": "status-good",
+      "description": "Shared good and pending status pairs with an Atrium neutral state.",
+      "html": "<span class=\"ds-status\">Active</span> <span class=\"ds-status ds-status-pending\">Pending</span> <span class=\"ds-status ds-status-neutral\">Suspended</span>",
+      "css": "@font-face{font-family:\"Manrope preview\";src:url(\"/prototype-ui/manrope.ttf\") format(\"truetype\");font-weight:200 800;font-style:normal;font-display:swap;}.ds-status{display:inline-flex;align-items:center;padding:4px 9px;border-radius:4px;background:#e7eee5;color:#355032;font-family:\"Manrope preview\", sans-serif;font-size:10px;font-weight:600;line-height:1.55;white-space:nowrap;}.ds-status-pending{background:#f3e8c8;color:#66501e;}.ds-status-neutral{background:#f4f3ed;color:#68665e;}"
+    },
+    {
+      "name": "Join panel",
+      "kind": "card",
+      "refersTo": "atrium-join-panel",
+      "description": "The shared supporting panel and full-width action, shown in Atrium.",
+      "html": "<aside class=\"ds-join\"><h2>There's room for you.</h2><p>2 places available. Join the conversation.</p><button type=\"button\">Join Meetup<svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14m-6-6 6 6-6 6\"/></svg></button><small>Open to Members in Ministry A</small></aside>",
+      "css": "@font-face{font-family:\"Manrope preview\";src:url(\"/prototype-ui/manrope.ttf\") format(\"truetype\");font-weight:200 800;font-style:normal;font-display:swap;}.ds-join{max-width:310px;padding:25px;border-radius:12px;background:#f4f3ed;color:#292723;font-family:\"Manrope preview\", sans-serif;font-size:14px;line-height:1.55;}.ds-join h2{margin:0;font-size:20px;font-weight:600;line-height:1.35;letter-spacing:-.025em;}.ds-join p{margin:12px 0 18px;color:#68665e;font-size:12px;}.ds-join button{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:44px;padding:11px 18px;font-family:\"Manrope preview\", sans-serif;font-size:12px;font-weight:600;line-height:1.55;cursor:pointer;transition:background-color 160ms ease-out,color 160ms ease-out;width:100%;background:#292723;color:#fffefa;border:1px solid #292723;border-radius:6px;}.ds-join button:hover{filter:brightness(1.16);}.ds-join button:focus-visible{outline:2px solid #74633c;outline-offset:4px;}.ds-join small{display:block;margin-top:12px;text-align:center;color:#68665e;font-size:10px;}@media(prefers-reduced-motion:reduce){.ds-join button{transition:none;}}"
+    },
+    {
+      "name": "Administration table",
+      "kind": "custom",
+      "refersTo": "studio-table",
+      "description": "Shared table borders, labelled scrolling, row hover, and explicit status, shown in Studio.",
+      "html": "<div class=\"ds-table\" role=\"region\" aria-label=\"Members\" tabindex=\"0\"><table><caption class=\"ds-table-caption\">Members</caption><thead><tr><th scope=\"col\">Member</th><th scope=\"col\">Department</th><th scope=\"col\">Status</th></tr></thead><tbody><tr><td>Priya Nair</td><td>Policy</td><td><span class=\"ds-table-status\">Active</span></td></tr><tr><td>Daniel Tan</td><td>Operations</td><td><span class=\"ds-table-status\">Active</span></td></tr></tbody></table></div>",
+      "css": "@font-face{font-family:\"Manrope preview\";src:url(\"/prototype-ui/manrope.ttf\") format(\"truetype\");font-weight:200 800;font-style:normal;font-display:swap;}.ds-table{width:100%;overflow-x:auto;border:1px solid #ddd8e5;border-radius:8px;background:#fdfcfb;color:#342e41;font-family:\"Manrope preview\", sans-serif;line-height:1.55;}.ds-table:focus-visible{outline:2px solid #7558a0;outline-offset:4px;}.ds-table table{width:100%;border-collapse:collapse;text-align:left;font-size:12px;}.ds-table-caption{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;}.ds-table th{background:#f2f0f5;color:#6b6575;font-size:11px;font-weight:500;white-space:nowrap;}.ds-table th,.ds-table td{padding:17px 20px;border-bottom:1px solid #ddd8e5;vertical-align:middle;}.ds-table tbody tr:last-child td{border-bottom:0;}.ds-table tbody tr:hover{background:#f2f0f5;}.ds-table-status{display:inline-flex;padding:4px 9px;border-radius:4px;background:#e7eee5;color:#355032;font-size:10px;font-weight:600;white-space:nowrap;}@media(max-width:960px){.ds-table table{min-width:630px;}}"
+    },
+    {
+      "name": "Collapsed comparison control",
+      "kind": "custom",
+      "refersTo": "comparison-toggle",
+      "description": "The persistent mobile Compare styles control. Expansion is implemented in the route; this sample shows the collapsed state.",
+      "html": "<aside class=\"ds-comparison\" aria-label=\"Design comparison\"><button type=\"button\" aria-expanded=\"false\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 3h7v7H3Zm11 0h7v7h-7ZM3 14h7v7H3Zm11 0h7v7h-7Z\"/></svg>Compare styles<span class=\"ds-comparison-swatch\"></span></button></aside>",
+      "css": "@font-face{font-family:\"Manrope preview\";src:url(\"/prototype-ui/manrope.ttf\") format(\"truetype\");font-weight:200 800;font-style:normal;font-display:swap;}.ds-comparison{display:inline-flex;border-radius:13px;background:#292a29;color:#f9faf7;box-shadow:0 10px 40px #17231838;}.ds-comparison button{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:44px;padding:0 16px;border:0;border-radius:0;background:transparent;color:#f9faf7;font-family:\"Manrope preview\", sans-serif;font-size:12px;font-weight:500;line-height:1.55;cursor:pointer;transition:background-color 160ms ease-out,color 160ms ease-out;}.ds-comparison button:focus-visible{outline:2px solid #e3dfc9;outline-offset:4px;}.ds-comparison-swatch{width:9px;height:9px;border-radius:2px;background:#cabfa9;}@media(prefers-reduced-motion:reduce){.ds-comparison button{transition:none;}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Atrium, Fieldwork, and Studio, provisional prototypes",
+    "overview": "This document records the three interactive styles at `/prototype/ui`, including Member screens, Organisation Admin screens, and Platform Admin screens. No production direction has been approved. Outside this route, the existing application styles in `src/app/globals.css` remain authoritative. The frontmatter is normative only for the prototype rules recorded here.\n\nAtrium follows the supplied warm architectural references. Fieldwork puts dates and times first. Studio uses a compact directory with violet panels. The user requested alternatives to the usual Meetup and Luma styling. These are comparison candidates, not a combined production identity.",
+    "keyCharacteristics": [
+      "Atrium combines warm stone, ivory, and charcoal with horizontal navigation and broad photographs.",
+      "Fieldwork combines forest green and sage with a narrow navigation rail and a date-led schedule.",
+      "Studio combines violet, white, and aubergine with a compact directory and rectangular panels.",
+      "All three styles share Manrope controls, explicit statuses, and the same sample actions."
+    ],
+    "rules": [
+      {
+        "name": "The Prototype Scope Rule",
+        "body": "Apply these tokens only within `/prototype/ui` until the user chooses a production direction.",
+        "section": "overview"
+      },
+      {
+        "name": "The Shared Controls Rule",
+        "body": "Use the active style's palette for buttons, fields, panels, and tables. Keep their labels and actions consistent when the style changes.",
+        "section": "components"
+      },
+      {
+        "name": "The Visible Status Rule",
+        "body": "Keep the status text alongside its color, including Pending, Active, and Suspended states.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do preserve the three named styles as separate comparison candidates.",
+      "Do retain the current screen and sample state when switching styles.",
+      "Do keep visible keyboard focus, labelled fields, and text status labels.",
+      "Do keep administration tables in labelled, keyboard-focusable horizontal scroll regions when space is limited."
+    ],
+    "donts": [
+      "Don't apply these provisional tokens to production routes before a direction is approved.",
+      "Don't treat preview-only comparison controls or fictional photographs as production brand commitments.",
+      "Don't replace SVG icons with text glyphs or use color alone to communicate status."
+    ]
+  }
+}
