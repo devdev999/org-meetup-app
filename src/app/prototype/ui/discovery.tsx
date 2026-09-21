@@ -8,6 +8,7 @@ import {
   Status,
 } from "./components";
 import {
+  formatMeetupDate,
   initialMeetups,
   members,
   type Meetup,
@@ -50,7 +51,7 @@ export function MeetupCard({
       </button>
       <div className="mock-card-copy">
         <p className="mock-card-time">
-          {meetup.date} <span>·</span> {meetup.time}
+          {formatMeetupDate(meetup.date)} <span>·</span> {meetup.time}
         </p>
         <h3>
           <button
@@ -154,10 +155,23 @@ export function Discovery({
   );
   const feature = meetups[0] ?? initialMeetups[0];
   const isDiscovery = !kind;
+  const dates = filtered.map((meetup) => meetup.date).sort();
+  const firstDate = dates[0];
+  const lastDate = dates.at(-1);
+  let scheduleTitle = "Your schedule";
+  if (firstDate && lastDate) {
+    scheduleTitle = formatMeetupDate(lastDate, {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+    if (firstDate !== lastDate)
+      scheduleTitle = `${formatMeetupDate(firstDate, { day: "numeric", month: "short" })} to ${scheduleTitle}`;
+  }
   const title = kind
     ? `${kind}s`
     : variant === "fieldwork"
-      ? "Make room for a Meetup."
+      ? scheduleTitle
       : variant === "studio"
         ? "Good company.\nShared Interests."
         : "A little time, well spent.";
@@ -322,7 +336,7 @@ export function Discovery({
                 <article key={meetup.id}>
                   <div className="mock-schedule-time">
                     <strong>{meetup.time}</strong>
-                    <span>{meetup.date}</span>
+                    <span>{formatMeetupDate(meetup.date)}</span>
                   </div>
                   <img
                     src={`/prototype-ui/${meetup.photo}.webp`}
@@ -533,8 +547,13 @@ export function MeetupDetails({
               name={meetup.activity === "Coffee" ? "coffee" : "calendar"}
               size={32}
             />
-            <strong>{meetup.day}</strong>
-            <span>September 2026</span>
+            <strong>{formatMeetupDate(meetup.date, { day: "numeric" })}</strong>
+            <span>
+              {formatMeetupDate(meetup.date, {
+                month: "long",
+                year: "numeric",
+              })}
+            </span>
             <p>
               {meetup.time} · {meetup.duration}
             </p>
@@ -557,7 +576,7 @@ export function MeetupDetails({
           <div className="mock-detail-facts">
             <span>
               <Icon name="calendar" size={17} />
-              {meetup.date}
+              {formatMeetupDate(meetup.date)}
             </span>
             <span>
               <Icon name="clock" size={17} />
@@ -641,7 +660,7 @@ export function MeetupDetails({
           <div className="mock-join-date">
             <Icon name="calendar" size={25} />
             <div>
-              <strong>{meetup.date}</strong>
+              <strong>{formatMeetupDate(meetup.date)}</strong>
               <span>
                 {meetup.time} · {meetup.duration}
               </span>

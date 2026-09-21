@@ -72,11 +72,14 @@ export function UiPrototype() {
   const [joined, setJoined] = useState(["learning"]);
   const [waitlisted, setWaitlisted] = useState<string[]>([]);
   const [message, setMessage] = useState("");
+  const [comparisonExpanded, setComparisonExpanded] = useState(false);
   const memberDemo = useMemberDemo();
   const adminDemo = useAdminDemo();
   const mainRef = useRef<HTMLElement>(null);
   const selectedMeetup =
-    meetups.find((meetup) => meetup.id === id) ?? meetups[0] ?? initialMeetups[0];
+    meetups.find((meetup) => meetup.id === id) ??
+    meetups[0] ??
+    initialMeetups[0];
   const personalScreens = [
     "profile",
     "interests",
@@ -108,6 +111,10 @@ export function UiPrototype() {
   }
 
   useEffect(() => {
+    setComparisonExpanded(window.matchMedia("(min-width: 701px)").matches);
+  }, []);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (
         event.altKey ||
@@ -116,7 +123,7 @@ export function UiPrototype() {
         event.shiftKey ||
         (event.target instanceof Element &&
           event.target.closest(
-            "input, textarea, select, button, a, [contenteditable]:not([contenteditable='false']), [role='slider']",
+            "input, textarea, select, button, a, [contenteditable]:not([contenteditable='false']), [role='slider'], .mock-table-scroll",
           ))
       )
         return;
@@ -470,60 +477,88 @@ export function UiPrototype() {
           </>
         )}
       </div>
-      <aside className="mock-comparison" aria-label="Design comparison">
-        <div className="mock-comparison-top">
-          <span>
-            Design preview <span className="mock-demo-dot" /> Fictional data
-          </span>
-          <button onClick={() => window.location.reload()}>Reset demo</button>
-        </div>
-        <div className="mock-comparison-controls">
+      <aside
+        className={`mock-comparison ${comparisonExpanded ? "" : "is-collapsed"}`}
+        aria-label="Design comparison"
+      >
+        {!comparisonExpanded && (
           <button
-            className="mock-switch-arrow"
-            aria-label="Previous style"
-            onClick={() => cycleVariant(-1)}
+            className="mock-comparison-expand"
+            aria-expanded={false}
+            aria-controls="mock-comparison-panel"
+            onClick={() => setComparisonExpanded(true)}
           >
-            <Icon name="back" size={17} />
+            <Icon name="grid" size={17} />
+            Compare styles
+            <span className={`mock-swatch ${variant}`} />
           </button>
-          <div className="mock-variant-options">
-            {variants.map((name) => (
-              <button
-                aria-pressed={variant === name}
-                key={name}
-                onClick={() => selectVariant(name)}
-              >
-                <span className={`mock-swatch ${name}`} />
-                {variantNames[name]}
+        )}
+        <div id="mock-comparison-panel" hidden={!comparisonExpanded}>
+          <div className="mock-comparison-top">
+            <span>
+              Design preview <span className="mock-demo-dot" /> Fictional data
+            </span>
+            <div>
+              <button onClick={() => window.location.reload()}>
+                Reset demo
               </button>
-            ))}
+              <button
+                aria-expanded={true}
+                aria-controls="mock-comparison-panel"
+                onClick={() => setComparisonExpanded(false)}
+              >
+                Collapse <Icon name="close" size={12} />
+              </button>
+            </div>
           </div>
-          <button
-            className="mock-switch-arrow"
-            aria-label="Next style"
-            onClick={() => cycleVariant(1)}
-          >
-            <Icon name="arrow" size={17} />
-          </button>
-          <label>
-            <span className="mock-sr-only">Preview screen</span>
-            <select
-              value={screen}
-              onChange={(event) => {
-                const selected = screens.find(
-                  (item) => item === event.target.value,
-                );
-                if (selected) navigate(selected);
-              }}
+          <div className="mock-comparison-controls">
+            <button
+              className="mock-switch-arrow"
+              aria-label="Previous style"
+              onClick={() => cycleVariant(-1)}
             >
-              {screens.map((name) => (
-                <option value={name} key={name}>
-                  {screenNames[name]}
-                </option>
+              <Icon name="back" size={17} />
+            </button>
+            <div className="mock-variant-options">
+              {variants.map((name) => (
+                <button
+                  aria-pressed={variant === name}
+                  key={name}
+                  onClick={() => selectVariant(name)}
+                >
+                  <span className={`mock-swatch ${name}`} />
+                  {variantNames[name]}
+                </button>
               ))}
-            </select>
-          </label>
+            </div>
+            <button
+              className="mock-switch-arrow"
+              aria-label="Next style"
+              onClick={() => cycleVariant(1)}
+            >
+              <Icon name="arrow" size={17} />
+            </button>
+            <label>
+              <span className="mock-sr-only">Preview screen</span>
+              <select
+                value={screen}
+                onChange={(event) => {
+                  const selected = screens.find(
+                    (item) => item === event.target.value,
+                  );
+                  if (selected) navigate(selected);
+                }}
+              >
+                {screens.map((name) => (
+                  <option value={name} key={name}>
+                    {screenNames[name]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <p>{variantDescriptions[variant]}</p>
         </div>
-        <p>{variantDescriptions[variant]}</p>
       </aside>
     </div>
   );

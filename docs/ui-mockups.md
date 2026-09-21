@@ -6,7 +6,7 @@ Run the existing local setup in README.md, then `pnpm dev` and open [the UI prev
 - [Fieldwork](http://localhost:3000/prototype/ui?variant=fieldwork) uses a green navigation rail and a time-ordered Meetup list.
 - [Studio](http://localhost:3000/prototype/ui?variant=studio) uses violet, a directory sidebar and a compact two-column index.
 
-The bottom toolbar switches styles without losing the current screen or saved sample actions. Left and right arrow keys also change styles when a form control is not focused. The screen selector exposes all 16 main screens. Administration has eight sections; Platform Admin has five.
+The bottom toolbar switches styles without losing the current screen or saved sample actions. Collapse it to inspect the complete layout. On mobile it starts as a compact Compare styles button. Left and right arrow keys also change styles when a form control or scrolling table is not focused. The screen selector exposes all 16 main screens. Administration has eight sections; Platform Admin has five.
 
 The URL records the style, screen and selected record. Sample state remains in memory and resets on reload. Use Reset demo to start again.
 

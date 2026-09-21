@@ -817,12 +817,7 @@ export function CreateMeetup({
               title: String(values.get("title")),
               activity: String(values.get("activity")),
               kind: isEvent ? "Event" : "Meetup",
-              date: new Date(`${date}T12:00:00`).toLocaleDateString("en-GB", {
-                weekday: "short",
-                day: "numeric",
-                month: "short",
-              }),
-              day: Number(date.slice(-2)),
+              date,
               time: String(values.get("time")),
               duration: `${values.get("duration")} minutes`,
               place: virtual ? "Virtual" : String(values.get("place")),

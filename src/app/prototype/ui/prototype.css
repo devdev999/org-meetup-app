@@ -1932,6 +1932,23 @@ html:has(.ui-prototype) {
   align-items: center;
   gap: 7px;
 }
+.mock-comparison-top > div {
+  display: flex;
+  gap: 15px;
+}
+.ui-prototype .mock-comparison.is-collapsed {
+  left: auto;
+  right: 16px;
+  transform: none;
+  width: auto;
+  padding: 0;
+}
+.ui-prototype .mock-comparison-expand {
+  min-height: 44px;
+  padding: 0 16px;
+  color: #f9faf7;
+  font-size: 12px;
+}
 .ui-prototype .mock-comparison-top button {
   color: #c9cbc7;
   font-size: 9px;
@@ -2000,7 +2017,7 @@ html:has(.ui-prototype) {
   font-size: 10px;
   min-height: 39px;
 }
-.mock-comparison > p {
+.mock-comparison p {
   text-align: center;
   color: #c9cbc7;
   font-size: 9px;
@@ -2741,7 +2758,7 @@ html:has(.ui-prototype) {
     padding-bottom: 4px;
     font-size: 8px;
   }
-  .mock-comparison > p {
+  .mock-comparison p {
     font-size: 8px;
     padding-top: 6px;
   }

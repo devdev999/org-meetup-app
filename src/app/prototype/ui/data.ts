@@ -40,7 +40,6 @@ export type Meetup = {
   activity: string;
   kind: "Meetup" | "Event";
   date: string;
-  day: number;
   time: string;
   duration: string;
   place: string;
@@ -63,8 +62,7 @@ export const initialMeetups = [
     title: "A coffee, a conversation",
     activity: "Coffee",
     kind: "Meetup",
-    date: "Tue, 22 Sep",
-    day: 22,
+    date: "2026-09-22",
     time: "10:30",
     duration: "45 minutes",
     place: "The courtyard café",
@@ -83,8 +81,7 @@ export const initialMeetups = [
     title: "The lunchtime long way round",
     activity: "Walk",
     kind: "Meetup",
-    date: "Tue, 22 Sep",
-    day: 22,
+    date: "2026-09-22",
     time: "12:15",
     duration: "45 minutes",
     place: "Garden entrance",
@@ -103,8 +100,7 @@ export const initialMeetups = [
     title: "One more round?",
     activity: "Game",
     kind: "Meetup",
-    date: "Wed, 23 Sep",
-    day: 23,
+    date: "2026-09-23",
     time: "17:30",
     duration: "90 minutes",
     place: "Common room, level 2",
@@ -123,8 +119,7 @@ export const initialMeetups = [
     title: "Make your data tell a story",
     activity: "Learning session",
     kind: "Event",
-    date: "Thu, 24 Sep",
-    day: 24,
+    date: "2026-09-24",
     time: "14:00",
     duration: "60 minutes",
     place: "Learning room",
@@ -139,6 +134,17 @@ export const initialMeetups = [
       "Bring a small dataset or use the sample provided. Sofia will walk through choosing a chart, removing distractions and explaining what the numbers mean. This Event is open to the Organisation.",
   },
 ] satisfies [Meetup, ...Meetup[]];
+
+export function formatMeetupDate(
+  date: string,
+  options: Intl.DateTimeFormatOptions = {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  },
+) {
+  return new Date(`${date}T12:00:00`).toLocaleDateString("en-GB", options);
+}
 
 export const members = [
   {
