@@ -223,6 +223,21 @@ describe.each(["native", "structured"] as const)("Scout with %s tools", (aiToolP
     expect(JSON.stringify(h.ai.completionRequests.at(-1))).not.toContain("Remember Ana Silva");
   });
 
+  test("starts a fresh conversation when a saved upcoming period has expired", async () => {
+    await h.setupOrganisation(ministryA);
+    const asker = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", email: "ana@example.test", name: "Ana Silva" });
+    h.ai.completionResponses.push({ kind: "tool", call: { id: "short-period", name: "upcoming_meetups_and_events",
+      arguments: { from: null, until: "2026-09-18T09:10:00Z" } } }, { kind: "answer", text: "No upcoming Meetups in that period." });
+    const first = await asker.askScout({ question: "What starts in the next ten minutes?" });
+    h.clock.set(new Date("2026-09-18T09:11:00Z"));
+
+    const next = await asker.askScout({ question: "Hello again.", conversation: first.conversation });
+
+    expect(next.conversationReset).toBe(true);
+    expect(next.conversation.turns).toHaveLength(1);
+    expect(JSON.stringify(h.ai.completionRequests.at(-1))).not.toContain("No upcoming Meetups in that period.");
+  });
+
   test("rejects write tools and forged scope arguments without changing domain data", async () => {
     await h.setupOrganisation(ministryA);
     const asker = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", email: "ana@example.test", name: "Ana Silva" });

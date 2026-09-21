@@ -50,7 +50,7 @@ export async function askScout(deps: Deps, actor: Actor, tools: ScoutTool[], inp
         let result;
         try { result = await tool.read(read.call.arguments); }
         catch (error) {
-          if (!(error instanceof AccessDeniedError) && !(error instanceof z.ZodError)) throw error;
+          if (!(error instanceof AccessDeniedError) && !(error instanceof InvalidInputError) && !(error instanceof z.ZodError)) throw error;
           conversationReset = true;
           break;
         }
@@ -97,6 +97,7 @@ export async function askScout(deps: Deps, actor: Actor, tools: ScoutTool[], inp
       };
       return withActiveMember(deps, actor, async () => answer);
     }
+    if (round === 5) break;
     const tool = tools.find(({ definition }) => definition.name === completion.call.name);
     if (!tool) throw new InvalidInputError("invalid-scout", "Scout requested an unavailable action. Ask a question about what you can see.");
     let result;
