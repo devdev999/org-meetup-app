@@ -1,8 +1,9 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, date, foreignKey, index, integer, jsonb, pgEnum, pgTable, primaryKey, serial, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, date, foreignKey, index, integer, jsonb, pgEnum, pgSequence, pgTable, primaryKey, serial, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type { NoticeKind } from "./notice-kinds";
 import type { RecurrenceRule } from "./recurrence-rule";
 import type { DeploymentSettings } from "./deployment-settings-input";
+import type { InterestMergeSnapshot } from "./interest-merge-snapshot";
 
 /**
  * Organisation data carries `organisationId`; Ministries and platform configuration are global
@@ -230,6 +231,7 @@ export const organisationAdminNotices = pgTable(
 
 export const interestKind = pgEnum("interest_kind", ["skill", "hobby"]);
 export const stance = pgEnum("stance", ["shares", "seeks"]);
+export const interestChangeOrder = pgSequence("interest_change_order");
 
 export const interests = pgTable("interests", {
   id: uuid().primaryKey().defaultRandom(),
@@ -237,10 +239,12 @@ export const interests = pgTable("interests", {
   name: text().notNull(),
   nameKey: text().notNull(),
   kind: interestKind().notNull(),
+  mergedIntoId: uuid(),
   createdAt: timestamptz().notNull(),
 }, (table) => [
   unique("interests_organisation_id_id_unique").on(table.organisationId, table.id),
   uniqueIndex("interests_organisation_name_key_unique").on(table.organisationId, table.nameKey),
+  foreignKey({ columns: [table.organisationId, table.mergedIntoId], foreignColumns: [table.organisationId, table.id] }),
 ]);
 
 export const interestAliases = pgTable("interest_aliases", {
@@ -263,6 +267,7 @@ export const memberInterests = pgTable("member_interests", {
   memberId: uuid().notNull(),
   interestId: uuid().notNull(),
   stance: stance().notNull(),
+  revision: bigint({ mode: "number" }).notNull().default(sql`nextval('interest_change_order')`),
 }, (table) => [
   primaryKey({ columns: [table.organisationId, table.memberId, table.interestId] }),
   foreignKey({
@@ -329,6 +334,22 @@ const gatheringFields = () => ({
   createdAt: timestamptz().notNull(),
 });
 
+export const interestMergeProposals = pgTable("interest_merge_proposals", {
+  id: uuid().primaryKey().defaultRandom(),
+  organisationId: uuid().notNull().references(() => organisations.id),
+  interestIds: uuid().array().notNull(),
+  clusterKey: text().notNull(),
+  createdAt: timestamptz().notNull(),
+  survivingInterestId: uuid(),
+  snapshot: jsonb().$type<InterestMergeSnapshot>(),
+  mergeOrder: bigint({ mode: "number" }),
+  mergedAt: timestamptz(),
+  splitAt: timestamptz(),
+}, (table) => [
+  unique("interest_merge_proposals_cluster_unique").on(table.organisationId, table.clusterKey),
+  foreignKey({ columns: [table.organisationId, table.survivingInterestId], foreignColumns: [interests.organisationId, interests.id] }),
+]);
+
 export const recurrences = pgTable("recurrences", {
   ...gatheringFields(),
   frequency: text().$type<RecurrenceRule["frequency"]>().notNull(),
@@ -359,6 +380,7 @@ export const recurrenceInterests = pgTable("recurrence_interests", {
   organisationId: uuid().notNull().references(() => organisations.id),
   recurrenceId: uuid().notNull(),
   interestId: uuid().notNull(),
+  revision: bigint({ mode: "number" }).notNull().default(sql`nextval('interest_change_order')`),
 }, (table) => [
   primaryKey({ columns: [table.organisationId, table.recurrenceId, table.interestId] }),
   foreignKey({ columns: [table.organisationId, table.recurrenceId], foreignColumns: [recurrences.organisationId, recurrences.id] }),
@@ -408,6 +430,7 @@ export const gatheringInterests = pgTable("gathering_interests", {
   organisationId: uuid().notNull().references(() => organisations.id),
   gatheringId: uuid().notNull(),
   interestId: uuid().notNull(),
+  revision: bigint({ mode: "number" }).notNull().default(sql`nextval('interest_change_order')`),
 }, (table) => [
   primaryKey({ columns: [table.organisationId, table.gatheringId, table.interestId] }),
   foreignKey({ columns: [table.organisationId, table.gatheringId], foreignColumns: [gatherings.organisationId, gatherings.id] }),

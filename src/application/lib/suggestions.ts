@@ -42,7 +42,7 @@ export async function previewInviteSuggestions(deps: Deps, actor: Actor, input: 
   const data = parsed.data;
   const siteId = data.place.kind === "physical" ? data.place.siteId : undefined;
   if (siteId) await validSite(deps.db, actor.organisationId, siteId);
-  const catalog = await listInterests(deps, actor);
+  const catalog = await listInterests(deps.db, actor.organisationId);
   const selected: Interest[] = [];
   for (const { selection } of data.relevantInterests) {
     const existing = "interestId" in selection ? catalog.find((interest) => interest.interestId === selection.interestId)

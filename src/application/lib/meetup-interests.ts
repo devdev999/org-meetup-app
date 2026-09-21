@@ -1,5 +1,5 @@
 import { extractionSettings } from "./deployment-settings";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, notInArray } from "drizzle-orm";
 import { z } from "zod";
 import { requireActiveMember, type Actor } from "./actor";
 import type { Queryable } from "./departments-and-sites";
@@ -54,6 +54,7 @@ export async function saveRelevantInterests(db: Queryable, organisationId: strin
   for (const choice of choices) ids.add("interestId" in choice.selection
     ? await saveCanonicalInterest(db, organisationId, choice.selection, now)
     : await saveInterestChoice(db, organisationId, choice, now));
-  await db.delete(gatheringInterests).where(and(eq(gatheringInterests.organisationId, organisationId), eq(gatheringInterests.gatheringId, meetupId)));
-  if (ids.size) await db.insert(gatheringInterests).values([...ids].map((interestId) => ({ organisationId, gatheringId: meetupId, interestId })));
+  await db.delete(gatheringInterests).where(and(eq(gatheringInterests.organisationId, organisationId), eq(gatheringInterests.gatheringId, meetupId),
+    ids.size ? notInArray(gatheringInterests.interestId, [...ids]) : undefined));
+  if (ids.size) await db.insert(gatheringInterests).values([...ids].map((interestId) => ({ organisationId, gatheringId: meetupId, interestId }))).onConflictDoNothing();
 }

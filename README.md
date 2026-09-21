@@ -32,6 +32,20 @@ Retired Departments and Sites disappear from profile choices. Existing assignmen
 
 Organisation Admin access is checked for each command and query. Roster views, previews and unknown-login lists record the actor, view, filter and time in the audit log, as required by [ADR 0006](./docs/adr/0006-admins-see-individual-level-data.md). Each view records access; the filter is empty because these views have no filtering controls yet.
 
+## Interest administration
+
+Organisation Admins open **Interests** to find duplicate Interests, approve a surviving Interest, rename an Interest or change its kind. The worker checks each Organisation daily at 02:00 UTC. Both paths send only Interest names and counts of Active and Provisioned Members to the configured extraction model, including identifying text in typed or renamed Interests. No Member identifiers, attributes or Organisation identifiers accompany the request. The same set of Interest identifiers is proposed only once, including after a split.
+
+A merge repoints Aliases, personal Stances and relevant Interests on Meetups, Events, pending Event proposals and recurring schedules. The most recent explicit declaration wins, including a same-value Stance command. Members see the survivor; an old form must reload before saving a removed Interest. The merge retains the original declarations and their order, and does not change the affected Members' first declaration dates or last activity.
+
+**Merge history** provides the split action. Untouched declarations and attachments recover their originals. A later Stance edit stays on the survivor, and a later removal stays removed. Removing and adding an Interest again counts as a new choice. Editing an unrelated Meetup or Event field or adding another relevant Interest preserves the unaffected attachments. New occurrences created during a merge keep the Interests they received; after a split, future generation uses the restored series.
+
+Approving a recurring Event proposal during a merge carries its original Interest choices into the new series. A later split restores those choices for future occurrences too.
+
+Split a later merge involving the same Interests first. Unrelated merges remain independent. Hidden Interests retain their names for restoration, so those names cannot be reused while merged. Migration preserves old declarations with unknown order; ties prefer the survivor's Stance, then the lowest Interest identifier. All originals remain available for an untouched split. See [ADR 0013](./docs/adr/0013-interest-splits-preserve-later-choices.md).
+
+Members can remove a personal declaration from **Your Interests**. This leaves the shared Interest catalog and any Meetup or Event attachments intact.
+
 ## Meetups
 
 Open Meetups from your profile to create one, join one or manage one you Host. Physical Meetups default to the Host's Site as their audience, even when the Place is at another Site. Virtual Meetups default to the whole Organisation. The Host can instead choose a Site, the Organisation or invite-only. Invite-only Meetups are visible to their Host and invitees.
@@ -273,7 +287,7 @@ Retired `BOOTSTRAP_DEPARTMENTS`, `BOOTSTRAP_SITES` and Organisation Admin bootst
 
 `AI_PROVIDER=memory` is the default. It makes no outbound requests and provides deterministic Interest resolution for local development and tests. Set `AI_PROVIDER=chat-completion` and install `AI_API_KEY` in the environment. Configure the endpoint and models through Platform Admin settings, or supply their initial environment defaults before first setup. The base URL must include the provider's API prefix, such as `https://chat.example/v1`. The adapter appends `/chat/completions`, authenticates with a bearer key, and requests a JSON object through the [Chat Completions protocol](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create). The chosen endpoint and model must support JSON mode.
 
-To check a configured endpoint, put `AI_CONTRACT_TEST=yes`, `AI_BASE_URL`, `AI_API_KEY` and `AI_MODEL` in the ignored `.env`, then run `node --env-file=.env node_modules/vitest/vitest.mjs run src/adapters/ai/tests/live-contract.test.ts`. This makes three live requests using fixed Interest phrases. The contract tests skip unless explicitly enabled with credentials.
+To check a configured endpoint, put `AI_CONTRACT_TEST=yes`, `AI_BASE_URL`, `AI_API_KEY` and `AI_MODEL` in the ignored `.env`, then run `node --env-file=.env node_modules/vitest/vitest.mjs run src/adapters/ai/tests/live-contract.test.ts`. This checks canonicalisation and clustering with fixed Interest phrases. The contract tests skip unless explicitly enabled with credentials.
 
 Canonicalisation sends the typed Interest phrase and shortlisted Interest names, kinds and counts. Extraction sends the selected Activity name and description, then canonicalises each extracted phrase within the Member's Organisation. These texts may contain identifying information under ADR 0009. Requests time out after five seconds. Failed canonicalisation falls back to text similarity; failed extraction adds no Interests and leaves manual creation available.
 

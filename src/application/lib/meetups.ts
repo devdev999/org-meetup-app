@@ -10,9 +10,10 @@ import type { Deps } from "./deps";
 import { AccessDeniedError, InvalidInputError } from "./errors";
 import { isUuid } from "./input";
 import { interestChoiceSchema, type Interest, type InterestChoice } from "./interests";
+import { retainProposalInterestHistory } from "./interest-merges";
 import { relevantInterests, saveRelevantInterests } from "./meetup-interests";
 import { gatheringNoticeText, recordNotices, supersedeDeliveries } from "./notifications";
-import { activities, attendanceMembers, departments, eventProposals, gatheringMembers, gatheringRsvps, gatherings, invites, members, notices, organisations, recurrenceInterests, recurrenceMembers, recurrences, sites } from "./schema";
+import { activities, attendanceMembers, departments, eventProposals, gatheringInterests, gatheringMembers, gatheringRsvps, gatherings, invites, members, notices, organisations, recurrenceInterests, recurrenceMembers, recurrences, sites } from "./schema";
 import { availabilityOverlapSchema, findAvailabilityOverlap, type AvailabilityOverlap } from "./availability";
 import { readRecurrences, recurrenceSchema, saveRsvp, type Recurrence, type RecurrenceInput } from "./recurrence-records";
 
@@ -242,8 +243,10 @@ export async function publishGathering(db: Queryable, actor: Actor, row: typeof 
   if (series) {
     await db.insert(recurrenceMembers).values({ organisationId: actor.organisationId, recurrenceId: series.id, memberId: actor.memberId });
     await db.insert(gatheringRsvps).values({ organisationId: actor.organisationId, gatheringId: row.id, memberId: actor.memberId });
-    const interests = await relevantInterests(db, actor.organisationId, row.id);
-    if (interests.length) await db.insert(recurrenceInterests).values(interests.map(({ interestId }) => ({ organisationId: actor.organisationId, recurrenceId: series.id, interestId })));
+    const interests = await db.select({ interestId: gatheringInterests.interestId, revision: gatheringInterests.revision }).from(gatheringInterests)
+      .where(and(eq(gatheringInterests.organisationId, actor.organisationId), eq(gatheringInterests.gatheringId, row.id)));
+    if (interests.length) await db.insert(recurrenceInterests).values(interests.map((interest) => ({ ...interest, organisationId: actor.organisationId, recurrenceId: series.id })));
+    if (row.status === "proposed") await retainProposalInterestHistory(db, actor.organisationId, row.id, series.id);
   }
   if (!invitedMemberIds.length) return;
   const gathering = (await readGathering(db, actor, row.id, host.siteId, now))!;

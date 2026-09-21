@@ -1,5 +1,5 @@
 import { requirePlatformAdmin } from "../../../web/session";
-import { ActionForm } from "../action-form";
+import { ActionForm } from "../../_components/action-form";
 import { updateSettings } from "../actions";
 
 export default async function SettingsPage() {

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requirePlatformAdmin } from "../../../web/session";
-import { ActionForm } from "../action-form";
+import { ActionForm } from "../../_components/action-form";
 import { createOrganisation, setFirstOrganisationAdmin } from "../actions";
 
 export default async function OrganisationsPage() {

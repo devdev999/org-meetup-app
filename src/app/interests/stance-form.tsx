@@ -2,11 +2,11 @@
 
 import { useActionState } from "react";
 import type { MemberInterest } from "../../application/index";
-import { updateInterestStance, type InterestSaveState } from "./actions";
+import { removeInterest, updateInterestStance, type InterestSaveState } from "./actions";
 
 export function StanceForm({ interest }: { interest: MemberInterest }) {
   const [state, action, pending] = useActionState<InterestSaveState, FormData>(
-    (_previous, form) => updateInterestStance(form),
+    (_previous, form) => form.get("operation") === "remove" ? removeInterest(form) : updateInterestStance(form),
     {},
   );
   return (
@@ -20,6 +20,7 @@ export function StanceForm({ interest }: { interest: MemberInterest }) {
         </select>
       </label>
       <button className="secondary" disabled={pending}>{pending ? "Saving..." : "Save Stance"}</button>
+      <button className="secondary" name="operation" value="remove" aria-label={`Remove ${interest.name}`} disabled={pending}>Remove Interest</button>
       {state.saved && !pending && <span role="status">Saved.</span>}
       {state.error && <p className="error" role="alert">{state.error}</p>}
     </form>
