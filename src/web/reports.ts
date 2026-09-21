@@ -1,10 +1,10 @@
-import { localDate } from "../calendar";
+import { monthToDate } from "../calendar";
 import { application } from "./application";
 import { InvalidInputError, isAccessDeniedError, isInvalidInputError, type PlatformReportScope, type ReportCsv, type ReportPeriod } from "../application";
 
 export async function selectedReportPeriod(input: { from?: string; to?: string }): Promise<ReportPeriod> {
-  const today = localDate(new Date(), await application().timeZone());
-  return { from: input.from ?? `${today.slice(0, 7)}-01`, to: input.to ?? today };
+  const defaults = monthToDate(new Date(), await application().timeZone());
+  return { from: input.from ?? defaults.from, to: input.to ?? defaults.to };
 }
 
 export function selectedPlatformScope(input: { scope?: string; kind?: string; id?: string }, defaultId = ""): PlatformReportScope {

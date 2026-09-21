@@ -1,11 +1,14 @@
 import { z } from "zod";
 import { createHash } from "node:crypto";
-import type { AiMessage, AiToolCall } from "../ports";
+import type { AiMessage, AiToolCall, AiToolDefinition } from "../ports";
 import { requireActiveMember, withActiveMember, type Actor } from "./actor";
 import { readDeploymentSettings } from "./deployment-settings";
 import type { Deps } from "./deps";
 import { AccessDeniedError, InvalidInputError } from "./errors";
-import type { ScoutLink, ScoutTool, ScoutToolResult } from "./scout-member-tools";
+
+export interface ScoutLink { label: string; href: string }
+export interface ScoutToolResult { data: unknown; links: ScoutLink[] }
+export interface ScoutTool { definition: AiToolDefinition; read: (input: unknown) => Promise<ScoutToolResult> }
 
 const callSchema = z.strictObject({ id: z.string().min(1).max(200), name: z.string().min(1).max(80), arguments: z.record(z.string(), z.unknown()) });
 const readSchema = z.strictObject({ call: callSchema, fingerprint: z.string().regex(/^[a-f0-9]{64}$/) });

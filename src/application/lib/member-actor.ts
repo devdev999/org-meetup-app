@@ -25,6 +25,9 @@ import { attendance, attendanceHistory, confirmAttendance, connections, rateOccu
 import { flag, type FlagInput } from "./moderation";
 import { askScout, type ScoutAnswer, type ScoutQuestion } from "./scout";
 import { memberScoutTools } from "./scout-member-tools";
+import { adminScoutTools } from "./scout-admin-tools";
+import { deploymentTimeZone } from "./deployment-settings";
+import { monthToDate } from "../../calendar";
 import type { MemberProfile, MemberSearch } from "./member-profiles";
 export type { MemberSummary, MemberProfile, MemberSearch } from "./member-profiles";
 
@@ -186,9 +189,15 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
   }
 
   return {
-    askScout: (input) => askScout(deps, actor, memberScoutTools({ availability: readAvailability, searchMembers: readMembers,
-      listMeetups: readMeetups, listEvents: readEvents, connections: readConnections,
-      meetupSuggestions: readMeetupSuggestions, eventSuggestions: readEventSuggestions }, deps.clock.now()), input),
+    askScout: async (input) => {
+      const member = await requireActiveMember(deps.db, actor);
+      const tools = memberScoutTools({ availability: readAvailability, searchMembers: readMembers,
+        listMeetups: readMeetups, listEvents: readEvents, connections: readConnections,
+        meetupSuggestions: readMeetupSuggestions, eventSuggestions: readEventSuggestions }, deps.clock.now());
+      if (member.isOrganisationAdmin) tools.push(...adminScoutTools(await organisationAdmin(deps, actor),
+        monthToDate(deps.clock.now(), await deploymentTimeZone(deps.db))));
+      return askScout(deps, actor, tools, input);
+    },
     proposeEvent: (input) => proposeEvent(deps, actor, input),
     flag: (input) => flag(deps, actor, input),
     confirmAttendance: (id, memberIds) => withNotices(id, () => confirmAttendance(deps, actor, id, memberIds)),
