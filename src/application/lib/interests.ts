@@ -224,8 +224,9 @@ export async function setInterestStance(deps: Deps, actor: Actor, input: { inter
 export async function removeInterest(deps: Deps, actor: Actor, interestId: string): Promise<MemberInterest[]> {
   const id = parse(z.uuid(), interestId, "Choose a declared Interest to remove.");
   await withActiveMember(deps, actor, async (db) => {
-    await db.delete(memberInterests).where(and(eq(memberInterests.organisationId, actor.organisationId),
-      eq(memberInterests.memberId, actor.memberId), eq(memberInterests.interestId, id)));
+    const removed = await db.delete(memberInterests).where(and(eq(memberInterests.organisationId, actor.organisationId),
+      eq(memberInterests.memberId, actor.memberId), eq(memberInterests.interestId, id))).returning({ interestId: memberInterests.interestId });
+    if (!removed.length) throw new InvalidInputError("unknown-interest", "This declaration has changed. Reload your Interests before removing it.");
   });
   return memberInterestList(deps, actor);
 }

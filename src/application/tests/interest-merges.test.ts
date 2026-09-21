@@ -321,6 +321,23 @@ test.each(["Stance change", "same-value Stance edit", "removal", "re-added decla
   expect(await member.myInterests()).toEqual(action === "removal" ? [] : [{ ...survivor, stance: action === "same-value Stance edit" ? "seeks" : "shares" }]);
 });
 
+test("removing an Interest from a stale form requires reload before removing the merged declaration", async () => {
+  await h.setupOrganisation(ministryA);
+  const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
+  const survivor = await declare(member, "SQL", "shares");
+  const original = await declare(member, "Structured query language", "seeks");
+  const admin = await h.organisationAdmin();
+  const pending = await proposal(admin, [survivor.name, original.name]);
+  await admin.approveInterestMerge(pending.id, survivor.interestId);
+
+  await expect(member.removeInterest(original.interestId)).rejects.toMatchObject({ code: "unknown-interest", message: expect.stringContaining("Reload") });
+  expect(await member.myInterests()).toEqual([{ ...survivor, stance: "seeks" }]);
+  await member.removeInterest(survivor.interestId);
+  await admin.splitInterestMerge(pending.id);
+
+  expect(await member.myInterests()).toEqual([]);
+});
+
 test.each(["shares", "seeks"] as const)("a merge repoints Aliases and keeps the most recent explicit Stance when it is %s", async (latest) => {
   await h.setupOrganisation(ministryA);
   const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
