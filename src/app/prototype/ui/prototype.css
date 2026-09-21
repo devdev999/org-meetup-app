@@ -1943,7 +1943,13 @@ html:has(.ui-prototype) {
   width: auto;
   padding: 0;
 }
-.ui-prototype .mock-comparison-expand {
+.ui-prototype .mock-comparison.is-collapsed .mock-comparison-top {
+  padding: 0;
+}
+.ui-prototype .mock-comparison [hidden] {
+  display: none;
+}
+.ui-prototype .mock-comparison.is-collapsed .mock-comparison-toggle {
   min-height: 44px;
   padding: 0 16px;
   color: #f9faf7;

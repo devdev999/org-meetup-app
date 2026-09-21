@@ -481,36 +481,38 @@ export function UiPrototype() {
         className={`mock-comparison ${comparisonExpanded ? "" : "is-collapsed"}`}
         aria-label="Design comparison"
       >
-        {!comparisonExpanded && (
-          <button
-            className="mock-comparison-expand"
-            aria-expanded={false}
-            aria-controls="mock-comparison-panel"
-            onClick={() => setComparisonExpanded(true)}
-          >
-            <Icon name="grid" size={17} />
-            Compare styles
-            <span className={`mock-swatch ${variant}`} />
-          </button>
-        )}
-        <div id="mock-comparison-panel" hidden={!comparisonExpanded}>
-          <div className="mock-comparison-top">
-            <span>
-              Design preview <span className="mock-demo-dot" /> Fictional data
-            </span>
-            <div>
-              <button onClick={() => window.location.reload()}>
-                Reset demo
-              </button>
-              <button
-                aria-expanded={true}
-                aria-controls="mock-comparison-panel"
-                onClick={() => setComparisonExpanded(false)}
-              >
-                Collapse <Icon name="close" size={12} />
-              </button>
-            </div>
+        <div className="mock-comparison-top">
+          <span hidden={!comparisonExpanded}>
+            Design preview <span className="mock-demo-dot" /> Fictional data
+          </span>
+          <div>
+            <button
+              hidden={!comparisonExpanded}
+              onClick={() => window.location.reload()}
+            >
+              Reset demo
+            </button>
+            <button
+              className="mock-comparison-toggle"
+              aria-expanded={comparisonExpanded}
+              aria-controls="mock-comparison-panel"
+              onClick={() => setComparisonExpanded(!comparisonExpanded)}
+            >
+              {comparisonExpanded ? (
+                <>
+                  Collapse <Icon name="close" size={12} />
+                </>
+              ) : (
+                <>
+                  <Icon name="grid" size={17} />
+                  Compare styles
+                  <span className={`mock-swatch ${variant}`} />
+                </>
+              )}
+            </button>
           </div>
+        </div>
+        <div id="mock-comparison-panel" hidden={!comparisonExpanded}>
           <div className="mock-comparison-controls">
             <button
               className="mock-switch-arrow"
