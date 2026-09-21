@@ -69,6 +69,7 @@ export type {
 export type { ClaimMapping } from "./lib/schema";
 export type { CreateMeetupInput, EditMeetupInput, Invite, InviteAnswer, InviteChoices, InviteSearch, MeetupAudience, MeetupChoices, MeetupDetail, MeetupPerson, MeetupPlace, MeetupSummary, Notice } from "./lib/meetups";
 export type { InterestKind } from "./ports";
+export type { ScoutAnswer, ScoutQuestion, ScoutConversation } from "./lib/scout";
 export type { InterestMergeProposal } from "./lib/interest-clustering";
 export type { InterestMerge } from "./lib/interest-merges";
 export type { MemberProfile, MemberSearch } from "./lib/member-actor";

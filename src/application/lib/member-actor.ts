@@ -23,6 +23,10 @@ import { listEvents, ownEventProposals, proposeEvent, viewEvent, type EventPropo
 import type { CreateEventInput, EditEventInput, EventDetail, EventSummary } from "./meetups";
 import { attendance, attendanceHistory, confirmAttendance, connections, rateOccurrence, type Attendance, type AttendanceHistoryEntry, type Connection } from "./attendance";
 import { flag, type FlagInput } from "./moderation";
+import { askScout, type ScoutAnswer, type ScoutQuestion } from "./scout";
+import { memberScoutTools } from "./scout-member-tools";
+import type { MemberProfile, MemberSearch } from "./member-profiles";
+export type { MemberSummary, MemberProfile, MemberSearch } from "./member-profiles";
 
 export type MemberStatus = (typeof members.status.enumValues)[number];
 
@@ -53,30 +57,13 @@ export interface UpdateProfileInput {
   site: string | null;
 }
 
-/** What a Member sees about another Member of their Organisation. */
-export interface MemberSummary {
-  memberId: string;
-  name: string;
-  department: string | null;
-  site: string | null;
-}
-
-export interface MemberProfile extends MemberSummary {
-  interests: MemberInterest[];
-}
-
-export interface MemberSearch {
-  interest?: string;
-  department?: string;
-  site?: string;
-}
-
 /**
  * The actor-scoped interface: everything a signed-in Member can do. The
  * Organisation is fixed when the actor is created and every query is scoped
  * to it, so nothing a page passes in can reach another Organisation.
  */
 export interface MemberActions {
+  askScout(input: ScoutQuestion): Promise<ScoutAnswer>;
   flag(input: FlagInput): Promise<void>;
   confirmAttendance(id: string, memberIds: string[]): Promise<void>;
   attendance(id: string): Promise<Attendance | undefined>;
@@ -180,16 +167,37 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     for (const gatheringId of await operation()) await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId });
   }
 
+  const readAvailability = () => afterNotice(() => availability(deps, actor), { action: "availability", filter: {} });
+  const readMeetups = () => listMeetups(deps, actor);
+  const readEvents = () => listEvents(deps, actor);
+  const readConnections = () => afterNotice(() => connections(deps, actor), { action: "connections", filter: {} });
+  const readMeetupSuggestions = () => afterNotice(() => meetupSuggestions(deps, actor), { action: "meetup-suggestions", filter: {} });
+  const readEventSuggestions = () => afterNotice(() => eventSuggestions(deps, actor), { action: "event-suggestions", filter: {} });
+  function readMembers(input: MemberSearch = {}): Promise<MemberProfile[]> {
+    const filter: MemberSearch = {};
+    if (input.interest?.trim()) filter.interest = input.interest.trim();
+    if (input.department?.trim()) filter.department = input.department.trim().toLowerCase();
+    if (input.site?.trim()) filter.site = input.site.trim().toLowerCase();
+    if (input.stance !== undefined) {
+      if (input.stance !== "shares" && input.stance !== "seeks") throw new InvalidInputError("invalid-interest", "Choose Shares or Seeks.");
+      filter.stance = input.stance;
+    }
+    return afterNotice(() => searchMembers(deps, actor, filter), { action: "member-search", filter: { ...filter } });
+  }
+
   return {
+    askScout: (input) => askScout(deps, actor, memberScoutTools({ availability: readAvailability, searchMembers: readMembers,
+      listMeetups: readMeetups, listEvents: readEvents, connections: readConnections,
+      meetupSuggestions: readMeetupSuggestions, eventSuggestions: readEventSuggestions }, deps.clock.now()), input),
     proposeEvent: (input) => proposeEvent(deps, actor, input),
     flag: (input) => flag(deps, actor, input),
     confirmAttendance: (id, memberIds) => withNotices(id, () => confirmAttendance(deps, actor, id, memberIds)),
     attendance: (id) => afterNotice(() => attendance(deps, actor, id), { action: "attendance", filter: { gatheringId: id } }),
     attendanceHistory: () => attendanceHistory(deps, actor),
     rateOccurrence: (id, value) => rateOccurrence(deps, actor, id, value),
-    connections: () => afterNotice(() => connections(deps, actor), { action: "connections", filter: {} }),
+    connections: readConnections,
     eventProposals: () => ownEventProposals(deps, actor),
-    listEvents: () => listEvents(deps, actor),
+    listEvents: readEvents,
     listEventSeries: async () => (await listSeries(deps, actor, "event")).filter((series) => series.kind === "event"),
     viewEvent: (id) => viewEvent(deps, actor, id),
     joinEvent: (id) => withNotices(id, () => joinMeetup(deps, actor, id, "event")),
@@ -199,7 +207,7 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     editEvent: (id, input) => withNotices(id, () => editMeetup(deps, actor, id, input, "event")),
     cancelEvent: (id) => withNotices(id, () => cancelMeetup(deps, actor, id, "event")),
     handOverEvent: (id, memberId) => withNotices(id, () => handOverMeetup(deps, actor, id, memberId, "event")),
-    eventSuggestions: () => afterNotice(() => eventSuggestions(deps, actor), { action: "event-suggestions", filter: {} }),
+    eventSuggestions: readEventSuggestions,
     eventInviteSuggestions: (id) => afterNotice(() => inviteSuggestions(deps, actor, id, "event"), { action: "event-invite-suggestions", filter: { eventId: id } }),
     inviteSuggestedMemberToEvent: (id, memberId, previousInviteId) => withNotices(id, () => inviteMember(deps, actor, id, memberId, { previousInviteId, selectionSource: "suggestion" }, "event")),
     extractEventInterests: (input, signal) => afterNotice(() => extractMeetupInterests(deps, actor, input, signal)),
@@ -213,7 +221,7 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
       await deliverSoon(deps, { organisationId: actor.organisationId, kind: "availability-overlap" });
       return posted;
     },
-    availability: () => afterNotice(() => availability(deps, actor), { action: "availability", filter: {} }),
+    availability: readAvailability,
     availabilityMeetup: (input) => afterNotice(() => availabilityMeetup(deps, actor, input), { action: "availability-meetup", filter: { ownAvailabilityId: input?.ownAvailabilityId, otherAvailabilityId: input?.otherAvailabilityId } }),
     beginTelegramLink: () => beginTelegramLink(deps, actor),
     unlinkTelegram: () => unlinkTelegram(deps, actor),
@@ -225,7 +233,7 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
       if (meetup.invites?.length) await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: meetup.id });
       return meetup;
     },
-    listMeetups: () => listMeetups(deps, actor),
+    listMeetups: readMeetups,
     viewMeetup: (id) => viewMeetup(deps, actor, id),
     joinMeetup: (id) => withNotices(id, () => joinMeetup(deps, actor, id)),
     leaveMeetup: (id) => withNotices(id, () => leaveMeetup(deps, actor, id)),
@@ -238,7 +246,7 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     inviteChoices: (id, input = {}) => afterNotice(() => inviteChoices(deps, actor, id, input), { action: "meetup-invite-choices", filter: { meetupId: id, name: input.name ?? "", page: String(input.page ?? 0) } }),
     inviteSuggestions: (id) => afterNotice(() => inviteSuggestions(deps, actor, id), { action: "invite-suggestions", filter: { meetupId: id } }),
     previewInviteSuggestions: (input) => afterNotice(() => previewInviteSuggestions(deps, actor, input), { action: "invite-suggestions-preview", filter: input?.place?.kind === "physical" ? { placeKind: input.place.kind, siteId: input.place.siteId } : { placeKind: input?.place?.kind } }),
-    meetupSuggestions: () => afterNotice(() => meetupSuggestions(deps, actor), { action: "meetup-suggestions", filter: {} }),
+    meetupSuggestions: readMeetupSuggestions,
     extractMeetupInterests: (input, signal) => afterNotice(() => extractMeetupInterests(deps, actor, input, signal)),
     answerInvite: async (id, answer) => {
       const result = await answerInvite(deps, actor, id, answer);
@@ -259,13 +267,7 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     updateProfile: (input) => afterNotice(() => updateProfile(deps, actor, input)),
     departmentsAndSites: () => afterNotice(() => listDepartmentsAndSites(deps.db, actor.organisationId)),
     viewMember: (id) => afterNotice(() => viewMember(deps, actor, id), { action: "member-profile", filter: { memberId: id } }),
-    searchMembers: (input = {}) => {
-      const filter: Record<string, string> = {};
-      if (input.interest?.trim()) filter.interest = input.interest.trim();
-      if (input.department?.trim()) filter.department = input.department.trim().toLowerCase();
-      if (input.site?.trim()) filter.site = input.site.trim().toLowerCase();
-      return afterNotice(() => searchMembers(deps, actor, filter), { action: "member-search", filter });
-    },
+    searchMembers: readMembers,
   };
 }
 
@@ -364,7 +366,7 @@ async function viewMember(deps: Deps, actor: Actor, memberId: string): Promise<M
 }
 
 async function searchMembers({ db }: Deps, actor: Actor, input: MemberSearch): Promise<MemberProfile[]> {
-  const { interest, department, site } = input;
+  const { interest, department, site, stance } = input;
   const pattern = interest ? `%${interest.replace(/[\\%_]/g, "\\$&")}%` : undefined;
   const rows = await db.select({ memberId: members.id, name: members.name, department: departments.name, site: sites.name })
     .from(members)
@@ -376,10 +378,12 @@ async function searchMembers({ db }: Deps, actor: Actor, input: MemberSearch): P
       inArray(members.status, VISIBLE_MEMBER_STATUSES),
       department ? eq(departments.nameKey, department) : undefined,
       site ? eq(sites.nameKey, site) : undefined,
-      pattern ? exists(db.select({ id: memberInterests.interestId }).from(memberInterests)
+      pattern || stance ? exists(db.select({ id: memberInterests.interestId }).from(memberInterests)
         .innerJoin(interests, and(eq(interests.organisationId, memberInterests.organisationId), eq(interests.id, memberInterests.interestId)))
         .leftJoin(interestAliases, and(eq(interestAliases.organisationId, interests.organisationId), eq(interestAliases.interestId, interests.id)))
-        .where(and(eq(memberInterests.organisationId, actor.organisationId), eq(memberInterests.memberId, members.id), or(ilike(interests.name, pattern), ilike(interestAliases.phrase, pattern))))) : undefined,
+        .where(and(eq(memberInterests.organisationId, actor.organisationId), eq(memberInterests.memberId, members.id),
+          stance ? eq(memberInterests.stance, stance) : undefined,
+          pattern ? or(ilike(interests.name, pattern), ilike(interestAliases.phrase, pattern)) : undefined))) : undefined,
     )).orderBy(asc(members.name), asc(members.id));
   if (!rows.length) return [];
   const declarations = await memberInterestsFor(db, actor.organisationId, rows.map((row) => row.memberId));

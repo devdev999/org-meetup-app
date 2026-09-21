@@ -8,6 +8,7 @@ import { MemoryEmail } from "../../adapters/email/memory";
 import { runMigrations } from "../../db/migrate";
 import { createTestDatabase } from "../../testing/test-database";
 import { createApplication, type Application, type OrganisationAdminActions } from "../index";
+import type { AiToolProtocol } from "../ports";
 import { organisationSetup, type TestOrganisationConfig } from "./fixtures";
 
 /**
@@ -29,7 +30,7 @@ export interface Harness {
 export const START_OF_TEST = new Date("2026-09-18T09:00:00.000Z");
 
 /** Registers the per-file lifecycle and returns a harness populated before the first test. */
-export function harness(): Harness {
+export function harness(options: { aiToolProtocol?: AiToolProtocol } = {}): Harness {
   const h = {} as Harness;
   let pool: Pool;
   let dispose: () => Promise<void>;
@@ -42,7 +43,7 @@ export function harness(): Harness {
     await runMigrations(pool);
     h.identity = new FakeIdentity();
     h.clock = new ControllableClock(START_OF_TEST);
-    h.ai = new MemoryAi();
+    h.ai = new MemoryAi(options.aiToolProtocol);
     h.telegram = new MemoryTelegram();
     h.email = new MemoryEmail();
     h.app = createApplication({ deploymentDefaults: { telegramBotUsername: "meetups_test_bot", emailFrom: "meetups@example.test" }, pool, identity: h.identity, clock: h.clock, ai: h.ai, telegram: h.telegram, email: h.email });

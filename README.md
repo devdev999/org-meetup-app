@@ -273,6 +273,7 @@ Secrets and process settings come from the environment; see [`.env.example`](./.
 | `BOOTSTRAP_*` | Creates only the first platform owner Organisation and Platform Admin. Unset all fields to skip. Later setup runs leave an existing owner unchanged. |
 | `BOOTSTRAP_OIDC_CREDENTIAL_REF` | Optional installed credential reference for the initial owner issuer. Blank means a public client. |
 | `AI_BASE_URL`, `AI_MODEL`, `AI_EXTRACTION_MODEL` | Initial AI endpoint, Scout model and small Interest model. An unset extraction model keeps `AI_MODEL`; when neither is set, both default to `gpt-5.6-luna`. |
+| `AI_TOOL_PROTOCOL` | Scout tool protocol, `native` by default or `structured` for endpoints without native tool calls. |
 | `TELEGRAM_BOT_USERNAME`, `EMAIL_FROM`, `TIME_ZONE` | Initial non-secret defaults. Time zone defaults to UTC. |
 
 Open Platform Admin, then Organisations, to create an Organisation or appoint an existing Organisation's first Organisation Admin. Creation accepts issuer, client ID, claim mapping and an optional credential reference. Leave the reference blank only for a public client. A required reference with no installed secret shows "Sign-in awaiting OIDC credential". An operator installs that reference in `OIDC_CREDENTIALS` and restarts the services. The UI and database hold no OIDC secret value. Confidential clients use `client_secret_basic` or `client_secret_post`; public clients rely on PKCE. Sign-in rejects an explicit `email_verified: false` claim.
@@ -287,11 +288,19 @@ Retired `BOOTSTRAP_DEPARTMENTS`, `BOOTSTRAP_SITES` and Organisation Admin bootst
 
 `AI_PROVIDER=memory` is the default. It makes no outbound requests and provides deterministic Interest resolution for local development and tests. Set `AI_PROVIDER=chat-completion` and install `AI_API_KEY` in the environment. Configure the endpoint and models through Platform Admin settings, or supply their initial environment defaults before first setup. The base URL must include the provider's API prefix, such as `https://chat.example/v1`. The adapter appends `/chat/completions`, authenticates with a bearer key, and requests a JSON object through the [Chat Completions protocol](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create). The chosen endpoint and model must support JSON mode.
 
-To check a configured endpoint, put `AI_CONTRACT_TEST=yes`, `AI_BASE_URL`, `AI_API_KEY` and `AI_MODEL` in the ignored `.env`, then run `node --env-file=.env node_modules/vitest/vitest.mjs run src/adapters/ai/tests/live-contract.test.ts`. This checks canonicalisation and clustering with fixed Interest phrases. The contract tests skip unless explicitly enabled with credentials.
+To check a configured endpoint, put `AI_CONTRACT_TEST=yes`, `AI_BASE_URL`, `AI_API_KEY` and `AI_MODEL` in the ignored `.env`, then run `node --env-file=.env node_modules/vitest/vitest.mjs run src/adapters/ai/tests/live-contract.test.ts`. This checks canonicalisation, clustering and a Scout tool conversation in both protocols using synthetic data. The contract tests skip unless explicitly enabled with credentials.
 
 Canonicalisation sends the typed Interest phrase and shortlisted Interest names, kinds and counts. Extraction sends the selected Activity name and description, then canonicalises each extracted phrase within the Member's Organisation. These texts may contain identifying information under ADR 0009. Requests time out after five seconds. Failed canonicalisation falls back to text similarity; failed extraction adds no Interests and leaves manual creation available.
 
 Set the Interest extraction model independently of Scout in Platform Admin settings. Both extraction and canonicalisation use this small model. Initial setup keeps an existing `AI_MODEL` when `AI_EXTRACTION_MODEL` is unset; new deployments with neither value default to `gpt-5.6-luna`. Choose a supported model for the endpoint. Both operations require JSON mode. The production adapter lives in `src/adapters/ai/chat-completion.ts`; `MemoryAi` records requests and accepts scripted results or errors for application tests. HTTP adapter tests cover the request, invalid output and timeout behavior with a local stub endpoint.
+
+### Scout
+
+Members open Scout from Home to ask about current Availability, Members who Share or Seek an Interest, upcoming Meetups and Events, or their own Connections. Scout uses the same application queries as the normal screens, including their access checks, Suggestion reasons and admin audit records. It cannot create, join, invite or merge. Answers appear as plain text with links supplied by the application.
+
+`AI_TOOL_PROTOCOL=native` uses Chat Completions function calls, one at a time. `structured` puts the same read definitions in the prompt and accepts one JSON request or answer per response. It does not require native tools or JSON mode for Scout. Both modes send identifying questions, earlier answers, arguments and authorized results under ADR 0009. Each completion times out after 30 seconds, and a question can make at most six completions. The memory provider supports the same protocols with deterministic replies for local testing.
+
+Conversation history stays in the browser with a server signature, tied to the Member and valid for 30 minutes. Before reusing an answer, Scout repeats the reads that supported it. If their results or permissions change, it starts a new conversation. After six complete turns, the next question starts a new conversation too. Access and read results are checked again after each AI response. No database migration is needed for Scout.
 
 ## Upgrading existing Organisations to Platform Admin configuration
 

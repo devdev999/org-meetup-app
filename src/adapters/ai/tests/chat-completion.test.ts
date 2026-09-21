@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
-import type { AiInterestRequest } from "../../../application/ports";
+import type { AiInterestRequest, AiCompletionRequest } from "../../../application/ports";
 import { ChatCompletionAi } from "../chat-completion";
 
 const requests: Array<{ url: string | undefined; authorization: string | undefined; body: unknown }> = [];
@@ -39,6 +39,98 @@ afterAll(async () => {
 const adapter = () => new ChatCompletionAi({ apiKey: "provider-key" });
 const settings = () => ({ baseUrl, model: "interest-model" });
 const input: AiInterestRequest = { phrase: "rustlang", shortlist: [{ name: "Rust", kind: "skill", count: 3 }] };
+
+const scoutInput: AiCompletionRequest = { instructions: "Read only.", messages: [{ role: "user", content: "Who is available?" }],
+  tools: [{ name: "available_now", description: "Current Availability", parameters: { type: "object", properties: {}, additionalProperties: false } }] };
+
+test.each(["native", "structured"] as const)("Scout supports plain completion without tools in %s mode", async (toolProtocol) => {
+  reply = { status: 200, body: { choices: [{ finish_reason: "stop", message: { content: "Open Meetups to join one." } }] } };
+  expect(await new ChatCompletionAi({ apiKey: "provider-key", toolProtocol }).complete({ ...scoutInput, tools: [] }, settings()))
+    .toEqual({ kind: "answer", text: "Open Meetups to join one." });
+  expect(requests[0]!.body).toEqual({ model: "interest-model", stream: false,
+    messages: [{ role: "system", content: "Read only." }, ...scoutInput.messages] });
+});
+
+test.each([
+  { choices: [] },
+  { choices: [{ finish_reason: "length", message: { content: "Incomplete" } }] },
+  { choices: [{ finish_reason: "stop", message: { content: "Refused", refusal: "No" } }] },
+  { choices: [{ finish_reason: "stop", message: { content: " " } }] },
+  { choices: [{ finish_reason: "tool_calls", message: { content: null, tool_calls: [] } }] },
+  { choices: [{ finish_reason: "tool_calls", message: { tool_calls: [{ id: "call-1", type: "function", function: { name: "available_now", arguments: "[]" } }] } }] },
+])("Scout rejects unusable native provider output: %j", async (body) => {
+  reply = { status: 200, body };
+  await expect(adapter().complete(scoutInput, settings())).rejects.toThrow();
+});
+
+test.each(["not JSON", '{"kind":"answer","text":""}', '{"kind":"tool","call":{"id":"one","name":"available_now","arguments":[]}}'])
+  ("Scout rejects unusable structured output: %s", async (content) => {
+    reply = { status: 200, body: { choices: [{ finish_reason: "stop", message: { content } }] } };
+    await expect(new ChatCompletionAi({ apiKey: "provider-key", toolProtocol: "structured" }).complete(scoutInput, settings())).rejects.toThrow();
+  });
+
+test("Scout rejects missing endpoints and provider errors", async () => {
+  await expect(adapter().complete(scoutInput, { baseUrl: null, model: "scout" })).rejects.toThrow("not been configured");
+  expect(requests).toHaveLength(0);
+  reply!.status = 503;
+  await expect(adapter().complete(scoutInput, settings())).rejects.toThrow("503");
+});
+
+test("Scout times out an unresponsive endpoint and supports cancellation", async () => {
+  reply = null;
+  await expect(new ChatCompletionAi({ apiKey: "provider-key", timeoutMs: 50 }).complete(scoutInput, settings()))
+    .rejects.toMatchObject({ name: "TimeoutError" });
+  const controller = new AbortController();
+  const pending = adapter().complete(scoutInput, settings(), controller.signal).catch((error: unknown) => error);
+  await expect.poll(() => requests.length).toBe(2);
+  controller.abort();
+  expect(await pending).toMatchObject({ name: "AbortError" });
+}, 1_000);
+
+test.each(["native", "structured"] as const)("Scout sends the complete conversation and tool result in %s mode", async (toolProtocol) => {
+  const tool = { name: "members_by_interest", description: "Find Members by Interest and Stance.", parameters: {
+    type: "object", properties: { interest: { type: "string" } }, required: ["interest"], additionalProperties: false,
+  } };
+  const call = { id: "call-ana", name: "members_by_interest", arguments: { interest: "Ana Silva's SQL" } };
+  const result = '{"members":[{"name":"Maya Chen","department":"Finance","site":"Harbour House"}]}';
+  const request: AiCompletionRequest = { instructions: "Read only.", tools: [tool], messages: [
+    { role: "user", content: "I am Ana Silva." }, { role: "assistant", content: "You asked about Maya Chen." },
+    { role: "user", content: "Who Shares Ana Silva's SQL?" }, { role: "tool", call, content: result },
+  ] };
+  reply = { status: 200, body: { choices: [{ finish_reason: "stop", message: { content: toolProtocol === "native"
+    ? "Maya Chen Shares it." : '{"kind":"answer","text":"Maya Chen Shares it."}' } }] } };
+
+  expect(await new ChatCompletionAi({ apiKey: "provider-key", toolProtocol }).complete(request, { baseUrl, model: "scout-model" }))
+    .toEqual({ kind: "answer", text: "Maya Chen Shares it." });
+
+  expect(requests).toEqual([{ url: "/v1/chat/completions", authorization: "Bearer provider-key", body: {
+    model: "scout-model", stream: false,
+    messages: [
+      { role: "system", content: toolProtocol === "native" ? "Read only." : expect.stringContaining(JSON.stringify([tool])) },
+      { role: "user", content: "I am Ana Silva." }, { role: "assistant", content: toolProtocol === "native"
+        ? "You asked about Maya Chen." : '{"kind":"answer","text":"You asked about Maya Chen."}' },
+      { role: "user", content: "Who Shares Ana Silva's SQL?" },
+      ...(toolProtocol === "native" ? [
+        { role: "assistant", content: null, tool_calls: [{ id: "call-ana", type: "function", function: { name: "members_by_interest", arguments: '{"interest":"Ana Silva\'s SQL"}' } }] },
+        { role: "tool", tool_call_id: "call-ana", content: result },
+      ] : [
+        { role: "assistant", content: JSON.stringify({ kind: "tool", call }) },
+        { role: "user", content: JSON.stringify({ toolResult: { id: "call-ana", name: "members_by_interest", content: result } }) },
+      ]),
+    ],
+    ...(toolProtocol === "native" ? { tools: [{ type: "function", function: { ...tool, strict: true } }], parallel_tool_calls: false } : {}),
+  } }]);
+});
+
+test.each(["native", "structured"] as const)("Scout reads a provider tool request in %s mode", async (toolProtocol) => {
+  reply = { status: 200, body: { choices: [toolProtocol === "native"
+    ? { finish_reason: "tool_calls", message: { content: null, tool_calls: [{ id: "call-1", type: "function", function: { name: "available_now", arguments: '{"activity":"lunch"}' } }] } }
+    : { finish_reason: "stop", message: { content: '{"kind":"tool","call":{"id":"call-1","name":"available_now","arguments":{"activity":"lunch"}}}' } }] } };
+  const result = await new ChatCompletionAi({ apiKey: "provider-key", toolProtocol }).complete({ instructions: "Read only.",
+    messages: [{ role: "user", content: "Who is free?" }], tools: [{ name: "available_now", description: "Availability", parameters: {} }],
+  }, settings());
+  expect(result).toEqual({ kind: "tool", call: { id: "call-1", name: "available_now", arguments: { activity: "lunch" } } });
+});
 
 test("clustering sends complete Interest names and counts without forwarding unrelated data", async () => {
   const cluster = ["Ana Silva's SQL", "SQL"];
