@@ -76,7 +76,7 @@ export function UiPrototype() {
   const adminDemo = useAdminDemo();
   const mainRef = useRef<HTMLElement>(null);
   const selectedMeetup =
-    meetups.find((meetup) => meetup.id === id) ?? initialMeetups[0];
+    meetups.find((meetup) => meetup.id === id) ?? meetups[0] ?? initialMeetups[0];
   const personalScreens = [
     "profile",
     "interests",
