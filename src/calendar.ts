@@ -8,6 +8,11 @@ export function localDate(value: Date | string, timeZone: string): string {
   return zonedTime(value, timeZone).toPlainDate().toString();
 }
 
+export function monthToDate(value: Date, timeZone: string): { from: string; to: string } {
+  const today = localDate(value, timeZone);
+  return { from: `${today.slice(0, 7)}-01`, to: today };
+}
+
 export function localDateTime(value: Date | string, timeZone: string, seconds = false): string {
   return zonedTime(value, timeZone).toPlainDateTime().toString({ smallestUnit: seconds ? "second" : "minute" });
 }

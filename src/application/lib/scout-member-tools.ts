@@ -1,15 +1,11 @@
 import { z } from "zod";
 import type { AvailabilityBoard } from "./availability";
-import type { AiToolDefinition } from "../ports";
 import type { MemberProfile, MemberSearch } from "./member-profiles";
 import type { EventSummary, MeetupSummary } from "./meetups";
 import { InvalidInputError } from "./errors";
 import type { Connection } from "./attendance";
 import type { EventSuggestion, MeetupSuggestion } from "./suggestions";
-
-export interface ScoutLink { label: string; href: string }
-export interface ScoutToolResult { data: unknown; links: ScoutLink[] }
-export interface ScoutTool { definition: AiToolDefinition; read: (input: unknown) => Promise<ScoutToolResult> }
+import type { ScoutTool } from "./scout";
 
 const activitySchema = z.strictObject({ activity: z.string().trim().min(1).max(120).nullable() });
 const interestSchema = z.strictObject({ interest: z.string().trim().min(1).max(120), stance: z.enum(["shares", "seeks"]).nullable() });

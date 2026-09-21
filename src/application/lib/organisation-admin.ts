@@ -44,7 +44,7 @@ export interface OrganisationAdminActions {
   approveInterestMerge(id: string, survivingInterestId: string): Promise<void>;
   interestMergeHistory(): Promise<InterestMerge[]>;
   splitInterestMerge(id: string): Promise<void>;
-  reports(period: ReportPeriod): Promise<Report>;
+  reports(period: ReportPeriod, tableId?: string): Promise<Report>;
   memberReport(memberId: string, period: ReportPeriod): Promise<Report>;
   exportReport(tableId: string, period: ReportPeriod): Promise<ReportCsv>;
   exportMemberReport(memberId: string, tableId: string, period: ReportPeriod): Promise<ReportCsv>;
@@ -130,7 +130,7 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
       const clusters = await requestInterestClusters(deps, catalog);
       await command((db) => saveInterestClusters(db, actor.organisationId, clusters, deps.clock.now()));
     },
-    reports: (period) => authorised((db) => organisationReport(db, actor.organisationId, period, deps.clock.now())),
+    reports: (period, tableId) => authorised((db) => organisationReport(db, actor.organisationId, period, deps.clock.now(), tableId)),
     memberReport: (memberId, period) => authorised((db) => memberReport(db, actor, memberId, period, deps.clock.now()), "member-report", { memberId, ...period }),
     exportReport: async (table, period) => command(async (db) => exportReportTable(await organisationReport(db, actor.organisationId, period, deps.clock.now(), table), table),
       "aggregate-report-export", { table, ...period }),

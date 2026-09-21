@@ -1,6 +1,7 @@
 import type { AiClusteringRequest, AiExtractionRequest, AiExtractedInterest, AiInterestRequest, AiInterestResolution, AiRequestSettings, AiPort } from "../../application/ports";
 import type { AiCompletion, AiCompletionRequest, AiToolProtocol } from "../../application/ports";
 import { completionRequest, completionResult } from "./completion-protocol";
+import type { InterestMergeProposal, Report } from "../../application";
 
 export class MemoryAi implements AiPort {
   constructor(private readonly toolProtocol: AiToolProtocol = "native") {}
@@ -92,6 +93,22 @@ export class MemoryAi implements AiPort {
 function defaultCompletion(input: AiCompletionRequest): AiCompletion {
   const latest = input.messages.at(-1);
   if (latest?.role === "tool") {
+    if (latest.call.name === "duplicate_interests") {
+      const result: { items: InterestMergeProposal[]; total: number } = JSON.parse(latest.content);
+      const lines = result.items.slice(0, 3).map(({ interests }) => `${interests.slice(0, 3).map(({ name }) => name).join(", ")}${interests.length > 3 ? ` and ${interests.length - 3} more` : ""}.`);
+      return { kind: "answer", text: lines.length ? `${result.total} ${result.total === 1 ? "proposal" : "proposals"} in the Interest merge queue:\n${lines.join("\n")}` : "There are no duplicate Interest proposals in the queue." };
+    }
+    if (latest.call.name === "unshared_seeks") {
+      const report: Report = JSON.parse(latest.content);
+      const lines = report.tables[0]!.rows.map(([name, , seeks]) => `${name}: ${seeks} Seeks and no Shares.`);
+      return { kind: "answer", text: lines.length ? lines.join("\n") : "There are no Seeks with no Shares among current Active Members." };
+    }
+    if (latest.call.name === "report_headlines") {
+      const report: Report = JSON.parse(latest.content);
+      const tables = report.tables.filter(({ id }) => ["waitlists", "rsvp-attendance", "availability", "telegram", "activation"].includes(id));
+      const lines = tables.map((table) => `${table.title}\n${table.rows.map((row) => row.map((value, index) => `${table.columns[index]}: ${value ?? "Not available"}`).join("; ")).join("\n")}`);
+      return { kind: "answer", text: `Reports from ${report.period.from} through ${report.period.to}, ${report.timeZone}.\n${lines.join("\n")}` };
+    }
     const result: { items: Array<{ name?: string; member?: { name: string }; activity?: { name: string }; startsAt?: string; kind?: string }>; total: number } = JSON.parse(latest.content);
     const lines = result.items.map((item) => {
       if (latest.call.name === "available_now") return `${item.member!.name} is available for ${item.activity!.name}.`;
@@ -106,7 +123,11 @@ function defaultCompletion(input: AiCompletionRequest): AiCompletion {
     return { kind: "answer", text: "Open the relevant screen to take that action yourself." };
   }
   const interest = question.match(/\b(shares?|seeks?)\s+(.+?)[?.!]*$/i);
-  const call = /\b(connections|met)\b/i.test(question) ? { name: "my_connections", arguments: {} }
+  const dates = question.match(/\b\d{4}-\d{2}-\d{2}\b/g);
+  const call = /\bduplicates?\b/i.test(question) ? { name: "duplicate_interests", arguments: {} }
+    : /\b(unshared|unmet)\b|\b(nobody|no one)\s+shares\b|\bseeks\s+(with\s+)?no\s+shares\b/i.test(question) ? { name: "unshared_seeks", arguments: {} }
+    : /\b(reports?|headlines?|figures|dashboard)\b/i.test(question) ? { name: "report_headlines", arguments: { from: dates?.[0] ?? null, to: dates?.[1] ?? null } }
+    : /\b(connections|met)\b/i.test(question) ? { name: "my_connections", arguments: {} }
     : interest ? { name: "members_by_interest", arguments: { interest: interest[2]!.trim(), stance: interest[1]!.toLowerCase().startsWith("share") ? "shares" : "seeks" } }
       : /\b(upcoming|meetups|events|week)\b/i.test(question) ? { name: "upcoming_meetups_and_events", arguments: { from: null, until: null } }
         : /\b(available|availability|free)\b/i.test(question) ? { name: "available_now", arguments: { activity: question.match(/\b(coffee|lunch|walk|game|sport)\b/i)?.[1]?.toLowerCase() ?? null } }
