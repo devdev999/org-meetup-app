@@ -88,6 +88,19 @@ export async function readInterestMergeHistory(db: Queryable, organisationId: st
   }));
 }
 
+export async function retainProposalInterestHistory(db: Queryable, organisationId: string, gatheringId: string, recurrenceId: string): Promise<void> {
+  const merges = await db.select({ id: interestMergeProposals.id, snapshot: interestMergeProposals.snapshot }).from(interestMergeProposals)
+    .where(and(eq(interestMergeProposals.organisationId, organisationId), isNotNull(interestMergeProposals.mergedAt), isNull(interestMergeProposals.splitAt),
+      sql`${interestMergeProposals.snapshot} @> ${JSON.stringify({ gatherings: [{ gatheringId }] })}::jsonb`));
+  for (const merge of merges) {
+    const snapshot = merge.snapshot!;
+    const originals = snapshot.gatherings.filter((row) => row.gatheringId === gatheringId)
+      .map(({ interestId, revision }) => ({ recurrenceId, interestId, revision }));
+    await db.update(interestMergeProposals).set({ snapshot: { ...snapshot, recurrences: [...snapshot.recurrences, ...originals] } })
+      .where(and(eq(interestMergeProposals.organisationId, organisationId), eq(interestMergeProposals.id, merge.id)));
+  }
+}
+
 export async function splitInterestMerge(db: Queryable, organisationId: string, id: string, now: Date): Promise<void> {
   if (!isUuid(id)) invalid("Choose a recorded Interest merge.");
   const [merge] = await db.select().from(interestMergeProposals).where(and(eq(interestMergeProposals.organisationId, organisationId), eq(interestMergeProposals.id, id)));
@@ -100,31 +113,34 @@ export async function splitInterestMerge(db: Queryable, organisationId: string, 
   if (dependent) invalid("Split the later merge that uses these Interests first.");
   const current = new Map((await db.select().from(memberInterests).where(and(eq(memberInterests.organisationId, organisationId),
     eq(memberInterests.interestId, merge.survivingInterestId)))).map((row) => [row.memberId, row]));
-  for (const [memberId, originals] of Map.groupBy(merge.snapshot.declarations, (row) => row.memberId)) {
-    if (current.get(memberId)?.revision !== latestChange(originals, merge.survivingInterestId).revision) continue;
-    await db.delete(memberInterests).where(and(eq(memberInterests.organisationId, organisationId), eq(memberInterests.memberId, memberId),
+  const declarations = [...Map.groupBy(merge.snapshot.declarations, (row) => row.memberId)]
+    .filter(([memberId, originals]) => current.get(memberId)?.revision === latestChange(originals, merge.survivingInterestId!).revision);
+  if (declarations.length) {
+    await db.delete(memberInterests).where(and(eq(memberInterests.organisationId, organisationId), inArray(memberInterests.memberId, declarations.map(([memberId]) => memberId)),
       eq(memberInterests.interestId, merge.survivingInterestId)));
-    await db.insert(memberInterests).values(originals.map((row) => ({ ...row, organisationId })));
+    await db.insert(memberInterests).values(declarations.flatMap(([, originals]) => originals.map((row) => ({ ...row, organisationId }))));
   }
   const attachments = new Map((await db.select().from(gatheringInterests).where(and(eq(gatheringInterests.organisationId, organisationId),
     eq(gatheringInterests.interestId, merge.survivingInterestId)))).map((row) => [row.gatheringId, row]));
-  for (const [gatheringId, originals] of Map.groupBy(merge.snapshot.gatherings, (row) => row.gatheringId)) {
-    if (attachments.get(gatheringId)?.revision !== latestChange(originals, merge.survivingInterestId).revision) continue;
-    await db.delete(gatheringInterests).where(and(eq(gatheringInterests.organisationId, organisationId), eq(gatheringInterests.gatheringId, gatheringId),
+  const gatherings = [...Map.groupBy(merge.snapshot.gatherings, (row) => row.gatheringId)]
+    .filter(([gatheringId, originals]) => attachments.get(gatheringId)?.revision === latestChange(originals, merge.survivingInterestId!).revision);
+  if (gatherings.length) {
+    await db.delete(gatheringInterests).where(and(eq(gatheringInterests.organisationId, organisationId), inArray(gatheringInterests.gatheringId, gatherings.map(([gatheringId]) => gatheringId)),
       eq(gatheringInterests.interestId, merge.survivingInterestId)));
-    await db.insert(gatheringInterests).values(originals.map((row) => ({ ...row, organisationId })));
+    await db.insert(gatheringInterests).values(gatherings.flatMap(([, originals]) => originals.map((row) => ({ ...row, organisationId }))));
   }
   const seriesAttachments = new Map((await db.select().from(recurrenceInterests).where(and(eq(recurrenceInterests.organisationId, organisationId),
     eq(recurrenceInterests.interestId, merge.survivingInterestId)))).map((row) => [row.recurrenceId, row]));
-  for (const [recurrenceId, originals] of Map.groupBy(merge.snapshot.recurrences, (row) => row.recurrenceId)) {
-    if (seriesAttachments.get(recurrenceId)?.revision !== latestChange(originals, merge.survivingInterestId).revision) continue;
-    await db.delete(recurrenceInterests).where(and(eq(recurrenceInterests.organisationId, organisationId), eq(recurrenceInterests.recurrenceId, recurrenceId),
+  const recurrences = [...Map.groupBy(merge.snapshot.recurrences, (row) => row.recurrenceId)]
+    .filter(([recurrenceId, originals]) => seriesAttachments.get(recurrenceId)?.revision === latestChange(originals, merge.survivingInterestId!).revision);
+  if (recurrences.length) {
+    await db.delete(recurrenceInterests).where(and(eq(recurrenceInterests.organisationId, organisationId), inArray(recurrenceInterests.recurrenceId, recurrences.map(([recurrenceId]) => recurrenceId)),
       eq(recurrenceInterests.interestId, merge.survivingInterestId)));
-    await db.insert(recurrenceInterests).values(originals.map((row) => ({ ...row, organisationId })));
+    await db.insert(recurrenceInterests).values(recurrences.flatMap(([, originals]) => originals.map((row) => ({ ...row, organisationId }))));
   }
-  for (const alias of merge.snapshot.aliases) {
-    await db.update(interestAliases).set({ interestId: alias.interestId }).where(and(eq(interestAliases.organisationId, organisationId),
-      eq(interestAliases.phraseKey, alias.phraseKey), eq(interestAliases.interestId, merge.survivingInterestId)));
+  for (const [interestId, aliases] of Map.groupBy(merge.snapshot.aliases, (row) => row.interestId)) {
+    await db.update(interestAliases).set({ interestId }).where(and(eq(interestAliases.organisationId, organisationId),
+      inArray(interestAliases.phraseKey, aliases.map(({ phraseKey }) => phraseKey)), eq(interestAliases.interestId, merge.survivingInterestId)));
   }
   await db.update(interests).set({ mergedIntoId: null }).where(and(eq(interests.organisationId, organisationId), inArray(interests.id, merge.interestIds)));
   await db.update(interestMergeProposals).set({ splitAt: now }).where(and(eq(interestMergeProposals.organisationId, organisationId), eq(interestMergeProposals.id, id)));

@@ -37,12 +37,16 @@ export async function requestInterestClusters(deps: Deps, catalog: CountedIntere
 }
 
 export async function saveInterestClusters(db: Queryable, organisationId: string, clusters: CountedInterest[][], now: Date): Promise<void> {
-  const current = new Map((await clusteringCatalog(db, organisationId)).map((interest) => [interest.interestId, interest]));
-  for (const cluster of clusters) {
-    if (cluster.some((interest) => current.get(interest.interestId)?.name !== interest.name)) continue;
+  if (!clusters.length) return;
+  const proposedIds = [...new Set(clusters.flat().map(({ interestId }) => interestId))];
+  const current = new Map((await db.select({ id: interests.id, name: interests.name }).from(interests)
+    .where(and(eq(interests.organisationId, organisationId), inArray(interests.id, proposedIds), isNull(interests.mergedIntoId))))
+    .map((interest) => [interest.id, interest.name]));
+  const proposals = clusters.filter((cluster) => cluster.every((interest) => current.get(interest.interestId) === interest.name)).map((cluster) => {
     const interestIds = cluster.map(({ interestId }) => interestId).sort();
-    await db.insert(interestMergeProposals).values({ organisationId, interestIds, clusterKey: interestIds.join(","), createdAt: now }).onConflictDoNothing();
-  }
+    return { organisationId, interestIds, clusterKey: interestIds.join(","), createdAt: now };
+  });
+  if (proposals.length) await db.insert(interestMergeProposals).values(proposals).onConflictDoNothing();
 }
 
 export async function readInterestMergeProposals(db: Queryable, organisationId: string): Promise<InterestMergeProposal[]> {

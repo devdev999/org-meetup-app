@@ -77,9 +77,9 @@ export async function seedInterests(db: Pick<Database, "insert">, organisationId
   }))).onConflictDoNothing();
 }
 
-export function listInterests({ db }: Deps, actor: Actor): Promise<Interest[]> {
+export function listInterests(db: Queryable, organisationId: string): Promise<Interest[]> {
   return db.select({ interestId: interests.id, name: interests.name, kind: interests.kind })
-    .from(interests).where(and(eq(interests.organisationId, actor.organisationId), isNull(interests.mergedIntoId))).orderBy(asc(interests.kind), asc(interests.name));
+    .from(interests).where(and(eq(interests.organisationId, organisationId), isNull(interests.mergedIntoId))).orderBy(asc(interests.kind), asc(interests.name));
 }
 
 export function memberInterestsFor(db: Queryable, organisationId: string, memberIds: string[]): Promise<(MemberInterest & { memberId: string })[]> {
@@ -105,7 +105,7 @@ export async function resolveInterests(deps: Deps, actor: Actor, inputs: { phras
   if (!phrases.length || signal?.aborted) return [];
   const settings = await extractionSettings(deps);
   const [catalog, aliases, counts] = await Promise.all([
-    listInterests(deps, actor),
+    listInterests(deps.db, actor.organisationId),
     deps.db.select({
       interestId: interestAliases.interestId, phrase: interestAliases.phrase,
       matches: sql<boolean[]>`array[${sql.join(phrases.map(({ phrase }) => eq(interestAliases.phraseKey, aliasKey(phrase))), sql`, `)}]`,

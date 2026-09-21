@@ -26,7 +26,7 @@ import {
 import { members, organisationAdminNotices, organisations } from "./schema";
 import { clusteringCatalog, readInterestMergeProposals, requestInterestClusters, saveInterestClusters, type InterestMergeProposal } from "./interest-clustering";
 import { approveInterestMerge, readInterestMergeHistory, splitInterestMerge, type InterestMerge } from "./interest-merges";
-import { updateInterest, type Interest } from "./interests";
+import { listInterests, updateInterest, type Interest } from "./interests";
 import {
   organisationLists,
   retireListEntry,
@@ -119,7 +119,7 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
     }, auditAction, filter);
   }
   return {
-    interests: () => authorised(async (db) => (await clusteringCatalog(db, actor.organisationId)).map(({ count: _, ...interest }) => interest)),
+    interests: () => authorised((db) => listInterests(db, actor.organisationId)),
     updateInterest: (interestId, input) => command((db) => updateInterest(db, actor.organisationId, interestId, input)),
     splitInterestMerge: (id) => command((db) => splitInterestMerge(db, actor.organisationId, id, deps.clock.now())),
     approveInterestMerge: (id, survivingInterestId) => command((db) => approveInterestMerge(db, actor.organisationId, id, survivingInterestId, deps.clock.now())),

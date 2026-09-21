@@ -40,6 +40,8 @@ A merge repoints Aliases, personal Stances and relevant Interests on Meetups, Ev
 
 **Merge history** provides the split action. Untouched declarations and attachments recover their originals. A later Stance edit stays on the survivor, and a later removal stays removed. Removing and adding an Interest again counts as a new choice. Editing an unrelated Meetup or Event field or adding another relevant Interest preserves the unaffected attachments. New occurrences created during a merge keep the Interests they received; after a split, future generation uses the restored series.
 
+Approving a recurring Event proposal during a merge carries its original Interest choices into the new series. A later split restores those choices for future occurrences too.
+
 Split a later merge involving the same Interests first. Unrelated merges remain independent. Hidden Interests retain their names for restoration, so those names cannot be reused while merged. Migration preserves old declarations with unknown order; ties prefer the survivor's Stance, then the lowest Interest identifier. All originals remain available for an untouched split. See [ADR 0013](./docs/adr/0013-interest-splits-preserve-later-choices.md).
 
 Members can remove a personal declaration from **Your Interests**. This leaves the shared Interest catalog and any Meetup or Event attachments intact.

@@ -49,6 +49,30 @@ test("an Event approved while its Interests are merged retains untouched attachm
   expect((await host.viewEvent(event.id))?.relevantInterests.map(({ name }) => name)).toEqual([b.name]);
 });
 
+test.each([false, true])("a recurring Event approved during a merge restores its proposal's Interests after splitting, with a dependent merge: %s", async (dependent) => {
+  await h.setupOrganisation(ministryA);
+  const host = await signInAndAcknowledgeAs(h, "ministry-a", ana);
+  const survivor = await declare(host, "SQL", "shares");
+  const original = await declare(host, "Structured query language", "seeks");
+  const event = await host.proposeEvent({ activityId: (await host.meetupChoices()).activities[0]!.id,
+    startsAt: new Date("2026-09-19T10:00:00Z"), durationMinutes: 30,
+    place: { kind: "virtual", url: "https://meet.example/proposal" }, recurrence: { frequency: "weekly" },
+    relevantInterests: [{ phrase: original.name, selection: { interestId: original.interestId } }],
+  });
+  const admin = await h.organisationAdmin();
+  const pending = await proposal(admin, [survivor.name, original.name]);
+  await admin.approveInterestMerge(pending.id, survivor.interestId);
+  const later = dependent ? await proposal(admin, [survivor.name, "Spreadsheets"]) : undefined;
+  if (later) await admin.approveInterestMerge(later.id, later.interests.find(({ name }) => name === "Spreadsheets")!.interestId);
+  await admin.approveEvent(event.id);
+  if (later) await admin.splitInterestMerge(later.id);
+  await admin.splitInterestMerge(pending.id);
+  await h.app.processRecurrences();
+
+  const generated = (await host.listEvents()).find(({ id }) => id !== event.id)!;
+  expect((await host.viewEvent(generated.id))?.relevantInterests.map(({ name }) => name)).toEqual(["Structured query language"]);
+});
+
 test("a merged canonical name resolves to the survivor even when no Member had used it as an Alias", async () => {
   await h.setupOrganisation(ministryA);
   const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);

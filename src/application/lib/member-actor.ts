@@ -245,7 +245,7 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
       await deliverSoon(deps, { organisationId: actor.organisationId, gatheringId: result.eventId ?? result.meetupId });
       return result;
     },
-    interests: () => afterNotice(() => listInterests(deps, actor)),
+    interests: () => afterNotice(() => listInterests(deps.db, actor.organisationId)),
     myInterests: () => afterNotice(() => memberInterestList(deps, actor)),
     resolveInterest: (input) => afterNotice(() => resolveInterest(deps, actor, input)),
     confirmInterest: (input) => afterNotice(() => confirmInterest(deps, actor, input)),
