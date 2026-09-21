@@ -16,6 +16,7 @@ export const INVITE_EXPIRY_QUEUE = "invite-expiry";
 export const AVAILABILITY_QUEUE = "availability";
 export const RECURRENCE_QUEUE = "recurrences";
 export const ATTENDANCE_QUEUE = "attendance";
+export const INTEREST_CLUSTERING_QUEUE = "interest-clustering";
 
 /** Once a minute, so a running worker is visible in the logs. */
 export const HEARTBEAT_CRON = "* * * * *";
@@ -40,6 +41,9 @@ export async function registerJobs(boss: PgBoss, options: JobOptions = {}): Prom
 
   const application = options.application;
   if (application) {
+    await boss.createQueue(INTEREST_CLUSTERING_QUEUE);
+    await boss.schedule(INTEREST_CLUSTERING_QUEUE, "0 2 * * *", {}, { tz: "UTC" });
+    await boss.work(INTEREST_CLUSTERING_QUEUE, async () => { await application.processInterestMerges(); });
     for (const [queue, run] of [
       [NOTICE_QUEUE, () => application.deliverNotices()],
       [DIGEST_QUEUE, () => application.sendDailyDigests()],

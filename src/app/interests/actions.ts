@@ -90,3 +90,14 @@ export async function updateInterestStance(form: FormData): Promise<InterestSave
   revalidateInterests();
   return { saved: true };
 }
+
+export async function removeInterest(form: FormData): Promise<InterestSaveState> {
+  const { member } = await requireMemberPastWelcome();
+  try {
+    await member.removeInterest(formText(form.get("interestId")) ?? "");
+  } catch (error) {
+    return inputErrorState(error);
+  }
+  revalidateInterests();
+  return { saved: true };
+}

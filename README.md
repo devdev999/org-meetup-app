@@ -32,6 +32,18 @@ Retired Departments and Sites disappear from profile choices. Existing assignmen
 
 Organisation Admin access is checked for each command and query. Roster views, previews and unknown-login lists record the actor, view, filter and time in the audit log, as required by [ADR 0006](./docs/adr/0006-admins-see-individual-level-data.md). Each view records access; the filter is empty because these views have no filtering controls yet.
 
+## Interest administration
+
+Organisation Admins open **Interests** to find duplicate Interests, approve a surviving Interest, rename an Interest or change its kind. The worker checks each Organisation daily at 02:00 UTC. Both paths send only Interest names and counts of Active and Provisioned Members to the configured extraction model, including identifying text in typed or renamed Interests. No Member identifiers, attributes or Organisation identifiers accompany the request. The same set of Interest identifiers is proposed only once, including after a split.
+
+A merge repoints Aliases, personal Stances and relevant Interests on Meetups, Events, pending Event proposals and recurring schedules. The most recent explicit declaration wins, including a same-value Stance command. Members see the survivor; an old form must reload before saving a removed Interest. The merge retains the original declarations and their order, and does not change the affected Members' first declaration dates or last activity.
+
+**Merge history** provides the split action. Untouched declarations and attachments recover their originals. A later Stance edit stays on the survivor, and a later removal stays removed. Removing and adding an Interest again counts as a new choice. Editing an unrelated Meetup or Event field or adding another relevant Interest preserves the unaffected attachments. New occurrences created during a merge keep the Interests they received; after a split, future generation uses the restored series.
+
+Split a later merge involving the same Interests first. Unrelated merges remain independent. Hidden Interests retain their names for restoration, so those names cannot be reused while merged. Migration preserves old declarations with unknown order; ties prefer the survivor's Stance, then the lowest Interest identifier. All originals remain available for an untouched split. See [ADR 0013](./docs/adr/0013-interest-splits-preserve-later-choices.md).
+
+Members can remove a personal declaration from **Your Interests**. This leaves the shared Interest catalog and any Meetup or Event attachments intact.
+
 ## Meetups
 
 Open Meetups from your profile to create one, join one or manage one you Host. Physical Meetups default to the Host's Site as their audience, even when the Place is at another Site. Virtual Meetups default to the whole Organisation. The Host can instead choose a Site, the Organisation or invite-only. Invite-only Meetups are visible to their Host and invitees.

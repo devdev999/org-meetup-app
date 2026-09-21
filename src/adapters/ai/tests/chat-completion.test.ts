@@ -40,6 +40,27 @@ const adapter = () => new ChatCompletionAi({ apiKey: "provider-key" });
 const settings = () => ({ baseUrl, model: "interest-model" });
 const input: AiInterestRequest = { phrase: "rustlang", shortlist: [{ name: "Rust", kind: "skill", count: 3 }] };
 
+test("clustering sends complete Interest names and counts without forwarding unrelated data", async () => {
+  const cluster = ["Ana Silva's SQL", "SQL"];
+  reply = { status: 200, body: { choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ clusters: [cluster] }) } }] } };
+  const input = { organisationId: "not-for-ai", interests: [
+    { name: cluster[0]!, count: 2, memberIds: ["not-for-ai"] }, { name: "SQL", count: 5, memberIds: [] },
+  ] };
+  expect(await adapter().clusterInterests(input, settings())).toEqual([cluster]);
+  expect(requests).toEqual([{
+    url: "/v1/chat/completions", authorization: "Bearer provider-key",
+    body: { model: "interest-model", messages: [
+      { role: "system", content: expect.stringContaining("clusters") },
+      { role: "user", content: JSON.stringify({ interests: [{ name: "Ana Silva's SQL", count: 2 }, { name: "SQL", count: 5 }] }) },
+    ], response_format: { type: "json_object" }, stream: false },
+  }]);
+});
+
+test.each([{ clusters: [["SQL"]] }, { clusters: [["SQL", ""]] }, { clusters: "SQL" }, { clusters: [], extra: true }])("clustering rejects malformed output: %j", async (output) => {
+  reply = { status: 200, body: { choices: [{ finish_reason: "stop", message: { content: JSON.stringify(output) } }] } };
+  await expect(adapter().clusterInterests({ interests: [{ name: "SQL", count: 2 }, { name: "Structured query language", count: 1 }] }, settings())).rejects.toThrow();
+});
+
 test("resolves Interest text through the configured chat-completion endpoint", async () => {
   expect(await adapter().resolveInterest(input, settings())).toEqual({ existingName: "Rust" });
   expect(requests).toEqual([{

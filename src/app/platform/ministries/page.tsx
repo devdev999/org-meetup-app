@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requirePlatformAdmin } from "../../../web/session";
-import { ActionForm } from "../action-form";
+import { ActionForm } from "../../_components/action-form";
 import { assignMinistry, createMinistry } from "../actions";
 
 export default async function MinistriesPage() {

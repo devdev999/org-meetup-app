@@ -24,6 +24,9 @@ import {
   type RosterRow,
 } from "./roster";
 import { members, organisationAdminNotices, organisations } from "./schema";
+import { clusteringCatalog, readInterestMergeProposals, requestInterestClusters, saveInterestClusters, type InterestMergeProposal } from "./interest-clustering";
+import { approveInterestMerge, readInterestMergeHistory, splitInterestMerge, type InterestMerge } from "./interest-merges";
+import { updateInterest, type Interest } from "./interests";
 import {
   organisationLists,
   retireListEntry,
@@ -34,6 +37,13 @@ import {
 } from "./organisation-lists";
 
 export interface OrganisationAdminActions {
+  interests(): Promise<Interest[]>;
+  updateInterest(interestId: string, input: Pick<Interest, "name" | "kind">): Promise<void>;
+  interestMergeProposals(): Promise<InterestMergeProposal[]>;
+  proposeInterestMerges(): Promise<void>;
+  approveInterestMerge(id: string, survivingInterestId: string): Promise<void>;
+  interestMergeHistory(): Promise<InterestMerge[]>;
+  splitInterestMerge(id: string): Promise<void>;
   reports(period: ReportPeriod): Promise<Report>;
   memberReport(memberId: string, period: ReportPeriod): Promise<Report>;
   exportReport(tableId: string, period: ReportPeriod): Promise<ReportCsv>;
@@ -109,6 +119,17 @@ export async function organisationAdmin(deps: Deps, actor: Actor): Promise<Organ
     }, auditAction, filter);
   }
   return {
+    interests: () => authorised(async (db) => (await clusteringCatalog(db, actor.organisationId)).map(({ count: _, ...interest }) => interest)),
+    updateInterest: (interestId, input) => command((db) => updateInterest(db, actor.organisationId, interestId, input)),
+    splitInterestMerge: (id) => command((db) => splitInterestMerge(db, actor.organisationId, id, deps.clock.now())),
+    approveInterestMerge: (id, survivingInterestId) => command((db) => approveInterestMerge(db, actor.organisationId, id, survivingInterestId, deps.clock.now())),
+    interestMergeHistory: () => authorised((db) => readInterestMergeHistory(db, actor.organisationId)),
+    interestMergeProposals: () => authorised((db) => readInterestMergeProposals(db, actor.organisationId)),
+    proposeInterestMerges: async () => {
+      const catalog = await authorised((db) => clusteringCatalog(db, actor.organisationId));
+      const clusters = await requestInterestClusters(deps, catalog);
+      await command((db) => saveInterestClusters(db, actor.organisationId, clusters, deps.clock.now()));
+    },
     reports: (period) => authorised((db) => organisationReport(db, actor.organisationId, period, deps.clock.now())),
     memberReport: (memberId, period) => authorised((db) => memberReport(db, actor, memberId, period, deps.clock.now()), "member-report", { memberId, ...period }),
     exportReport: async (table, period) => command(async (db) => exportReportTable(await organisationReport(db, actor.organisationId, period, deps.clock.now(), table), table),

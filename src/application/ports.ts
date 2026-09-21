@@ -71,10 +71,12 @@ export type AiInterestResolution = { existingName: string } | { name: string; ki
 
 export interface AiExtractionRequest { activity: string; description: string }
 export interface AiExtractedInterest { phrase: string; kind: InterestKind }
+export interface AiClusteringRequest { interests: Array<{ name: string; count: number }> }
 
 export interface AiRequestSettings { baseUrl: string | null; model: string }
 
 export interface AiPort {
+  clusterInterests(input: AiClusteringRequest, settings: AiRequestSettings): Promise<string[][]>;
   resolveInterest(input: AiInterestRequest, settings: AiRequestSettings, signal?: AbortSignal): Promise<AiInterestResolution>;
   extractInterests(input: AiExtractionRequest, settings: AiRequestSettings, signal?: AbortSignal): Promise<AiExtractedInterest[]>;
 }

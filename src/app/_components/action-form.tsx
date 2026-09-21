@@ -1,10 +1,11 @@
 "use client";
 
 import { useActionState, type ReactNode } from "react";
-import type { PlatformActionState } from "./actions";
+
+export interface ActionState { error?: string; message?: string }
 
 export function ActionForm({ action, label, children }: {
-  action: (previous: PlatformActionState, form: FormData) => Promise<PlatformActionState>;
+  action: (previous: ActionState, form: FormData) => Promise<ActionState>;
   label: string;
   children: ReactNode;
 }) {

@@ -11,7 +11,7 @@ import { platformAdmin, type PlatformAdminActions } from "./platform-admin";
 import { answerInvite, cancelMeetup, createMeetup, editMeetup, handOverMeetup, inbox, inviteChoices, inviteMember, joinMeetup, leaveMeetup, listMeetups, meetupChoices, viewMeetup, type CreateMeetupInput, type EditMeetupInput, type Invite, type InviteAnswer, type InviteChoices, type InviteSearch, type MeetupChoices, type MeetupDetail, type MeetupSummary, type Notice } from "./meetups";
 import { departments, interestAliases, interests, memberInterests, members, organisations, sites } from "./schema";
 import type { InterestKind } from "../ports";
-import { confirmInterest, listInterests, memberInterestList, memberInterestsFor, resolveInterest, setInterestStance, type ConfirmInterestInput, type Interest, type InterestResolution, type MemberInterest, type Stance } from "./interests";
+import { confirmInterest, listInterests, memberInterestList, memberInterestsFor, removeInterest, resolveInterest, setInterestStance, type ConfirmInterestInput, type Interest, type InterestResolution, type MemberInterest, type Stance } from "./interests";
 import { beginTelegramLink, unlinkTelegram, type TelegramLink } from "./telegram";
 import { deliverSoon, notificationSettings, setNoticePreference, type NotificationSettings, type NoticePreference } from "./notifications";
 import { eventSuggestions, inviteSuggestions, meetupSuggestions, previewInviteSuggestions, type EventSuggestion, type InviteSuggestion, type MeetupSuggestion, type PreviewInviteSuggestionsInput } from "./suggestions";
@@ -134,6 +134,7 @@ export interface MemberActions {
   resolveInterest(input: { phrase: string; kind: InterestKind }): Promise<InterestResolution>;
   confirmInterest(input: ConfirmInterestInput): Promise<MemberInterest[]>;
   setInterestStance(input: { interestId: string; stance: Stance }): Promise<MemberInterest[]>;
+  removeInterest(interestId: string): Promise<MemberInterest[]>;
   organisationAdmin(): Promise<OrganisationAdminActions>;
   platformAdmin(): Promise<PlatformAdminActions>;
   adminVisibilityNotice(): Promise<AdminVisibilityNotice | undefined>;
@@ -249,6 +250,7 @@ export async function asMember(deps: Deps, memberId: string): Promise<MemberActi
     resolveInterest: (input) => afterNotice(() => resolveInterest(deps, actor, input)),
     confirmInterest: (input) => afterNotice(() => confirmInterest(deps, actor, input)),
     setInterestStance: (input) => afterNotice(() => setInterestStance(deps, actor, input)),
+    removeInterest: (interestId) => afterNotice(() => removeInterest(deps, actor, interestId)),
     organisationAdmin: () => organisationAdmin(deps, actor),
     platformAdmin: () => platformAdmin(deps, actor),
     adminVisibilityNotice: () => adminVisibilityNotice(deps, actor),

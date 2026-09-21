@@ -1,5 +1,5 @@
 import { extractionSettings } from "./deployment-settings";
-import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { InterestKind } from "../ports";
 import { VISIBLE_MEMBER_STATUSES, withActiveMember, type Actor } from "./actor";
@@ -37,7 +37,7 @@ const FALLBACK_PROPOSAL_SCORE = 0.6;
 const SUBSTRING_SIMILARITY = 0.8;
 const ALIAS_WHITESPACE = "\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
 
-function aliasKey(phrase: string) {
+export function aliasKey(phrase: string) {
   return sql`lower(btrim(${phrase}, ${ALIAS_WHITESPACE}))`;
 }
 
@@ -79,7 +79,7 @@ export async function seedInterests(db: Pick<Database, "insert">, organisationId
 
 export function listInterests({ db }: Deps, actor: Actor): Promise<Interest[]> {
   return db.select({ interestId: interests.id, name: interests.name, kind: interests.kind })
-    .from(interests).where(eq(interests.organisationId, actor.organisationId)).orderBy(asc(interests.kind), asc(interests.name));
+    .from(interests).where(and(eq(interests.organisationId, actor.organisationId), isNull(interests.mergedIntoId))).orderBy(asc(interests.kind), asc(interests.name));
 }
 
 export function memberInterestsFor(db: Queryable, organisationId: string, memberIds: string[]): Promise<(MemberInterest & { memberId: string })[]> {
@@ -171,7 +171,7 @@ export async function confirmInterest(deps: Deps, actor: Actor, input: ConfirmIn
   await withActiveMember(deps, actor, async (tx, current) => {
     const interestId = await saveInterestChoice(tx, actor.organisationId, { phrase, selection }, deps.clock.now());
     await tx.insert(memberInterests).values({ organisationId: actor.organisationId, memberId: actor.memberId, interestId, stance })
-      .onConflictDoUpdate({ target: [memberInterests.organisationId, memberInterests.memberId, memberInterests.interestId], set: { stance } });
+      .onConflictDoUpdate({ target: [memberInterests.organisationId, memberInterests.memberId, memberInterests.interestId], set: { stance, revision: sql`nextval('interest_change_order')` } });
     if (!current.hasDeclaredInterest) await tx.update(members).set({ hasDeclaredInterest: true, firstInterestDeclaredAt: deps.clock.now() })
       .where(and(eq(members.organisationId, actor.organisationId), eq(members.id, actor.memberId)));
   });
@@ -181,14 +181,15 @@ export async function confirmInterest(deps: Deps, actor: Actor, input: ConfirmIn
 export async function saveCanonicalInterest(db: Queryable, organisationId: string, selection: InterestSelection, now: Date): Promise<string> {
   if ("interestId" in selection) {
     const [existing] = await db.select({ id: interests.id }).from(interests)
-      .where(and(eq(interests.organisationId, organisationId), eq(interests.id, selection.interestId)));
+      .where(and(eq(interests.organisationId, organisationId), eq(interests.id, selection.interestId), isNull(interests.mergedIntoId)));
     if (!existing) throw new InvalidInputError("unknown-interest", "Choose an Interest from your Organisation.");
     return existing.id;
   }
   const [interest] = await db.insert(interests).values({
     organisationId, name: selection.name, nameKey: selection.name.toLowerCase(), kind: selection.kind, createdAt: now,
   }).onConflictDoUpdate({ target: [interests.organisationId, interests.nameKey], set: { nameKey: selection.name.toLowerCase() } })
-    .returning({ id: interests.id, name: interests.name, kind: interests.kind });
+    .returning({ id: interests.id, name: interests.name, kind: interests.kind, mergedIntoId: interests.mergedIntoId });
+  if (interest!.mergedIntoId) throw new InvalidInputError("unknown-interest", "This Interest was merged. Preview again to choose its current listing.");
   if (interest!.name !== selection.name || interest!.kind !== selection.kind) {
     throw new InvalidInputError("interest-name-conflict", "An Interest with this name already exists with a different spelling or kind. Preview again and confirm the existing Interest, or use another name.");
   }
@@ -212,10 +213,30 @@ export async function setInterestStance(deps: Deps, actor: Actor, input: { inter
   const selection = parse(z.object({ interestId: z.uuid(), stance: z.enum(["shares", "seeks"]) }), input,
     "Choose a declared Interest and select Shares or Seeks.");
   await withActiveMember(deps, actor, async (db) => {
-    const updated = await db.update(memberInterests).set({ stance: selection.stance })
+    const updated = await db.update(memberInterests).set({ stance: selection.stance, revision: sql`nextval('interest_change_order')` })
       .where(and(eq(memberInterests.organisationId, actor.organisationId), eq(memberInterests.memberId, actor.memberId), eq(memberInterests.interestId, selection.interestId)))
       .returning({ interestId: memberInterests.interestId });
     if (!updated.length) throw new InvalidInputError("unknown-interest", "Declare this Interest before changing its Stance.");
   });
   return memberInterestList(deps, actor);
+}
+
+export async function removeInterest(deps: Deps, actor: Actor, interestId: string): Promise<MemberInterest[]> {
+  const id = parse(z.uuid(), interestId, "Choose a declared Interest to remove.");
+  await withActiveMember(deps, actor, async (db) => {
+    await db.delete(memberInterests).where(and(eq(memberInterests.organisationId, actor.organisationId),
+      eq(memberInterests.memberId, actor.memberId), eq(memberInterests.interestId, id)));
+  });
+  return memberInterestList(deps, actor);
+}
+
+export async function updateInterest(db: Queryable, organisationId: string, interestId: string, input: Pick<Interest, "name" | "kind">): Promise<void> {
+  const data = parse(z.object({ interestId: z.uuid(), name: z.string().trim().min(1).max(120), kind: kindSchema }),
+    { ...input, interestId }, "Choose an Interest, a name of up to 120 characters, and Skill or Hobby.");
+  const [duplicate] = await db.select({ id: interests.id }).from(interests)
+    .where(and(eq(interests.organisationId, organisationId), eq(interests.nameKey, data.name.toLowerCase())));
+  if (duplicate && duplicate.id !== interestId) throw new InvalidInputError("interest-name-conflict", "An Interest already uses this name, including Interests kept for a possible split.");
+  const updated = await db.update(interests).set({ name: data.name, nameKey: data.name.toLowerCase(), kind: data.kind })
+    .where(and(eq(interests.organisationId, organisationId), eq(interests.id, interestId), isNull(interests.mergedIntoId))).returning({ id: interests.id });
+  if (!updated.length) throw new InvalidInputError("unknown-interest", "Choose a current Interest in your Organisation.");
 }

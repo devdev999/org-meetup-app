@@ -33,6 +33,7 @@ import { processAttendance } from "./lib/attendance";
 import { reconcileMemberLifecycles } from "./lib/member-lifecycle";
 import { deploymentDefaults } from "./lib/deployment-settings-input";
 import { initializeDeploymentSettings, readDeploymentSettings, type DeploymentSettings } from "./lib/deployment-settings";
+import { processInterestMerges } from "./lib/interest-clustering";
 
 export type { TelegramCommand, TelegramLink } from "./lib/telegram";
 export type { NotificationSettings, NoticePreference } from "./lib/notifications";
@@ -68,6 +69,8 @@ export type {
 export type { ClaimMapping } from "./lib/schema";
 export type { CreateMeetupInput, EditMeetupInput, Invite, InviteAnswer, InviteChoices, InviteSearch, MeetupAudience, MeetupChoices, MeetupDetail, MeetupPerson, MeetupPlace, MeetupSummary, Notice } from "./lib/meetups";
 export type { InterestKind } from "./ports";
+export type { InterestMergeProposal } from "./lib/interest-clustering";
+export type { InterestMerge } from "./lib/interest-merges";
 export type { MemberProfile, MemberSearch } from "./lib/member-actor";
 export type { Interest, MemberInterest, InterestResolution, InterestSelection, InterestChoice, ConfirmInterestInput, Stance } from "./lib/interests";
 export type { EventSuggestion, InviteSuggestion, MeetupSuggestion, PreviewInviteSuggestionsInput } from "./lib/suggestions";
@@ -118,6 +121,7 @@ export interface ApplicationDependencies {
  * Organisation the application derives itself, never from input.
  */
 export interface Application {
+  processInterestMerges(): Promise<void>;
   initializeDeploymentSettings(): Promise<void>;
   timeZone(): Promise<string>;
   initializePlatform(config: FirstPlatformAdminConfig): Promise<void>;
@@ -150,6 +154,7 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     email: dependencies.email,
   };
   return {
+    processInterestMerges: () => processInterestMerges(deps),
     initializeDeploymentSettings: () => initializeDeploymentSettings(deps.db, deps.deploymentDefaults),
     timeZone: async () => (await readDeploymentSettings(deps.db, deps.deploymentDefaults)).timeZone,
     initializePlatform: (config) => initializePlatform(deps, config),

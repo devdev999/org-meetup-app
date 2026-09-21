@@ -1,12 +1,29 @@
-import type { AiExtractionRequest, AiExtractedInterest, AiInterestRequest, AiInterestResolution, AiRequestSettings, AiPort } from "../../application/ports";
+import type { AiClusteringRequest, AiExtractionRequest, AiExtractedInterest, AiInterestRequest, AiInterestResolution, AiRequestSettings, AiPort } from "../../application/ports";
 
 export class MemoryAi implements AiPort {
+  readonly clusteringSettings: AiRequestSettings[] = [];
+  readonly clusteringRequests: AiClusteringRequest[] = [];
+  readonly clusteringResponses: Array<string[][] | Error> = [];
   readonly requestSettings: AiRequestSettings[] = [];
   readonly extractionSettings: AiRequestSettings[] = [];
   readonly requests: AiInterestRequest[] = [];
   readonly responses: Array<AiInterestResolution | Error> = [];
   readonly extractionRequests: AiExtractionRequest[] = [];
   readonly extractionResponses: Array<AiExtractedInterest[] | Error> = [];
+
+  async clusterInterests(input: AiClusteringRequest, settings: AiRequestSettings): Promise<string[][]> {
+    this.clusteringSettings.push(structuredClone(settings));
+    this.clusteringRequests.push(structuredClone(input));
+    const response = this.clusteringResponses.shift();
+    if (response instanceof Error) throw response;
+    if (response) return structuredClone(response);
+    const canonicalNames: Record<string, string> = { structuredquerylanguage: "sql", rustlang: "rust", boardgames: "boardgames" };
+    const grouped = Map.groupBy(input.interests, ({ name }) => {
+      const normalized = name.toLowerCase().replace(/\s+/g, "");
+      return Object.hasOwn(canonicalNames, normalized) ? canonicalNames[normalized]! : normalized;
+    });
+    return [...grouped.values()].filter((entries) => entries.length > 1).map((entries) => entries.map(({ name }) => name));
+  }
 
   async extractInterests(input: AiExtractionRequest, settings: AiRequestSettings): Promise<AiExtractedInterest[]> {
     this.extractionSettings.push(structuredClone(settings));
@@ -37,6 +54,9 @@ export class MemoryAi implements AiPort {
   }
 
   reset(): void {
+    this.clusteringSettings.length = 0;
+    this.clusteringRequests.length = 0;
+    this.clusteringResponses.length = 0;
     this.requestSettings.length = 0;
     this.extractionSettings.length = 0;
     this.requests.length = 0;
