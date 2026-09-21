@@ -122,14 +122,15 @@ function defaultCompletion(input: AiCompletionRequest): AiCompletion {
     return { kind: "answer", text: lines.length ? lines.join("\n") : "No results are available for this question." };
   }
   const question = latest?.content ?? "";
-  if (/\b(create|join|invite|merge|change|cancel|delete|approve|remove)\b/i.test(question)) {
+  const intentText = question.replace(/\bmerge\s+(queue|proposals?)\b/gi, "duplicates");
+  if (/\b(create|join|invite|merge|change|cancel|delete|approve|remove)\b/i.test(intentText)) {
     return { kind: "answer", text: "Open the relevant screen to take that action yourself." };
   }
   const unshared = /\b(nobody|no one)\s+shares\b|\bseeks\s+(with\s+)?no\s+shares\b/i.test(question);
   const interest = unshared ? null : question.match(/\b(shares?|seeks?)\s+(.+?)[?.!]*$/i);
   const dates = question.match(/\b\d{4}-\d{2}-\d{2}\b/g);
   const call = interest ? { name: "members_by_interest", arguments: { interest: interest[2]!.trim(), stance: interest[1]!.toLowerCase().startsWith("share") ? "shares" : "seeks" } }
-    : /\bduplicates?\b/i.test(question) ? { name: "duplicate_interests", arguments: {} }
+    : /\bduplicates?\b/i.test(intentText) ? { name: "duplicate_interests", arguments: {} }
     : unshared || /\b(unshared|unmet)\b/i.test(question) ? { name: "unshared_seeks", arguments: {} }
     : /\b(reports?|headlines?|figures|dashboard)\b/i.test(question) ? { name: "report_headlines", arguments: { from: dates?.[0] ?? null, to: dates?.[1] ?? null } }
     : /\b(connections|met)\b/i.test(question) ? { name: "my_connections", arguments: {} }

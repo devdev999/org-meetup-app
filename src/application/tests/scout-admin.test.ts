@@ -152,6 +152,27 @@ describe.each(["native", "structured"] as const)("Organisation Admin Scout with 
     expect(answer.text).toContain("Provisioned Members: 0");
   });
 
+  test("reads merge queue questions while refusing merge and approval commands", async () => {
+    const { olivia, admin } = await setup();
+    for (const name of ["SQL", "Structured Query Language"]) {
+      await olivia.confirmInterest({ phrase: name, selection: { name, kind: "skill" }, stance: "shares" });
+    }
+    await admin.proposeInterestMerges();
+    const queue = await admin.interestMergeProposals();
+
+    for (const question of ["Show the Interest merge queue.", "List the Interest merge proposals."]) {
+      const answer = await olivia.askScout({ question });
+      expect(answer.text).toContain("Structured Query Language");
+      expect(answer.links).toContainEqual({ label: "Interest merge queue", href: "/admin/interests#interest-merge-queue" });
+    }
+    for (const question of ["Merge SQL and Structured Query Language.", "Approve the proposals in the Interest merge queue."]) {
+      const answer = await olivia.askScout({ question });
+      expect(answer.text).toBe("Open the relevant screen to take that action yourself.");
+    }
+    expect(await admin.interestMergeProposals()).toEqual(queue);
+    expect(await admin.interestMergeHistory()).toEqual([]);
+  });
+
   test.each(["Member", "Organisation Admin"])("keeps Member Interest searches ahead of administrative keywords for the %s", async (role) => {
     const { olivia } = await setup();
     const member = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });

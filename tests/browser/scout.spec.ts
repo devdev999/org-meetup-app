@@ -75,7 +75,7 @@ test("an Organisation Admin asks Scout about duplicates, unshared Seeks and repo
   await page.getByRole("navigation", { name: "Administration", exact: true }).getByRole("link", { name: "Scout", exact: true }).click();
   await expect(page.getByText("As an Organisation Admin, you can also ask about duplicate Interests, Seeks with no Shares, and report figures.", { exact: true })).toBeVisible();
   const conversation = page.getByRole("region", { name: "Scout conversation", exact: true });
-  await page.getByLabel("Question", { exact: true }).fill("Which Interests look like duplicates?");
+  await page.getByLabel("Question", { exact: true }).fill("Show the Interest merge queue.");
   await page.getByRole("button", { name: "Ask Scout", exact: true }).click();
   await expect(conversation).toContainText("Structured Query Language");
   await conversation.getByRole("link", { name: "Interest merge queue", exact: true }).click();
