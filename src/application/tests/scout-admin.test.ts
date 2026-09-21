@@ -136,6 +136,20 @@ describe.each(["native", "structured"] as const)("Organisation Admin Scout with 
     expect(headlines.links).toContainEqual({ label: "Reports", href: "/admin/reports?from=2026-09-01&to=2026-09-18" });
   });
 
+  test.each(["Member", "Organisation Admin"])("keeps Member Interest searches ahead of administrative keywords for the %s", async (role) => {
+    const { olivia } = await setup();
+    const member = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });
+    const maya = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "maya", name: "Maya Reporter", email: "maya@example.test" });
+    const asker = role === "Member" ? member : olivia;
+    for (const name of ["report writing", "duplicate detection", "unmet needs research"]) {
+      await maya.confirmInterest({ phrase: name, selection: { name, kind: "skill" }, stance: "shares" });
+      const answer = await asker.askScout({ question: `Who Shares ${name}?` });
+      expect(answer.text).toContain("Maya Reporter matches your Interest search.");
+      expect(answer.links).toContainEqual({ label: "Maya Reporter", href: `/members/${(await maya.profile()).memberId}` });
+      expect(toolData()).toMatchObject({ total: 1, items: [expect.objectContaining({ name: "Maya Reporter" })] });
+    }
+  });
+
   test("does not advertise or dispatch admin tools for ordinary Members or Platform Admins", async () => {
     const { olivia } = await setup();
     const ordinary = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });

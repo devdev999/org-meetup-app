@@ -122,16 +122,17 @@ function defaultCompletion(input: AiCompletionRequest): AiCompletion {
   if (/\b(create|join|invite|merge|change|cancel|delete|approve|remove)\b/i.test(question)) {
     return { kind: "answer", text: "Open the relevant screen to take that action yourself." };
   }
-  const interest = question.match(/\b(shares?|seeks?)\s+(.+?)[?.!]*$/i);
+  const unshared = /\b(nobody|no one)\s+shares\b|\bseeks\s+(with\s+)?no\s+shares\b/i.test(question);
+  const interest = unshared ? null : question.match(/\b(shares?|seeks?)\s+(.+?)[?.!]*$/i);
   const dates = question.match(/\b\d{4}-\d{2}-\d{2}\b/g);
-  const call = /\bduplicates?\b/i.test(question) ? { name: "duplicate_interests", arguments: {} }
-    : /\b(unshared|unmet)\b|\b(nobody|no one)\s+shares\b|\bseeks\s+(with\s+)?no\s+shares\b/i.test(question) ? { name: "unshared_seeks", arguments: {} }
+  const call = interest ? { name: "members_by_interest", arguments: { interest: interest[2]!.trim(), stance: interest[1]!.toLowerCase().startsWith("share") ? "shares" : "seeks" } }
+    : /\bduplicates?\b/i.test(question) ? { name: "duplicate_interests", arguments: {} }
+    : unshared || /\b(unshared|unmet)\b/i.test(question) ? { name: "unshared_seeks", arguments: {} }
     : /\b(reports?|headlines?|figures|dashboard)\b/i.test(question) ? { name: "report_headlines", arguments: { from: dates?.[0] ?? null, to: dates?.[1] ?? null } }
     : /\b(connections|met)\b/i.test(question) ? { name: "my_connections", arguments: {} }
-    : interest ? { name: "members_by_interest", arguments: { interest: interest[2]!.trim(), stance: interest[1]!.toLowerCase().startsWith("share") ? "shares" : "seeks" } }
-      : /\b(upcoming|meetups|events|week)\b/i.test(question) ? { name: "upcoming_meetups_and_events", arguments: { from: null, until: null } }
-        : /\b(available|availability|free)\b/i.test(question) ? { name: "available_now", arguments: { activity: question.match(/\b(coffee|lunch|walk|game|sport)\b/i)?.[1]?.toLowerCase() ?? null } }
-          : undefined;
+    : /\b(upcoming|meetups|events|week)\b/i.test(question) ? { name: "upcoming_meetups_and_events", arguments: { from: null, until: null } }
+    : /\b(available|availability|free)\b/i.test(question) ? { name: "available_now", arguments: { activity: question.match(/\b(coffee|lunch|walk|game|sport)\b/i)?.[1]?.toLowerCase() ?? null } }
+    : undefined;
   return call && input.tools.some(({ name }) => name === call.name)
     ? { kind: "tool", call: { id: "memory-read", ...call } }
     : { kind: "answer", text: "Ask about current Availability, Members who Share or Seek an Interest, upcoming Meetups and Events, or your Connections." };
