@@ -109,7 +109,7 @@ function defaultCompletion(input: AiCompletionRequest): AiCompletion {
     if (latest.call.name === "report_headlines") {
       const report: Report = JSON.parse(latest.content);
       const tables = report.tables.filter(({ id }) => ["waitlists", "rsvp-attendance", "availability", "telegram", "activation"].includes(id));
-      const lines = tables.map((table) => `${table.title}\n${table.rows.map((row) => row.map((value, index) => `${table.columns[index]}: ${value ?? "Not available"}`).join("; ")).join("\n")}`);
+      const lines = tables.map((table) => `${table.title}\n${table.basis}\n${table.rows.map((row) => row.map((value, index) => `${table.columns[index]}: ${value ?? "Not available"}`).join("; ")).join("\n")}`);
       return { kind: "answer", text: `Reports from ${report.period.from} through ${report.period.to}, ${report.timeZone}.\n${lines.join("\n")}` };
     }
     const result: { items: Array<{ name?: string; member?: { name: string }; activity?: { name: string }; startsAt?: string; kind?: string }>; total: number } = JSON.parse(latest.content);

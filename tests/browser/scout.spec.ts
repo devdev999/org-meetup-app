@@ -94,6 +94,7 @@ test("an Organisation Admin asks Scout about duplicates, unshared Seeks and repo
   await page.getByLabel("Question", { exact: true }).fill("Show headline figures from 2020-01-01 through 2099-12-31.");
   await page.getByRole("button", { name: "Ask Scout", exact: true }).click();
   await expect(conversation).toContainText("Reports from 2020-01-01 through 2099-12-31, UTC.");
+  await expect(conversation).toContainText("Current Active Members, independent of the selected period.");
   const answer = await conversation.innerText();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await conversation.getByRole("link", { name: "Reports", exact: true }).click();

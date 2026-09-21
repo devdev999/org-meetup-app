@@ -136,6 +136,22 @@ describe.each(["native", "structured"] as const)("Organisation Admin Scout with 
     expect(headlines.links).toContainEqual({ label: "Reports", href: "/admin/reports?from=2026-09-01&to=2026-09-18" });
   });
 
+  test("distinguishes current population figures from the selected report period", async () => {
+    const { olivia, admin } = await setup();
+    const selected = { from: "2020-01-01", to: "2020-01-31" };
+    const report = await admin.reports(selected);
+    expect(report.tables.find(({ id }) => id === "telegram")!.rows).toEqual([[0, 2, 0]]);
+    expect(report.tables.find(({ id }) => id === "activation")!.rows[0]![0]).toBe(0);
+
+    const answer = await olivia.askScout({ question: "Show report headlines from 2020-01-01 through 2020-01-31." });
+
+    expect(answer.text).toContain("Reports from 2020-01-01 through 2020-01-31, UTC.");
+    expect(answer.text).toContain("Current Active Members, independent of the selected period.");
+    expect(answer.text).toContain("Active Members: 2");
+    expect(answer.text).toContain("Members initially provisioned in the selected period, including inactive Members.");
+    expect(answer.text).toContain("Provisioned Members: 0");
+  });
+
   test.each(["Member", "Organisation Admin"])("keeps Member Interest searches ahead of administrative keywords for the %s", async (role) => {
     const { olivia } = await setup();
     const member = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", name: "Ana", email: "ana@example.test" });
