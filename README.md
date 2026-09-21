@@ -174,6 +174,8 @@ An Organisation Admin's Member searches and profile views also create audit reco
 
 ## Develop
 
+The draft UI comparison is documented in [docs/ui-mockups.md](docs/ui-mockups.md). After local setup, open `/prototype/ui` under `pnpm dev` to compare Atrium, Fieldwork and Studio across Member and administration screens.
+
 Needs Node 22.12 or newer (the containers use 24) and pnpm 10.
 
 ```sh
