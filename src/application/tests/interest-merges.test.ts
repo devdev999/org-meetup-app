@@ -374,6 +374,22 @@ test("the worker produces merge proposals that the Organisation Admin can review
   expect(await admin.interestMergeProposals()).toEqual(proposals);
 });
 
+test("a cluster of 100 Interests is saved once even when its names arrive in reverse order", async () => {
+  await h.setupOrganisation(ministryA);
+  const member = await signInAndAcknowledgeAs(h, "ministry-a", ana);
+  const names = Array.from({ length: 100 }, (_, index) => `Database query language ${String(index + 1).padStart(3, "0")}`);
+  for (const name of names) await declare(member, name, "shares");
+  const admin = await h.organisationAdmin();
+  h.ai.clusteringResponses.push([names], [[...names].reverse()]);
+
+  await admin.proposeInterestMerges();
+  const first = (await admin.interestMergeProposals())[0]!;
+  expect(first.interests.map(({ name }) => name)).toEqual(names);
+  await admin.proposeInterestMerges();
+
+  expect((await admin.interestMergeProposals()).map(({ id }) => id)).toEqual([first.id]);
+});
+
 test("an Organisation Admin gets one merge proposal per cluster using only their Organisation's Interest names and counts", async () => {
   await h.setupOrganisation(ministryA);
   await h.setupOrganisation(ministryB);

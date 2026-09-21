@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { VISIBLE_MEMBER_STATUSES } from "./actor";
@@ -44,7 +45,7 @@ export async function saveInterestClusters(db: Queryable, organisationId: string
     .map((interest) => [interest.id, interest.name]));
   const proposals = clusters.filter((cluster) => cluster.every((interest) => current.get(interest.interestId) === interest.name)).map((cluster) => {
     const interestIds = cluster.map(({ interestId }) => interestId).sort();
-    return { organisationId, interestIds, clusterKey: interestIds.join(","), createdAt: now };
+    return { organisationId, interestIds, clusterKey: createHash("sha256").update(interestIds.join(",")).digest("hex"), createdAt: now };
   });
   if (proposals.length) await db.insert(interestMergeProposals).values(proposals).onConflictDoNothing();
 }
