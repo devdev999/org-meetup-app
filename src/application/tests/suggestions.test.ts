@@ -229,6 +229,7 @@ test("cancelled extraction does not canonicalise its proposals or prevent manual
   const controller = new AbortController();
   const requests: AiInterestRequest[] = [];
   const ai: AiPort = {
+    complete: h.ai.complete.bind(h.ai),
     clusterInterests: h.ai.clusterInterests.bind(h.ai),
     extractInterests: async () => {
       controller.abort();

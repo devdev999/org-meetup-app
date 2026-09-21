@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { DeploymentSettings, FirstPlatformAdminConfig } from "../application/index";
+import type { AiToolProtocol } from "../application/ports";
 
 export const DEFAULT_DATABASE_URL = "postgres://postgres:postgres@localhost:5439/org_meetup";
 
@@ -14,12 +15,13 @@ export function databaseUrl(env: NodeJS.ProcessEnv = process.env): string {
   return present(env).DATABASE_URL ?? DEFAULT_DATABASE_URL;
 }
 
-type AiConfig = { provider: "memory" } | { provider: "chat-completion"; apiKey: string };
+type AiConfig = { provider: "memory"; toolProtocol: AiToolProtocol } | { provider: "chat-completion"; apiKey: string; toolProtocol: AiToolProtocol };
 
 export function aiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig {
   const values = present(env);
   const provider = z.enum(["memory", "chat-completion"]).default("memory").parse(values.AI_PROVIDER);
-  return provider === "memory" ? { provider } : { provider, apiKey: z.string().trim().min(1).parse(values.AI_API_KEY) };
+  const toolProtocol = z.enum(["native", "structured"]).default("native").parse(values.AI_TOOL_PROTOCOL);
+  return provider === "memory" ? { provider, toolProtocol } : { provider, toolProtocol, apiKey: z.string().trim().min(1).parse(values.AI_API_KEY) };
 }
 
 export function deploymentSettingsFromEnv(env: NodeJS.ProcessEnv = process.env): DeploymentSettings {

@@ -48,5 +48,5 @@ export function emailFromEnv(): EmailPort {
 
 export function aiFromEnv(): AiPort {
   const config = aiConfig();
-  return config.provider === "memory" ? new MemoryAi() : new ChatCompletionAi(config);
+  return config.provider === "memory" ? new MemoryAi(config.toolProtocol) : new ChatCompletionAi(config);
 }

@@ -15,6 +15,7 @@ export default async function HomePage() {
         <Link href="/attendance">Your Attendance history</Link>
         <Link href="/connections">Your Connections</Link>
         <Link href="/availability">Availability</Link>
+        <Link href="/scout">Scout</Link>
         <Link href="/inbox">Inbox</Link>
       </nav>
       <h1>Suggested Meetups</h1>

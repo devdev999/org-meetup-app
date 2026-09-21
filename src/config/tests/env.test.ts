@@ -28,12 +28,19 @@ const firstPlatformEnvironment: NodeJS.ProcessEnv = {
 };
 
 test("AI defaults to an in-memory provider without endpoint credentials", () => {
-  expect(aiConfig({ NODE_ENV: "test" })).toEqual({ provider: "memory" });
+  expect(aiConfig({ NODE_ENV: "test" })).toEqual({ provider: "memory", toolProtocol: "native" });
+});
+
+test("Scout's structured tool protocol is configurable for either AI provider", () => {
+  expect(aiConfig({ NODE_ENV: "test", AI_TOOL_PROTOCOL: "structured" })).toEqual({ provider: "memory", toolProtocol: "structured" });
+  expect(aiConfig({ NODE_ENV: "test", AI_PROVIDER: "chat-completion", AI_API_KEY: "example-key", AI_TOOL_PROTOCOL: "structured" }))
+    .toEqual({ provider: "chat-completion", apiKey: "example-key", toolProtocol: "structured" });
+  expect(() => aiConfig({ NODE_ENV: "test", AI_TOOL_PROTOCOL: "unknown" })).toThrow();
 });
 
 test("real AI needs its environment credential while endpoint and model defaults stay non-secret", () => {
   expect(aiConfig({ NODE_ENV: "test", AI_PROVIDER: "chat-completion", AI_API_KEY: "example-key" }))
-    .toEqual({ provider: "chat-completion", apiKey: "example-key" });
+    .toEqual({ provider: "chat-completion", apiKey: "example-key", toolProtocol: "native" });
   expect(() => aiConfig({ NODE_ENV: "test", AI_PROVIDER: "chat-completion" })).toThrow();
   expect(() => aiConfig({ NODE_ENV: "test", AI_PROVIDER: "unsupported" })).toThrow();
   expect(deploymentSettingsFromEnv({ NODE_ENV: "test", AI_BASE_URL: "https://chat.example/v1", AI_MODEL: "scout-model",

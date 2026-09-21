@@ -128,6 +128,18 @@ textarea {
   resize: vertical;
 }
 
+.scout-conversation {
+  overflow-wrap: anywhere;
+}
+
+.scout-conversation h2:first-child {
+  margin-top: 0;
+}
+
+.scout-text {
+  white-space: pre-wrap;
+}
+
 button {
   font: inherit;
   font-weight: 600;

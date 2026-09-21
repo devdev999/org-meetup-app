@@ -18,6 +18,7 @@ x-app-environment: &app-environment
   ALLOW_FAKE_IDENTITY: "yes"
   OIDC_CREDENTIALS: ${OIDC_CREDENTIALS:-}
   AI_PROVIDER: ${AI_PROVIDER:-memory}
+  AI_TOOL_PROTOCOL: ${AI_TOOL_PROTOCOL:-native}
   AI_BASE_URL: ${AI_BASE_URL:-}
   AI_API_KEY: ${AI_API_KEY:-}
   AI_MODEL: ${AI_MODEL:-}

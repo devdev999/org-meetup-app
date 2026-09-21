@@ -75,7 +75,16 @@ export interface AiClusteringRequest { interests: Array<{ name: string; count: n
 
 export interface AiRequestSettings { baseUrl: string | null; model: string }
 
+export type AiToolProtocol = "native" | "structured";
+export interface AiToolDefinition { name: string; description: string; parameters: Record<string, unknown> }
+export interface AiToolCall { id: string; name: string; arguments: Record<string, unknown> }
+export type AiMessage = { role: "user" | "assistant"; content: string }
+  | { role: "tool"; call: AiToolCall; content: string };
+export interface AiCompletionRequest { instructions: string; messages: AiMessage[]; tools: AiToolDefinition[] }
+export type AiCompletion = { kind: "answer"; text: string } | { kind: "tool"; call: AiToolCall };
+
 export interface AiPort {
+  complete(input: AiCompletionRequest, settings: AiRequestSettings, signal?: AbortSignal): Promise<AiCompletion>;
   clusterInterests(input: AiClusteringRequest, settings: AiRequestSettings): Promise<string[][]>;
   resolveInterest(input: AiInterestRequest, settings: AiRequestSettings, signal?: AbortSignal): Promise<AiInterestResolution>;
   extractInterests(input: AiExtractionRequest, settings: AiRequestSettings, signal?: AbortSignal): Promise<AiExtractedInterest[]>;
