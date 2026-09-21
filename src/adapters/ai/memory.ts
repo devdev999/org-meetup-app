@@ -96,12 +96,15 @@ function defaultCompletion(input: AiCompletionRequest): AiCompletion {
     if (latest.call.name === "duplicate_interests") {
       const result: { items: InterestMergeProposal[]; total: number } = JSON.parse(latest.content);
       const lines = result.items.slice(0, 3).map(({ interests }) => `${interests.slice(0, 3).map(({ name }) => name).join(", ")}${interests.length > 3 ? ` and ${interests.length - 3} more` : ""}.`);
-      return { kind: "answer", text: lines.length ? `${result.total} ${result.total === 1 ? "proposal" : "proposals"} in the Interest merge queue:\n${lines.join("\n")}` : "There are no duplicate Interest proposals in the queue." };
+      const count = lines.length < result.total ? `Showing ${lines.length} of ${result.total} proposals` : `${result.total} ${result.total === 1 ? "proposal" : "proposals"}`;
+      return { kind: "answer", text: lines.length ? `${count} in the Interest merge queue:\n${lines.join("\n")}` : "There are no duplicate Interest proposals in the queue." };
     }
     if (latest.call.name === "unshared_seeks") {
-      const report: Report = JSON.parse(latest.content);
-      const lines = report.tables[0]!.rows.map(([name, , seeks]) => `${name}: ${seeks} Seeks and no Shares.`);
-      return { kind: "answer", text: lines.length ? lines.join("\n") : "There are no Seeks with no Shares among current Active Members." };
+      const report: { tables: Array<Report["tables"][number] & { totalRows: number }> } = JSON.parse(latest.content);
+      const table = report.tables[0]!;
+      const lines = table.rows.map(([name, , seeks]) => `${name}: ${seeks} Seeks and no Shares.`);
+      const limit = lines.length < table.totalRows ? `Showing ${lines.length} of ${table.totalRows} Interests.\n` : "";
+      return { kind: "answer", text: lines.length ? limit + lines.join("\n") : "There are no Seeks with no Shares among current Active Members." };
     }
     if (latest.call.name === "report_headlines") {
       const report: Report = JSON.parse(latest.content);

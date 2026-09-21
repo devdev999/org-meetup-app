@@ -281,11 +281,28 @@ describe.each(["native", "structured"] as const)("Organisation Admin Scout with 
     }
     const expected = (await admin.reports(period)).tables.find(({ id }) => id === "unmet-seeks")!;
     expect(expected.rows).toHaveLength(24);
-    await olivia.askScout({ question: "What do people Seek that nobody Shares?" });
+    const gaps = await olivia.askScout({ question: "What do people Seek that nobody Shares?" });
     expect(toolData().tables).toEqual([{ ...expected, rows: expected.rows.slice(0, 20), totalRows: 24 }]);
+    expect(gaps.text).toContain("Showing 20 of 24 Interests");
     await olivia.askScout({ question: "Show report headlines." });
     expect(toolData().tables).toContainEqual({ ...expected, rows: expected.rows.slice(0, 20), totalRows: 24 });
     expect(toolData().tables).toContainEqual(expect.objectContaining({ id: "telegram", rows: [[0, 2, 0]], totalRows: 1 }));
+  });
+
+  test("states when its duplicate answer shows fewer proposals than the queue", async () => {
+    const { olivia, admin } = await setup();
+    const groups = Array.from({ length: 4 }, (_, index) => [`First phrase ${index}`, `Second phrase ${index}`]);
+    for (const name of groups.flat()) {
+      await olivia.confirmInterest({ phrase: name, selection: { name, kind: "skill" }, stance: "shares" });
+    }
+    h.ai.clusteringResponses.push(groups);
+    await admin.proposeInterestMerges();
+
+    const answer = await olivia.askScout({ question: "Which Interests look like duplicates?" });
+
+    expect(toolData().total).toBe(4);
+    expect(answer.text).toContain("Showing 3 of 4 proposals");
+    expect(answer.links).toContainEqual({ label: "Interest merge queue", href: "/admin/interests#interest-merge-queue" });
   });
 
   test("records successful Scout usage without adding individual-view audits for aggregate reads", async () => {
