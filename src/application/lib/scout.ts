@@ -26,7 +26,7 @@ function fingerprint(result: ScoutToolResult): string {
 }
 
 function informationChanged(): never {
-  throw new InvalidInputError("invalid-scout", "The information available to Scout changed. Ask your question again.");
+  throw new InvalidInputError("stale-scout", "The information available to Scout changed. Ask your question again.");
 }
 
 export async function askScout(deps: Deps, actor: Actor, tools: ScoutTool[], input: ScoutQuestion): Promise<ScoutAnswer> {
@@ -62,6 +62,7 @@ export async function askScout(deps: Deps, actor: Actor, tools: ScoutTool[], inp
     }
   }
   if (conversationReset) { previous = []; checked.clear(); previousLinks.clear(); }
+  const failure = (message: string) => new InvalidInputError(conversationReset ? "stale-scout" : "invalid-scout", message);
   await requireActiveMember(deps.db, actor);
   const messages: AiMessage[] = previous.flatMap((turn): AiMessage[] => [
     { role: "user", content: turn.question }, { role: "assistant", content: turn.answer },
@@ -81,7 +82,7 @@ export async function askScout(deps: Deps, actor: Actor, tools: ScoutTool[], inp
       completion = await deps.ai.complete({ instructions, messages, tools: tools.map(({ definition }) => definition) },
         { baseUrl: settings.aiBaseUrl, model: settings.scoutModel });
     } catch {
-      throw new InvalidInputError("invalid-scout", "Scout is unavailable. Try again shortly.");
+      throw failure("Scout is unavailable. Try again shortly.");
     }
     await requireActiveMember(deps.db, actor);
     for (const read of checked.values()) {
@@ -99,11 +100,12 @@ export async function askScout(deps: Deps, actor: Actor, tools: ScoutTool[], inp
     }
     if (round === 5) break;
     const tool = tools.find(({ definition }) => definition.name === completion.call.name);
-    if (!tool) throw new InvalidInputError("invalid-scout", "Scout requested an unavailable action. Ask a question about what you can see.");
+    if (!tool) throw failure("Scout requested an unavailable action. Ask a question about what you can see.");
     let result;
     try { result = await tool.read(completion.call.arguments); }
     catch (error) {
-      if (error instanceof z.ZodError) throw new InvalidInputError("invalid-scout", "Scout could not understand that request. Try a more specific question.");
+      if (error instanceof z.ZodError) throw failure("Scout could not understand that request. Try a more specific question.");
+      if (error instanceof InvalidInputError) throw failure(error.message);
       throw error;
     }
     const key = readKey(completion.call);
@@ -114,5 +116,5 @@ export async function askScout(deps: Deps, actor: Actor, tools: ScoutTool[], inp
     for (const link of result.links) links.set(link.href, link);
     messages.push({ role: "tool", call: completion.call, content: JSON.stringify(result.data) });
   }
-  throw new InvalidInputError("invalid-scout", "Scout could not finish that question. Try a more specific question.");
+  throw failure("Scout could not finish that question. Try a more specific question.");
 }

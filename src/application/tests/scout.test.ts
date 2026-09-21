@@ -139,6 +139,25 @@ describe.each(["native", "structured"] as const)("Scout with %s tools", (aiToolP
     expect(requests).not.toContain(otherHistory.id);
   });
 
+  test("keeps a relevant Suggestion when earlier unrelated Meetups fill the result limit", async () => {
+    await h.setupOrganisation(ministryA);
+    const asker = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", email: "ana@example.test", name: "Ana Silva" });
+    const host = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "maya", email: "maya@example.test", name: "Maya Chen" });
+    const sql = (await asker.interests()).find(({ name }) => name === "SQL")!;
+    await asker.confirmInterest({ phrase: "SQL", selection: { interestId: sql.interestId }, stance: "seeks" });
+    const input = { activityId: (await host.meetupChoices()).activities[0]!.id, startsAt: new Date("2026-09-18T10:00:00Z"),
+      durationMinutes: 30, capacity: 4, place: { kind: "virtual" as const, url: "https://meet.example/scout" } };
+    for (let index = 0; index < 20; index++) await host.createMeetup({ ...input, description: `Unrelated ${index}` });
+    const relevant = await host.createMeetup({ ...input, startsAt: new Date("2026-09-19T10:00:00Z"), description: "SQL session with Maya",
+      relevantInterests: [{ phrase: "SQL", selection: { interestId: sql.interestId } }] });
+    expect((await asker.meetupSuggestions())[0]!.meetup.id).toBe(relevant.id);
+
+    const answer = await asker.askScout({ question: "What is on this week that suits me?" });
+
+    expect(JSON.stringify(h.ai.completionRequests)).toContain("SQL session with Maya");
+    expect(answer.links).toContainEqual({ label: expect.any(String), href: `/meetups/${relevant.id}` });
+  });
+
   test("reuses identifying questions and answers only while their application data remains visible", async () => {
     await h.setupOrganisation(ministryA);
     const asker = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", email: "ana@example.test", name: "Ana Silva" });
@@ -238,6 +257,20 @@ describe.each(["native", "structured"] as const)("Scout with %s tools", (aiToolP
     expect(JSON.stringify(h.ai.completionRequests.at(-1))).not.toContain("No upcoming Meetups in that period.");
   });
 
+  test("tells the screen to clear invalidated history even if the next completion fails", async () => {
+    await h.setupOrganisation(ministryA);
+    const asker = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", email: "ana@example.test", name: "Ana Silva" });
+    const maya = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "maya", email: "maya@example.test", name: "Maya Chen" });
+    await maya.confirmInterest({ phrase: "SQL", selection: { name: "SQL", kind: "skill" }, stance: "shares" });
+    const first = await asker.askScout({ question: "Who Shares SQL?" });
+    await (await h.organisationAdmin()).suspendMember((await maya.profile()).memberId);
+    h.ai.completionResponses.push(new Error("Provider timeout"));
+
+    await expect(asker.askScout({ question: "Who is free?", conversation: first.conversation }))
+      .rejects.toMatchObject({ code: "stale-scout", message: "Scout is unavailable. Try again shortly." });
+    expect(JSON.stringify(h.ai.completionRequests.at(-1))).not.toContain("Maya Chen");
+  });
+
   test("rejects write tools and forged scope arguments without changing domain data", async () => {
     await h.setupOrganisation(ministryA);
     const asker = await signInAndAcknowledgeAs(h, "ministry-a", { sub: "ana", email: "ana@example.test", name: "Ana Silva" });
@@ -305,7 +338,7 @@ describe.each(["native", "structured"] as const)("Scout with %s tools", (aiToolP
     h.ai.completionResponses.push({ kind: "tool", call: { id: "members", name: "members_by_interest", arguments: { interest: "SQL", stance: "shares" } } },
       async () => { entered.resolve(); return reply.promise; });
     const answer = asker.askScout({ question: "Who Shares SQL?" });
-    const changed = expect(answer).rejects.toMatchObject({ code: "invalid-scout", message: expect.stringContaining("changed") });
+    const changed = expect(answer).rejects.toMatchObject({ code: "stale-scout", message: expect.stringContaining("changed") });
     try {
       await entered.promise;
       await admin.suspendMember(mayaId);

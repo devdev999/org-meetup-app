@@ -20,7 +20,7 @@ export function ScoutConversation() {
     </section>
     {state.error && <p role="alert" className="error">{state.error}</p>}
     <form action={action}>
-      <label>Question<textarea name="question" maxLength={2000} rows={3} required disabled={pending} /></label>
+      <label>Question<textarea name="question" defaultValue={state.question ?? ""} maxLength={2000} rows={3} required disabled={pending} /></label>
       <button type="submit" disabled={pending}>{pending ? "Asking Scout..." : "Ask Scout"}</button>
       <button type="submit" name="intent" value="clear" formNoValidate className="secondary" disabled={pending}>New conversation</button>
     </form>

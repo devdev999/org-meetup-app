@@ -296,11 +296,11 @@ Set the Interest extraction model independently of Scout in Platform Admin setti
 
 ### Scout
 
-Members open Scout from Home to ask about current Availability, Members who Share or Seek an Interest, upcoming Meetups and Events, or their own Connections. Scout uses the same application queries as the normal screens, including their access checks, Suggestion reasons and admin audit records. It cannot create, join, invite or merge. Answers appear as plain text with links supplied by the application.
+Members open Scout from Home to ask about current Availability, Members who Share or Seek an Interest, upcoming Meetups and Events, or their own Connections. Scout uses the same application queries as the normal screens, including their access checks, Suggestion ranking and reasons, and admin audit records. It cannot create, join, invite or merge. Answers appear as plain text with links supplied by the application.
 
 `AI_TOOL_PROTOCOL=native` uses Chat Completions function calls, one at a time. `structured` puts the same read definitions in the prompt and accepts one JSON request or answer per response. It does not require native tools or JSON mode for Scout. Both modes send identifying questions, earlier answers, arguments and authorized results under ADR 0009. Each completion times out after 30 seconds, and a question can make at most six completions. The memory provider supports the same protocols with deterministic replies for local testing.
 
-Conversation history stays in the browser with a server signature, tied to the Member and valid for 30 minutes. Before reusing an answer, Scout repeats the reads that supported it. If their results or permissions change, it starts a new conversation. After six complete turns, the next question starts a new conversation too. Access and read results are checked again after each AI response. No database migration is needed for Scout.
+Conversation history stays in the browser with a server signature, tied to the Member and valid for 30 minutes. Before reusing an answer, Scout repeats the reads that supported it. If their results or permissions change, it starts a new conversation. After six complete turns, the next question starts a new conversation too. Access and read results are checked again after each AI response. Retryable input or provider errors preserve the question and verified history; invalidated history is cleared. No database migration is needed for Scout.
 
 ## Upgrading existing Organisations to Platform Admin configuration
 

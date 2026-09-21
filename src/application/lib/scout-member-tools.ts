@@ -51,7 +51,7 @@ export function memberScoutTools(reads: MemberScoutReads, now: Date): ScoutTool[
       ] };
     },
   }, {
-    definition: { name: "upcoming_meetups_and_events", description: "Upcoming Meetups and Events you can see, with the normal Suggestion reasons where available over the next fourteen days. Use ISO timestamps for an inclusive start and exclusive end, up to 31 days apart. Null from means now; null until means seven days after from.",
+    definition: { name: "upcoming_meetups_and_events", description: "Upcoming Meetups and Events you can see. Normal Suggestions come first, preserving their order within each kind, with their reasons over the next fourteen days; remaining entries follow by time. Use ISO timestamps for an inclusive start and exclusive end, up to 31 days apart. Null from means now; null until means seven days after from.",
       parameters: z.toJSONSchema(periodSchema) },
     read: async (input) => {
       const period = periodSchema.parse(input);
@@ -63,8 +63,11 @@ export function memberScoutTools(reads: MemberScoutReads, now: Date): ScoutTool[
       ]);
       const reasons = new Map([...meetupSuggestions.map(({ meetup, reasons }) => [meetup.id, reasons] as const),
         ...eventSuggestions.map(({ event, reasons }) => [event.id, reasons] as const)]);
+      const ranks = new Map([...meetupSuggestions.map(({ meetup }, rank) => [meetup.id, rank] as const),
+        ...eventSuggestions.map(({ event }, rank) => [event.id, rank] as const)]);
       const entries = [...meetups, ...events].filter((entry) => entry.startsAt >= from && entry.startsAt < until)
-        .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id.localeCompare(b.id));
+        .sort((a, b) => (ranks.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (ranks.get(b.id) ?? Number.MAX_SAFE_INTEGER)
+          || a.startsAt.getTime() - b.startsAt.getTime() || a.id.localeCompare(b.id));
       const items = entries.slice(0, 20).map((entry) => ({ ...entry, suggestionReasons: reasons.get(entry.id) ?? [] }));
       return { data: { items, total: entries.length }, links: [{ label: "Meetups", href: "/meetups" }, { label: "Events", href: "/events" },
         ...items.map((entry) => ({ label: `${entry.kind === "meetup" ? "Meetup" : "Event"}: ${entry.activity.name}`,

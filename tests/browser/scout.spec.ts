@@ -48,6 +48,8 @@ test("a Member asks Scout, continues the conversation and follows a profile link
     await asker.getByLabel("Question", { exact: true }).fill(" ");
     await asker.getByRole("button", { name: "Ask Scout", exact: true }).click();
     await expect(asker.getByRole("main").getByRole("alert")).toContainText("Enter a question of up to 2,000 characters.");
+    await expect(conversation).toContainText('<img src="x" onerror="alert(1)">');
+    await expect(asker.getByLabel("Question", { exact: true })).toHaveValue(" ");
     await asker.getByRole("button", { name: "New conversation", exact: true }).click();
     await expect(conversation).toContainText("Ask your first question.");
   } finally {
