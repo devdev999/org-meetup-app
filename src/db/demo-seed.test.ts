@@ -30,11 +30,11 @@ test.each([
   expect(() => localDemoSettings(env, ["--local"])).toThrow("requires --local");
 });
 
-test("demo seed creates a usable walkthrough and preserves existing data on reruns", async () => {
+test("a Friday demo seed creates a recurring walkthrough and preserves existing data on reruns", async () => {
   const database = await createTestDatabase();
   try {
     await runMigrations(database.pool);
-    const now = new Date("2026-09-22T04:00:00Z");
+    const now = new Date("2026-09-25T04:00:00Z");
     const clock = new ControllableClock(now);
     const app = createApplication({ pool: database.pool, clock, identity: new FakeIdentity(),
       ai: new MemoryAi(), telegram: new MemoryTelegram(), email: new MemoryEmail(),
@@ -51,7 +51,7 @@ test("demo seed creates a usable walkthrough and preserves existing data on reru
     const ownerProfile = await pat.profile();
     const existing = await pat.createMeetup({
       activityId: (await pat.meetupChoices()).activities[0]!.id,
-      startsAt: new Date("2026-09-25T04:00:00Z"), durationMinutes: 30, capacity: 4,
+      startsAt: new Date("2026-09-28T04:00:00Z"), durationMinutes: 30, capacity: 4,
       place: { kind: "virtual", url: "https://meet.example/existing" }, description: "Keep this Meetup.",
     });
     const result = await seedDemo(app, clock, "http://localhost:3000");
@@ -114,6 +114,12 @@ test("demo seed creates a usable walkthrough and preserves existing data on reru
     expect(await pat.profile()).toEqual(ownerProfile);
     expect(await pat.searchMembers()).toEqual([]);
     expect(await aisha.viewMeetup(existing.id)).toBeUndefined();
+
+    await app.processRecurrences();
+    const runs = (await aisha.listMeetups()).filter(({ activity }) => activity.name === "Easy run");
+    expect(runs.map(({ startsAt }) => startsAt)).toEqual([
+      new Date("2026-09-28T10:15:00Z"), new Date("2026-10-05T10:15:00Z"),
+    ]);
   } finally {
     await database.dispose();
   }

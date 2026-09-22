@@ -46,11 +46,11 @@ export async function seedDemo(app: Application, clock: ControllableClock, appUr
 
   const now = clock.now();
   const day = Temporal.Instant.from(now.toISOString()).toZonedDateTimeISO("Asia/Singapore").toPlainDate();
-  function at(offset: number, time = "12:15", weekdaysOnly = true) {
+  function at(offset: number, time = "12:15") {
     let target = day;
     for (let left = Math.abs(offset); left > 0;) {
       target = target.add({ days: offset < 0 ? -1 : 1 });
-      if (!weekdaysOnly || target.dayOfWeek <= 5) left--;
+      if (target.dayOfWeek <= 5) left--;
     }
     return new Date(target.toPlainDateTime(time).toZonedDateTime("Asia/Singapore").epochMilliseconds);
   }
@@ -121,9 +121,11 @@ export async function seedDemo(app: Application, clock: ControllableClock, appUr
   await actors[1]!.inviteMember(kdrama.id, memberIds[24]!);
   const games = await meetup(4, input("Board games", at(3),
     "A quick game before the afternoon starts. Codenames and Just One, with rules explained at the table. This table is full; join the waitlist for the next seat.", ["Board games"], 4, "Community table"), [12, 19, 23, 16, 28]);
-  const run = await meetup(3, { ...input("Easy run", at(1, "18:15"),
+  const runStartsAt = at(1, "18:15");
+  const runEndsOn = Temporal.PlainDate.from(localDate(runStartsAt, "Asia/Singapore")).add({ days: 14 }).toString();
+  const run = await meetup(3, { ...input("Easy run", runStartsAt,
     "Five kilometres at conversation pace. Walk breaks welcome. Meet at the demo campus entrance, bring water and choose a comfortable pace.", ["Running"], 10, "Campus entrance"),
-    durationMinutes: 45, recurrence: { frequency: "weekly", endsOn: localDate(at(8, "18:15", false), await app.timeZone()) } }, []);
+    durationMinutes: 45, recurrence: { frequency: "weekly", endsOn: runEndsOn } }, []);
   for (const index of [1, 5, 10, 18, 24, 27]) {
     await actors[index]!.joinSeries(run.recurrence!.id);
     if (index !== 24) await actors[index]!.answerRsvp(run.id, index === 18 ? "not-going" : "going");
