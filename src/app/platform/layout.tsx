@@ -1,12 +1,31 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { requirePlatformAdmin } from "../../web/session";
+import { SectionNavigation } from "../_components/navigation";
+import { PageHeading } from "../_components/ui";
 
-export default async function PlatformLayout({ children }: { children: ReactNode }) {
+export default async function PlatformLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
   await requirePlatformAdmin();
-  return <main className="admin-area">
-    <h1>Platform Admin</h1>
-    <nav aria-label="Platform administration"><Link href="/platform/organisations">Organisations</Link><Link href="/platform/ministries">Ministries</Link><Link href="/platform/settings">Settings</Link><Link href="/platform/reports">Reports</Link><Link href="/platform/audit">Audit log</Link><Link href="/profile">My profile</Link></nav>
-    {children}
-  </main>;
+  return (
+    <main className="admin-area">
+      <PageHeading
+        title="Platform Admin"
+        description="Manage Organisations and deployment settings, and review aggregate participation."
+      />
+      <SectionNavigation
+        label="Platform administration"
+        links={[
+          { href: "/platform/organisations", label: "Organisations" },
+          { href: "/platform/ministries", label: "Ministries" },
+          { href: "/platform/settings", label: "Settings" },
+          { href: "/platform/reports", label: "Reports" },
+          { href: "/platform/audit", label: "Audit log" },
+        ]}
+      />
+      <div className="admin-content">{children}</div>
+    </main>
+  );
 }

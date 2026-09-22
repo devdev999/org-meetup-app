@@ -1,0 +1,471 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-22T01:21:17.934Z",
+  "title": "Design system: Organisation Meetups / Atrium",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "primary",
+        "displayName": "Charcoal ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.00780 84.59)",
+          "oklch(26.43% 0.00780 84.59)",
+          "oklch(37.86% 0.00780 84.59)",
+          "oklch(49.29% 0.00780 84.59)",
+          "oklch(60.71% 0.00780 84.59)",
+          "oklch(72.14% 0.00780 84.59)",
+          "oklch(83.57% 0.00780 84.59)",
+          "oklch(95.00% 0.00780 84.59)"
+        ]
+      },
+      "ink-hover": {
+        "role": "primary",
+        "displayName": "Charcoal hover",
+        "tonalRamp": [
+          "oklch(15.00% 0.01339 95.40)",
+          "oklch(26.43% 0.01339 95.40)",
+          "oklch(37.86% 0.01339 95.40)",
+          "oklch(49.29% 0.01339 95.40)",
+          "oklch(60.71% 0.01339 95.40)",
+          "oklch(72.14% 0.01339 95.40)",
+          "oklch(83.57% 0.01339 95.40)",
+          "oklch(95.00% 0.01339 95.40)"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Ivory paper",
+        "tonalRamp": [
+          "oklch(15.00% 0.00537 95.10)",
+          "oklch(26.43% 0.00537 95.10)",
+          "oklch(37.86% 0.00537 95.10)",
+          "oklch(49.29% 0.00537 95.10)",
+          "oklch(60.71% 0.00537 95.10)",
+          "oklch(72.14% 0.00537 95.10)",
+          "oklch(83.57% 0.00537 95.10)",
+          "oklch(95.00% 0.00537 95.10)"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Pale panel",
+        "tonalRamp": [
+          "oklch(15.00% 0.00802 98.88)",
+          "oklch(26.43% 0.00802 98.88)",
+          "oklch(37.86% 0.00802 98.88)",
+          "oklch(49.29% 0.00802 98.88)",
+          "oklch(60.71% 0.00802 98.88)",
+          "oklch(72.14% 0.00802 98.88)",
+          "oklch(83.57% 0.00802 98.88)",
+          "oklch(95.00% 0.00802 98.88)"
+        ]
+      },
+      "ground": {
+        "role": "neutral",
+        "displayName": "Warm stone",
+        "tonalRamp": [
+          "oklch(15.00% 0.02346 80.66)",
+          "oklch(26.43% 0.02346 80.66)",
+          "oklch(37.86% 0.02346 80.66)",
+          "oklch(49.29% 0.02346 80.66)",
+          "oklch(60.71% 0.02346 80.66)",
+          "oklch(72.14% 0.02346 80.66)",
+          "oklch(83.57% 0.02346 80.66)",
+          "oklch(95.00% 0.02346 80.66)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.01261 95.31)",
+          "oklch(26.43% 0.01261 95.31)",
+          "oklch(37.86% 0.01261 95.31)",
+          "oklch(49.29% 0.01261 95.31)",
+          "oklch(60.71% 0.01261 95.31)",
+          "oklch(72.14% 0.01261 95.31)",
+          "oklch(83.57% 0.01261 95.31)",
+          "oklch(95.00% 0.01261 95.31)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Warm divider",
+        "tonalRamp": [
+          "oklch(15.00% 0.01232 96.44)",
+          "oklch(26.43% 0.01232 96.44)",
+          "oklch(37.86% 0.01232 96.44)",
+          "oklch(49.29% 0.01232 96.44)",
+          "oklch(60.71% 0.01232 96.44)",
+          "oklch(72.14% 0.01232 96.44)",
+          "oklch(83.57% 0.01232 96.44)",
+          "oklch(95.00% 0.01232 96.44)"
+        ]
+      },
+      "selected": {
+        "role": "neutral",
+        "displayName": "Muted olive",
+        "tonalRamp": [
+          "oklch(15.00% 0.02209 92.52)",
+          "oklch(26.43% 0.02209 92.52)",
+          "oklch(37.86% 0.02209 92.52)",
+          "oklch(49.29% 0.02209 92.52)",
+          "oklch(60.71% 0.02209 92.52)",
+          "oklch(72.14% 0.02209 92.52)",
+          "oklch(83.57% 0.02209 92.52)",
+          "oklch(95.00% 0.02209 92.52)"
+        ]
+      },
+      "focus": {
+        "role": "primary",
+        "displayName": "Olive focus",
+        "tonalRamp": [
+          "oklch(15.00% 0.05979 86.75)",
+          "oklch(26.43% 0.05979 86.75)",
+          "oklch(37.86% 0.05979 86.75)",
+          "oklch(49.29% 0.05979 86.75)",
+          "oklch(60.71% 0.05979 86.75)",
+          "oklch(72.14% 0.05979 86.75)",
+          "oklch(83.57% 0.05979 86.75)",
+          "oklch(95.00% 0.05979 86.75)"
+        ]
+      },
+      "control-border": {
+        "role": "neutral",
+        "displayName": "Secondary control border",
+        "tonalRamp": [
+          "oklch(15.00% 0.01926 92.76)",
+          "oklch(26.43% 0.01926 92.76)",
+          "oklch(37.86% 0.01926 92.76)",
+          "oklch(49.29% 0.01926 92.76)",
+          "oklch(60.71% 0.01926 92.76)",
+          "oklch(72.14% 0.01926 92.76)",
+          "oklch(83.57% 0.01926 92.76)",
+          "oklch(95.00% 0.01926 92.76)"
+        ]
+      },
+      "placeholder": {
+        "role": "neutral",
+        "displayName": "Placeholder ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.01730 90.33)",
+          "oklch(26.43% 0.01730 90.33)",
+          "oklch(37.86% 0.01730 90.33)",
+          "oklch(49.29% 0.01730 90.33)",
+          "oklch(60.71% 0.01730 90.33)",
+          "oklch(72.14% 0.01730 90.33)",
+          "oklch(83.57% 0.01730 90.33)",
+          "oklch(95.00% 0.01730 90.33)"
+        ]
+      },
+      "warning": {
+        "role": "secondary",
+        "displayName": "Error ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.11849 42.87)",
+          "oklch(26.43% 0.11849 42.87)",
+          "oklch(37.86% 0.11849 42.87)",
+          "oklch(49.29% 0.11849 42.87)",
+          "oklch(60.71% 0.11849 42.87)",
+          "oklch(72.14% 0.11849 42.87)",
+          "oklch(83.57% 0.11849 42.87)",
+          "oklch(95.00% 0.11849 42.87)"
+        ]
+      },
+      "error-background": {
+        "role": "secondary",
+        "displayName": "Error paper",
+        "tonalRamp": [
+          "oklch(15.00% 0.01786 64.93)",
+          "oklch(26.43% 0.01786 64.93)",
+          "oklch(37.86% 0.01786 64.93)",
+          "oklch(49.29% 0.01786 64.93)",
+          "oklch(60.71% 0.01786 64.93)",
+          "oklch(72.14% 0.01786 64.93)",
+          "oklch(83.57% 0.01786 64.93)",
+          "oklch(95.00% 0.01786 64.93)"
+        ]
+      },
+      "error-border": {
+        "role": "secondary",
+        "displayName": "Error border",
+        "tonalRamp": [
+          "oklch(15.00% 0.04139 56.22)",
+          "oklch(26.43% 0.04139 56.22)",
+          "oklch(37.86% 0.04139 56.22)",
+          "oklch(49.29% 0.04139 56.22)",
+          "oklch(60.71% 0.04139 56.22)",
+          "oklch(72.14% 0.04139 56.22)",
+          "oklch(83.57% 0.04139 56.22)",
+          "oklch(95.00% 0.04139 56.22)"
+        ]
+      },
+      "success-background": {
+        "role": "secondary",
+        "displayName": "Success paper",
+        "tonalRamp": [
+          "oklch(15.00% 0.01713 128.66)",
+          "oklch(26.43% 0.01713 128.66)",
+          "oklch(37.86% 0.01713 128.66)",
+          "oklch(49.29% 0.01713 128.66)",
+          "oklch(60.71% 0.01713 128.66)",
+          "oklch(72.14% 0.01713 128.66)",
+          "oklch(83.57% 0.01713 128.66)",
+          "oklch(95.00% 0.01713 128.66)"
+        ]
+      },
+      "success-ink": {
+        "role": "secondary",
+        "displayName": "Success ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.06806 136.36)",
+          "oklch(26.43% 0.06806 136.36)",
+          "oklch(37.86% 0.06806 136.36)",
+          "oklch(49.29% 0.06806 136.36)",
+          "oklch(60.71% 0.06806 136.36)",
+          "oklch(72.14% 0.06806 136.36)",
+          "oklch(83.57% 0.06806 136.36)",
+          "oklch(95.00% 0.06806 136.36)"
+        ]
+      },
+      "status-background": {
+        "role": "secondary",
+        "displayName": "Membership paper",
+        "tonalRamp": [
+          "oklch(15.00% 0.01408 138.71)",
+          "oklch(26.43% 0.01408 138.71)",
+          "oklch(37.86% 0.01408 138.71)",
+          "oklch(49.29% 0.01408 138.71)",
+          "oklch(60.71% 0.01408 138.71)",
+          "oklch(72.14% 0.01408 138.71)",
+          "oklch(83.57% 0.01408 138.71)",
+          "oklch(95.00% 0.01408 138.71)"
+        ]
+      },
+      "status-ink": {
+        "role": "secondary",
+        "displayName": "Membership ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.05908 142.02)",
+          "oklch(26.43% 0.05908 142.02)",
+          "oklch(37.86% 0.05908 142.02)",
+          "oklch(49.29% 0.05908 142.02)",
+          "oklch(60.71% 0.05908 142.02)",
+          "oklch(72.14% 0.05908 142.02)",
+          "oklch(83.57% 0.05908 142.02)",
+          "oklch(95.00% 0.05908 142.02)"
+        ]
+      },
+      "warning-background": {
+        "role": "secondary",
+        "displayName": "Warning paper",
+        "tonalRamp": [
+          "oklch(15.00% 0.04367 91.27)",
+          "oklch(26.43% 0.04367 91.27)",
+          "oklch(37.86% 0.04367 91.27)",
+          "oklch(49.29% 0.04367 91.27)",
+          "oklch(60.71% 0.04367 91.27)",
+          "oklch(72.14% 0.04367 91.27)",
+          "oklch(83.57% 0.04367 91.27)",
+          "oklch(95.00% 0.04367 91.27)"
+        ]
+      },
+      "warning-ink": {
+        "role": "secondary",
+        "displayName": "Warning ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.07303 84.99)",
+          "oklch(26.43% 0.07303 84.99)",
+          "oklch(37.86% 0.07303 84.99)",
+          "oklch(49.29% 0.07303 84.99)",
+          "oklch(60.71% 0.07303 84.99)",
+          "oklch(72.14% 0.07303 84.99)",
+          "oklch(83.57% 0.07303 84.99)",
+          "oklch(95.00% 0.07303 84.99)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page titles."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section headings."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Subsections and form groups."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Reading text."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Form labels."
+      },
+      "action": {
+        "displayName": "Action",
+        "purpose": "Buttons and prominent text links."
+      },
+      "metadata": {
+        "displayName": "Metadata",
+        "purpose": "Supporting facts and compact context."
+      },
+      "status": {
+        "displayName": "Status",
+        "purpose": "Membership badges."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "control-transition",
+        "value": "background-color 160ms ease-out, color 160ms ease-out",
+        "purpose": "Button hover states in src/app/globals.css."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "transition: none !important; scroll-behavior: auto !important",
+        "purpose": "Applied to all elements and pseudo-elements when prefers-reduced-motion is reduce."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact-desktop",
+        "value": "1180px"
+      },
+      {
+        "name": "tablet",
+        "value": "960px"
+      },
+      {
+        "name": "mobile",
+        "value": "700px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Submit an action. ActionForm uses the disabled state and Saving... label while pending. Source: src/app/_components/action-form.tsx and src/app/globals.css.",
+      "html": "<button class=\"ds-button-primary\" type=\"button\">Save changes</button>",
+      "css": ".ds-button-primary { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 44px; padding: 11px 18px; border: 1px solid var(--accent, #292723); border-radius: 6px; background: var(--accent, #292723); color: var(--accent-ink, #fffefa); font-family: Manrope, sans-serif; font-size: 12px; font-weight: 600; line-height: 1.6; text-decoration: none; cursor: pointer; transition: background-color 160ms ease-out, color 160ms ease-out; } .ds-button-primary:hover { background: #48463e; } .ds-button-primary:focus-visible { outline: 2px solid var(--focus, #74633c); outline-offset: 4px; } .ds-button-primary:disabled { cursor: wait; opacity: 0.6; } @media (prefers-reduced-motion: reduce) { .ds-button-primary { transition: none !important; } }"
+    },
+    {
+      "name": "Secondary button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A secondary action or sign-in link with a transparent background and outlined border. Source: src/app/globals.css.",
+      "html": "<button class=\"ds-button-secondary\" type=\"button\">Cancel</button>",
+      "css": ".ds-button-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 44px; padding: 11px 18px; border: 1px solid var(--accent, #292723); border-radius: 6px; background: var(--accent, #292723); color: var(--accent-ink, #fffefa); font-family: Manrope, sans-serif; font-size: 12px; font-weight: 600; line-height: 1.6; text-decoration: none; cursor: pointer; transition: background-color 160ms ease-out, color 160ms ease-out; } .ds-button-secondary:hover { background: #48463e; } .ds-button-secondary:focus-visible { outline: 2px solid var(--focus, #74633c); outline-offset: 4px; } .ds-button-secondary:disabled { cursor: wait; opacity: 0.6; } @media (prefers-reduced-motion: reduce) { .ds-button-secondary { transition: none !important; } } .ds-button-secondary { background: transparent; color: var(--ink, #292723); border-color: #9b978a; } .ds-button-secondary:hover { background: var(--selected, #e5e0d0); }"
+    },
+    {
+      "name": "Text field",
+      "kind": "input",
+      "refersTo": "input-text",
+      "description": "A labeled native field. Text inherits the label on desktop and increases on mobile. Source: src/app/globals.css.",
+      "html": "<label class=\"ds-field\">Activity<input class=\"ds-input\" name=\"activity\" placeholder=\"Add an Activity\" /></label>",
+      "css": ".ds-field { display: grid; gap: 7px; min-width: 0; color: var(--ink, #292723); font-family: Manrope, sans-serif; font-size: 13px; font-weight: 500; line-height: 1.6; } .ds-input { min-width: 0; width: 100%; min-height: 44px; padding: 11px 13px; border: 1px solid var(--line, #dfddd4); border-radius: 6px; background: var(--paper, #fffefa); color: var(--ink, #292723); font-family: Manrope, sans-serif; font-size: 13px; font-weight: 500; line-height: 1.6; caret-color: var(--ink, #292723); } .ds-input::placeholder { color: #777368; opacity: 1; } .ds-input:focus-visible { outline: 2px solid var(--focus, #74633c); outline-offset: 4px; } @media (max-width: 700px) { .ds-input { font-size: 16px; } }"
+    },
+    {
+      "name": "Primary navigation",
+      "kind": "nav",
+      "refersTo": "navigation-primary",
+      "description": "Horizontal route links within the pale header. The current route has an ink underline. Source: src/app/_components/navigation.tsx.",
+      "html": "<div class=\"ds-header\"><nav class=\"ds-primary-nav\" aria-label=\"Main navigation\"><a class=\"ds-primary-link\" href=\"#discover\" aria-current=\"page\">Discover</a><a class=\"ds-primary-link\" href=\"#meetups\">Meetups</a><a class=\"ds-primary-link\" href=\"#events\">Events</a><a class=\"ds-primary-link\" href=\"#members\">Members</a><a class=\"ds-primary-link\" href=\"#profile\">Your space</a></nav></div>",
+      "css": ".ds-header { padding: 17px 24px; border-radius: 10px; background: var(--panel, #f4f3ed); } .ds-primary-nav { display: flex; align-items: center; gap: 30px; color: var(--ink, #292723); font-family: Manrope, sans-serif; line-height: 1.6; } .ds-primary-link { position: relative; display: inline-flex; align-items: center; min-height: 44px; white-space: nowrap; color: inherit; font-size: 13px; text-decoration: none; } .ds-primary-link[aria-current=\"page\"]::after { content: \"\"; position: absolute; bottom: -17px; width: 100%; height: 2px; background: var(--ink, #292723); } .ds-primary-link:hover { text-decoration-color: var(--muted, #68665e); } .ds-primary-link:focus-visible { outline: 2px solid var(--focus, #74633c); outline-offset: 4px; } @media (max-width: 1180px) { .ds-header { padding: 15px 20px; } .ds-primary-nav { gap: 20px; } .ds-primary-link[aria-current=\"page\"]::after { bottom: -15px; } } @media (max-width: 960px) { .ds-primary-nav { width: 100%; justify-content: center; border-top: 1px solid var(--line, #dfddd4); padding-top: 10px; } } @media (max-width: 700px) { .ds-header { padding: 17px 20px 12px; border-radius: 0; } .ds-primary-nav { justify-content: space-between; gap: 12px; padding-top: 7px; } .ds-primary-link { font-size: 11px; min-height: 36px; } .ds-primary-link[aria-current=\"page\"]::after { bottom: -12px; } }"
+    },
+    {
+      "name": "Section navigation",
+      "kind": "nav",
+      "refersTo": "navigation-section",
+      "description": "Administrative routes share a divider and current-page underline. The row scrolls on mobile. Source: src/app/_components/navigation.tsx.",
+      "html": "<nav class=\"ds-section-nav\" aria-label=\"Administration\"><a class=\"ds-section-link\" href=\"#reports\" aria-current=\"page\">Reports</a><a class=\"ds-section-link\" href=\"#roster\">Roster</a><a class=\"ds-section-link\" href=\"#interests\">Interests</a><a class=\"ds-section-link\" href=\"#events\">Events</a><a class=\"ds-section-link\" href=\"#audit\">Audit log</a></nav>",
+      "css": ".ds-section-nav { display: flex; gap: 22px; flex-wrap: wrap; border-bottom: 1px solid var(--line, #dfddd4); margin: 0 0 30px; font-family: Manrope, sans-serif; line-height: 1.6; } .ds-section-link { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 0 15px; border-bottom: 2px solid transparent; color: var(--muted, #68665e); font-size: 12px; font-weight: 500; text-decoration: none; } .ds-section-link[aria-current=\"page\"] { border-bottom-color: var(--ink, #292723); color: var(--ink, #292723); font-weight: 600; } .ds-section-link:hover { color: var(--ink, #292723); } .ds-section-link:focus-visible { outline: 2px solid var(--focus, #74633c); outline-offset: 4px; } @media (max-width: 700px) { .ds-section-nav { flex-wrap: nowrap; overflow-x: auto; padding: 4px 4px 0; margin: 0 -4px 25px; } .ds-section-link { flex: none; white-space: nowrap; } }"
+    },
+    {
+      "name": "Interest chip",
+      "kind": "chip",
+      "refersTo": "chip-interest",
+      "description": "An Interest with its Shares or Seeks text. Source: src/app/_components/interest-groups.tsx.",
+      "html": "<span class=\"ds-interest-chip\"><strong>Coffee</strong><span class=\"ds-stance\">Shares</span></span>",
+      "css": ".ds-interest-chip { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 5px; padding: 5px 10px; border-bottom: 1px solid var(--line, #dfddd4); border-radius: 5px; background: var(--selected, #e5e0d0); color: var(--ink, #292723); font-family: Manrope, sans-serif; font-size: 11px; line-height: 1.6; } .ds-stance { color: var(--muted, #68665e); }"
+    },
+    {
+      "name": "Membership status",
+      "kind": "chip",
+      "refersTo": "status-membership",
+      "description": "Text and color communicate participation or cancellation. These badges have no interactive states. Source: src/app/_components/occurrence-card.tsx.",
+      "html": "<span class=\"ds-status\">Joined</span> <span class=\"ds-status ds-status-warning\">Cancelled</span>",
+      "css": ".ds-status { display: inline-flex; align-items: center; background: #e7eee5; color: #355032; font-family: Manrope, sans-serif; font-size: 10px; font-weight: 600; line-height: 1.6; padding: 4px 8px; border-radius: 4px; } .ds-status-warning { background: #f3e8c8; color: #66501e; }"
+    },
+    {
+      "name": "Member card",
+      "kind": "card",
+      "refersTo": "card-member",
+      "description": "A paper card with Member identity and facts. Preview content is illustrative. Source: src/app/globals.css and src/app/_components/ui.tsx.",
+      "html": "<article class=\"ds-member-card\"><span class=\"ds-avatar\" aria-hidden=\"true\">AL</span><h2 class=\"ds-member-name\"><a class=\"ds-member-link\" href=\"#member\">Alex Lee</a></h2><dl class=\"ds-member-facts\"><dt class=\"ds-term\">Department</dt><dd class=\"ds-definition\">Operations</dd><dt class=\"ds-term\">Site</dt><dd class=\"ds-definition\">Headquarters</dd></dl></article>",
+      "css": ".ds-member-card { padding: 23px; border: 1px solid var(--line, #dfddd4); background: var(--paper, #fffefa); border-radius: var(--radius, 12px); color: var(--ink, #292723); font-family: Manrope, sans-serif; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; } .ds-avatar { display: inline-flex; justify-content: center; align-items: center; width: 38px; height: 38px; border-radius: 50%; background: #e7ddc9; color: #56472c; font-size: 11px; font-weight: 600; } .ds-member-name { margin: 16px 0 14px; font-size: 19px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.35; } .ds-member-link { color: inherit; text-decoration: none; } .ds-member-link:hover { text-decoration-color: var(--muted, #68665e); } .ds-member-link:focus-visible { outline: 2px solid var(--focus, #74633c); outline-offset: 4px; } .ds-member-facts { display: grid; grid-template-columns: minmax(100px, max-content) minmax(0, 1fr); font-size: 12px; gap: 7px 14px; margin: 0 0 26px; } .ds-term { color: var(--muted, #68665e); } .ds-definition { margin: 0; } @media (max-width: 700px) { .ds-member-card { padding: 22px; } .ds-avatar { width: 34px; height: 34px; } .ds-member-facts { grid-template-columns: minmax(90px, max-content) minmax(0, 1fr); } }"
+    },
+    {
+      "name": "Notice and form feedback",
+      "kind": "custom",
+      "refersTo": "notice",
+      "description": "Pale notices provide context. Error and success messages keep their role and text. Source: src/app/_components/action-form.tsx and src/app/globals.css.",
+      "html": "<div class=\"ds-notice\" id=\"ds-notice\"><p class=\"ds-notice-copy\">Set your Availability to help Members find a time to meet.</p></div><p class=\"ds-alert\" role=\"alert\">Choose an Activity.</p><p class=\"ds-success\" role=\"status\">Your changes have been saved.</p>",
+      "css": ".ds-notice, .ds-alert, .ds-success { font-family: Manrope, sans-serif; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; } .ds-notice { padding: 20px; margin: 0 0 18px; background: var(--panel, #f4f3ed); color: var(--ink, #292723); border-radius: var(--radius, 12px); } .ds-notice-copy { margin: 0; } .ds-notice:target { outline: 2px solid var(--focus, #74633c); outline-offset: 3px; scroll-margin-top: 24px; } .ds-alert { color: var(--warning, #93431f); padding: 12px 15px; border: 1px solid #d9bdaa; border-radius: 6px; background: #fbf0e6; } .ds-success { background: #eaf0e4; color: #39532d; padding: 12px 16px; border-radius: 6px; }"
+    },
+    {
+      "name": "Report table",
+      "kind": "custom",
+      "refersTo": "report-table",
+      "description": "A named, keyboard-focusable scroll region preserves readable columns on mobile. Preview values are illustrative. Source: src/app/_components/report-tables.tsx.",
+      "html": "<div class=\"ds-table-scroll\" tabindex=\"0\" role=\"region\" aria-label=\"Participation report\"><table class=\"ds-table\"><thead><tr><th class=\"ds-th\" scope=\"col\">Activity</th><th class=\"ds-th\" scope=\"col\">Hosted</th><th class=\"ds-th\" scope=\"col\">Joined</th><th class=\"ds-th\" scope=\"col\">Attended</th></tr></thead><tbody><tr class=\"ds-row\"><td class=\"ds-td\">Coffee</td><td class=\"ds-td\">4</td><td class=\"ds-td\">18</td><td class=\"ds-td\">16</td></tr><tr class=\"ds-row\"><td class=\"ds-td\">Walk</td><td class=\"ds-td\">2</td><td class=\"ds-td\">12</td><td class=\"ds-td\">11</td></tr></tbody></table></div>",
+      "css": ".ds-table-scroll { max-width: 100%; overflow-x: auto; margin: 24px 0; border: 1px solid var(--line, #dfddd4); border-radius: 8px; scrollbar-width: thin; scrollbar-color: #a7a393 var(--panel, #f4f3ed); } .ds-table-scroll:focus-visible { outline: 2px solid var(--focus, #74633c); outline-offset: 4px; } .ds-table { width: 100%; border-collapse: collapse; text-align: left; font-family: Manrope, sans-serif; font-size: 12px; line-height: 1.6; font-variant-numeric: tabular-nums; color: var(--ink, #292723); } .ds-th, .ds-td { padding: 14px 16px; border-bottom: 1px solid var(--line, #dfddd4); vertical-align: top; } .ds-th { font-size: 11px; font-weight: 600; color: var(--muted, #68665e); background: var(--panel, #f4f3ed); } .ds-row:last-child .ds-td { border-bottom: 0; } .ds-row:hover { background: var(--panel, #f4f3ed); } @media (max-width: 960px) { .ds-table { min-width: 650px; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Atrium",
+    "overview": "Atrium places the staff Meetup application inside a warm stone frame. Ivory paper, charcoal controls and untinted Activity photographs give discovery, personal pages and administration one visual identity.\n\nThe user selected Atrium from the interactive prototypes. This document records the production implementation in [globals.css](src/app/globals.css) and [layout.tsx](src/app/layout.tsx). [PRODUCT.md](PRODUCT.md) records the selection; [the implementation record](docs/atrium-ui.md) links its preview evidence.",
+    "keyCharacteristics": [
+      "Warm stone surrounds ivory paper and pale panels.",
+      "Manrope carries headings, body text and controls.",
+      "Broad photographs illustrate Activities.",
+      "Horizontal navigation and compact tables carry the administrative workflows."
+    ],
+    "rules": [
+      {
+        "name": "Shared palette",
+        "body": "Use the same ground, paper, panel and ink tokens across Member and administrative pages.",
+        "section": "colors"
+      },
+      {
+        "name": "Manrope",
+        "body": "Use Manrope for headings, body text and controls, with tabular numerals for dates and counts.",
+        "section": "typography"
+      },
+      {
+        "name": "Flat panels",
+        "body": "Use tone, whitespace and thin dividers to separate content; panels have no shadows.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do reuse the shared shell and palette for Member, Organisation Admin and Platform Admin pages.",
+      "Do keep Activity, time, Place and participation facts readable beside illustrative photography.",
+      "Do retain visible keyboard focus, pending feedback and labeled horizontal table scrolling.",
+      "Do use the existing Manrope hierarchy, modest corners and flat panels."
+    ],
+    "donts": [
+      "Don't mix the Studio or Fieldwork prototype styles into Atrium.",
+      "Don't tint Activity photographs or present stock images as actual Sites, Hosts or Participants.",
+      "Don't shrink mobile report text to fit every column; retain the scroll region.",
+      "Don't add shadows to the flat panel system."
+    ]
+  }
+}

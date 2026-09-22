@@ -1,26 +1,36 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { requireOrganisationAdmin } from "../../web/session";
+import { SectionNavigation } from "../_components/navigation";
+import { PageHeading } from "../_components/ui";
 
-export default async function AdminLayout({ children }: { children: ReactNode }) {
+export default async function AdminLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
   await requireOrganisationAdmin();
   return (
     <main className="admin-area">
-      <h1>Organisation Admin</h1>
-      <nav aria-label="Administration">
-        <Link href="/admin/reports">Reports</Link>
-        <Link href="/scout">Scout</Link>
-        <Link href="/admin/roster">Roster</Link>
-        <Link href="/admin/lists">Departments, Sites and Activities</Link>
-        <Link href="/admin/interests">Interests</Link>
-        <Link href="/admin/events">Events</Link>
-        <Link href="/admin/moderation">Moderation</Link>
-        <Link href="/admin/attendance">Attendance and ratings</Link>
-        <Link href="/admin/notices">Unknown logins</Link>
-        <Link href="/admin/audit">Audit log</Link>
-        <Link href="/profile">My profile</Link>
-      </nav>
-      {children}
+      <PageHeading
+        title="Organisation Admin"
+        description="Manage your population, support Events and understand participation."
+      />
+      <SectionNavigation
+        label="Administration"
+        links={[
+          { href: "/admin/reports", label: "Reports" },
+          { href: "/scout", label: "Scout" },
+          { href: "/admin/roster", label: "Roster" },
+          { href: "/admin/lists", label: "Departments, Sites and Activities" },
+          { href: "/admin/interests", label: "Interests" },
+          { href: "/admin/events", label: "Events" },
+          { href: "/admin/moderation", label: "Moderation" },
+          { href: "/admin/attendance", label: "Attendance and ratings" },
+          { href: "/admin/notices", label: "Unknown logins" },
+          { href: "/admin/audit", label: "Audit log" },
+        ]}
+      />
+      <div className="admin-content">{children}</div>
     </main>
   );
 }
