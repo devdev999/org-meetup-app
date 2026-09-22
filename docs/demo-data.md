@@ -25,6 +25,7 @@ Choose **DSTA demo** on the sign-in page. The fake issuer needs an email and nam
 | Role | Name | Email |
 | --- | --- | --- |
 | Main Member | Aisha Rahman | `aisha.rahman@dsta.example.test` |
+| Preview B new joiner | Rachel Foo | `rachel.foo@dsta.example.test` |
 | Organisation Admin | Maya Tan | `maya.tan@dsta.example.test` |
 | Full Meetup Host | Priya Nair | `priya.nair@dsta.example.test` |
 | Recurring Meetup Host | Wei Ming Lim | `wei.ming.lim@dsta.example.test` |
