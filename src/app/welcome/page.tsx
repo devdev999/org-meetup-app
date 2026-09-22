@@ -9,25 +9,33 @@ export default async function WelcomePage() {
   if (!notice) redirect("/profile");
 
   return (
-    <main>
+    <main className="welcome-page">
       <h1>Welcome, {notice.name}</h1>
-      <p>Before you start, here is what the Organisation Admins of {notice.organisation.name} can see about you.</p>
+      <p>
+        Before you start, here is what the Organisation Admins of{" "}
+        {notice.organisation.name} can see about you.
+      </p>
       <div className="notice">
         <p>
           <strong>Organisation Admins can see, for each Member:</strong>
         </p>
         <ul>
           <li>your name, Department, Site and when you were last active;</li>
-          <li>the Interests you declare, including whether you Share or Seek each one;</li>
           <li>
-            the Meetups and Events you host, join and attend, including when you said you were going and did not come,
-            your Connections and your Availability;
+            the Interests you declare, including whether you Share or Seek each
+            one;
+          </li>
+          <li>
+            the Meetups and Events you host, join and attend, including when you
+            said you were going and did not come, your Connections and your
+            Availability;
           </li>
           <li>the Flags you raise and any raised about you.</li>
         </ul>
         <p>
-          Every time an Organisation Admin looks at a Member's individual data or exports it, that access is written
-          to an audit log. Platform Admins see totals only, never individual Members.
+          Every time an Organisation Admin looks at a Member's individual data
+          or exports it, that access is written to an audit log. Platform Admins
+          see totals only, never individual Members.
         </p>
         <p>Other Members see your name, Department, Site and Interests.</p>
       </div>

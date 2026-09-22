@@ -1,8 +1,17 @@
 import type { RosterRow } from "../../../application/index";
 
-export function RosterTable({ rows }: { rows: (RosterRow & { status?: string; label?: string })[] }) {
+export function RosterTable({
+  rows,
+}: {
+  rows: (RosterRow & { status?: string; label?: string })[];
+}) {
   return (
-    <div className="table-scroll">
+    <div
+      className="table-scroll"
+      tabIndex={0}
+      role="region"
+      aria-label="Member roster"
+    >
       <table>
         <thead>
           <tr>

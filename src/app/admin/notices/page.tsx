@@ -7,13 +7,18 @@ export default async function NoticesPage() {
     <>
       <h2>Unknown logins</h2>
       <p>
-        These Members first signed in without a roster row. Add them to your next roster if they belong to your
-        Organisation.
+        These Members first signed in without a roster row. Add them to your
+        next roster if they belong to your Organisation.
       </p>
       {notices.length === 0 ? (
         <p>No unknown logins.</p>
       ) : (
-        <div className="table-scroll">
+        <div
+          className="table-scroll"
+          tabIndex={0}
+          role="region"
+          aria-label="Unknown sign-in attempts"
+        >
           <table>
             <thead>
               <tr>

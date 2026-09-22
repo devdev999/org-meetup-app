@@ -9,7 +9,10 @@ import { organisationSetup } from "../../src/testing/organisation-setup";
 
 const database = await createTestDatabase();
 try {
-  await cp(".next/static", ".next/standalone/.next/static", { recursive: true });
+  await cp(".next/static", ".next/standalone/.next/static", {
+    recursive: true,
+  });
+  await cp("public", ".next/standalone/public", { recursive: true });
   Object.assign(process.env, {
     DATABASE_URL: database.connectionString,
     APP_URL: "http://127.0.0.1:3011",
@@ -23,21 +26,49 @@ try {
     TIME_ZONE: "UTC",
   });
   await runMigrations(database.pool);
-  await organisationSetup({ app: applicationFromEnv(database.pool) }).setupOrganisation({
-    organisation: { slug: "ministry-a", name: "Ministry A", departments: ["Finance", "Legal"], sites: ["Harbour House"] },
+  await organisationSetup({
+    app: applicationFromEnv(database.pool),
+  }).setupOrganisation({
+    organisation: {
+      slug: "ministry-a",
+      name: "Ministry A",
+      departments: ["Finance", "Legal"],
+      sites: ["Harbour House"],
+    },
     oidc: {
-      issuer: `${process.env.APP_URL}/dev-idp`, clientId: "browser-smoke", credentialRef: null,
-      claimMapping: { email: "email", name: "name", department: "department", site: "site" },
+      issuer: `${process.env.APP_URL}/dev-idp`,
+      clientId: "browser-smoke",
+      credentialRef: null,
+      claimMapping: {
+        email: "email",
+        name: "name",
+        department: "department",
+        site: "site",
+      },
     },
     platformAdmin: { email: "pat@ministry-a.example", name: "Pat Platform" },
-    organisationAdmin: { email: "olivia@ministry-a.example", name: "Olivia Admin" },
+    organisationAdmin: {
+      email: "olivia@ministry-a.example",
+      name: "Olivia Admin",
+    },
   });
-  process.env.ATTENDANCE_FIXTURES = JSON.stringify(await seedAttendance(database.pool, process.env.APP_URL!));
+  process.env.ATTENDANCE_FIXTURES = JSON.stringify(
+    await seedAttendance(database.pool, process.env.APP_URL!),
+  );
   const require = createRequire(import.meta.url);
   process.exitCode = await new Promise<number>((resolve, reject) => {
-    const runner = spawn(process.execPath, [require.resolve("@playwright/test/cli"), "test", ...process.argv.slice(2)], {
-      stdio: "inherit", windowsHide: true,
-    });
+    const runner = spawn(
+      process.execPath,
+      [
+        require.resolve("@playwright/test/cli"),
+        "test",
+        ...process.argv.slice(2),
+      ],
+      {
+        stdio: "inherit",
+        windowsHide: true,
+      },
+    );
     runner.once("error", reject);
     runner.once("close", (code) => resolve(code ?? 1));
   });
