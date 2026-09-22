@@ -20,6 +20,8 @@ The fake issuer lets you type who you are. Its Department and Site fields stand 
 
 The worker logs a heartbeat once a minute: `docker compose logs -f worker`.
 
+For a populated mobile walkthrough, run `pnpm db:seed:demo --local` after local setup. This adds a separate DSTA demo Organisation with fictional Members, public Programme Centre names, Meetups, Events and participation history. See [demo data and sign-in details](./docs/demo-data.md).
+
 ### Roster uploads
 
 The CSV must have `email,name,department,site` columns and may include `staff_identifier`. Column names ignore case, spaces, underscores and hyphens. Quoted values and UTF-8 byte-order marks are supported. Email and name are required in every row; Department, Site and staff identifier may be blank. The CSV adapter enforces a 1 MB limit on UTF-8 input after normalizing line endings, before parsing on both preview and commit.
